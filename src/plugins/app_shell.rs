@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
 
-use crate::data::{EditorState, MapData};
+use crate::data::{EditorState, MapData, TilesetData, TilesetMeta};
 
 /// Plugin that provides the application shell: menu bar, canvas area, and side panel.
 pub struct AppShellPlugin;
@@ -10,6 +10,7 @@ impl Plugin for AppShellPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NewMapDialog>()
             .init_resource::<ErrorDialog>()
+            .init_resource::<LoadTilesetDialog>()
             .init_resource::<EditorState>()
             .add_systems(EguiPrimaryContextPass, app_shell_ui);
     }
@@ -42,12 +43,34 @@ pub struct ErrorDialog {
     pub message: String,
 }
 
+/// Valid tile sizes for the tile size picker.
+const TILE_SIZE_OPTIONS: [u32; 4] = [8, 16, 32, 64];
+
+/// State for the "Load Tileset" dialog (tile size picker).
+#[derive(Resource)]
+pub struct LoadTilesetDialog {
+    pub open: bool,
+    pub selected_tile_size: u32,
+}
+
+impl Default for LoadTilesetDialog {
+    fn default() -> Self {
+        Self {
+            open: false,
+            selected_tile_size: 16,
+        }
+    }
+}
+
 fn app_shell_ui(
     mut contexts: EguiContexts,
     mut new_map_dialog: ResMut<NewMapDialog>,
     mut error_dialog: ResMut<ErrorDialog>,
+    mut load_tileset_dialog: ResMut<LoadTilesetDialog>,
     mut commands: Commands,
     existing_map: Option<Res<MapData>>,
+    asset_server: Res<AssetServer>,
+    mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -63,6 +86,8 @@ fn app_shell_ui(
                     ui.close();
                 }
                 if ui.button("Load Tileset").clicked() {
+                    load_tileset_dialog.open = true;
+                    load_tileset_dialog.selected_tile_size = 16;
                     ui.close();
                 }
                 ui.separator();
@@ -169,14 +194,120 @@ fn app_shell_ui(
         }
     }
 
-    // Side panel (tile palette placeholder)
-    egui::SidePanel::right("tile_palette")
-        .default_width(200.0)
-        .show(ctx, |ui| {
-            ui.heading("Tile Palette");
-            ui.separator();
-            ui.label("No tileset loaded.");
-        });
+    // Load Tileset dialog (tile size picker → file dialog → load)
+    if load_tileset_dialog.open {
+        let mut still_open = true;
+        let mut should_load = false;
+
+        egui::Window::new("Load Tileset")
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut still_open)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.label("Select tile size before loading:");
+                ui.horizontal(|ui| {
+                    ui.label("Tile Size:");
+                    egui::ComboBox::from_id_salt("tile_size_combo")
+                        .selected_text(format!(
+                            "{}x{}",
+                            load_tileset_dialog.selected_tile_size,
+                            load_tileset_dialog.selected_tile_size
+                        ))
+                        .show_ui(ui, |ui| {
+                            for &size in &TILE_SIZE_OPTIONS {
+                                ui.selectable_value(
+                                    &mut load_tileset_dialog.selected_tile_size,
+                                    size,
+                                    format!("{}x{}", size, size),
+                                );
+                            }
+                        });
+                });
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.button("Choose File…").clicked() {
+                        should_load = true;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        load_tileset_dialog.open = false;
+                    }
+                });
+            });
+
+        if !still_open {
+            load_tileset_dialog.open = false;
+        }
+
+        if should_load {
+            load_tileset_dialog.open = false;
+            let tile_size = load_tileset_dialog.selected_tile_size;
+
+            // Open native file dialog (blocking — acceptable for desktop app)
+            let file = rfd::FileDialog::new()
+                .add_filter("Images", &["png", "jpg", "jpeg"])
+                .pick_file();
+
+            if let Some(path) = file {
+                // Validate extension
+                let ext = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+
+                if !["png", "jpg", "jpeg"].contains(&ext.as_str()) {
+                    error_dialog.open = true;
+                    error_dialog.message =
+                        "Unsupported image format. Supported: PNG, JPEG".to_string();
+                } else {
+                    // Load image with the `image` crate to get dimensions
+                    match image::open(&path) {
+                        Ok(img) => {
+                            let (img_w, img_h) = (img.width(), img.height());
+
+                            match TilesetMeta::from_image_dimensions(
+                                img_w, img_h, tile_size, tile_size,
+                            ) {
+                                Ok(mut meta) => {
+                                    meta.file_path = path.to_string_lossy().to_string();
+
+                                    // Create TextureAtlasLayout
+                                    let layout = TextureAtlasLayout::from_grid(
+                                        UVec2::new(tile_size, tile_size),
+                                        meta.columns,
+                                        meta.rows,
+                                        None,
+                                        None,
+                                    );
+                                    let atlas_handle = atlas_layouts.add(layout);
+
+                                    // Load texture via Bevy asset server
+                                    let texture_handle: Handle<Image> =
+                                        asset_server.load(path.to_string_lossy().to_string());
+
+                                    let tileset_data = TilesetData {
+                                        meta,
+                                        texture: texture_handle,
+                                        atlas_layout: atlas_handle,
+                                    };
+                                    commands.insert_resource(tileset_data);
+                                }
+                                Err(e) => {
+                                    error_dialog.open = true;
+                                    error_dialog.message = e.to_string();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error_dialog.open = true;
+                            error_dialog.message = format!("Failed to read image: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Central panel (canvas placeholder)
     egui::CentralPanel::default().show(ctx, |ui| {

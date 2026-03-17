@@ -49,6 +49,7 @@ impl TilesetMeta {
 }
 
 /// Runtime tileset data (not serialized — the texture handle is runtime-only).
+#[derive(Resource)]
 pub struct TilesetData {
     pub meta: TilesetMeta,
     pub texture: Handle<Image>,
