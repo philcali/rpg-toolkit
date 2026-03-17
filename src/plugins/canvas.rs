@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::data::{EditorState, MapData};
+use crate::data::{EditorState, MapData, TilesetData};
 
 /// Default tile size in pixels (used when no tileset is loaded).
 const DEFAULT_TILE_SIZE: f32 = 16.0;
@@ -26,6 +26,7 @@ fn spawn_camera(mut commands: Commands) {
 /// When a `MapData` resource is first inserted, compute zoom-to-fit and apply it.
 fn zoom_to_fit_on_new_map(
     map: Option<Res<MapData>>,
+    tileset: Option<Res<TilesetData>>,
     mut editor: ResMut<EditorState>,
     mut camera_q: Query<&mut Transform, With<EditorCamera>>,
     windows: Query<&Window>,
@@ -35,12 +36,17 @@ fn zoom_to_fit_on_new_map(
         return;
     }
 
+    let tile_size = tileset
+        .as_ref()
+        .map(|ts| ts.meta.tile_width as f32)
+        .unwrap_or(DEFAULT_TILE_SIZE);
+
     let Ok(window) = windows.single() else { return };
     let viewport_w = window.width();
     let viewport_h = window.height();
 
-    let map_pixel_w = map.width as f32 * DEFAULT_TILE_SIZE;
-    let map_pixel_h = map.height as f32 * DEFAULT_TILE_SIZE;
+    let map_pixel_w = map.width as f32 * tile_size;
+    let map_pixel_h = map.height as f32 * tile_size;
 
     let zoom = (viewport_w / map_pixel_w)
         .min(viewport_h / map_pixel_h)
@@ -63,11 +69,15 @@ fn zoom_to_fit_on_new_map(
 /// Draw a grid overlay aligned to tile boundaries using gizmos.
 fn draw_grid(
     map: Option<Res<MapData>>,
+    tileset: Option<Res<TilesetData>>,
     mut gizmos: Gizmos,
 ) {
     let Some(map) = map else { return };
 
-    let tile = DEFAULT_TILE_SIZE;
+    let tile = tileset
+        .as_ref()
+        .map(|ts| ts.meta.tile_width as f32)
+        .unwrap_or(DEFAULT_TILE_SIZE);
     let cols = map.width as f32;
     let rows = map.height as f32;
     let total_w = cols * tile;

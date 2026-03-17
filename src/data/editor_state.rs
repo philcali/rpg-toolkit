@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::path::PathBuf;
 
-use super::map::TileIndex;
+use super::map::{Layer, TileIndex};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EditorError {
@@ -61,4 +61,35 @@ impl EditorState {
         self.zoom_level = zoom;
         self.clamp_zoom();
     }
+}
+
+/// A reversible editing command for undo/redo support.
+#[derive(Clone, Debug, bevy::prelude::Message)]
+pub struct EditCommand {
+    pub kind: EditCommandKind,
+}
+
+#[derive(Clone, Debug)]
+pub enum EditCommandKind {
+    PlaceTile {
+        layer_index: usize,
+        x: u32,
+        y: u32,
+        old_tile: Option<TileIndex>,
+        new_tile: TileIndex,
+    },
+    EraseTile {
+        layer_index: usize,
+        x: u32,
+        y: u32,
+        old_tile: Option<TileIndex>,
+    },
+    AddLayer {
+        layer_index: usize,
+        name: String,
+    },
+    DeleteLayer {
+        layer_index: usize,
+        layer_data: Layer,
+    },
 }

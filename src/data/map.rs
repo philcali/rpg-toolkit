@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::editor_state::EditorError;
+use super::editor_state::{EditCommand, EditCommandKind, EditorError};
 
 /// A coordinate identifying a tile graphic within a tileset image.
 ///
@@ -103,5 +103,95 @@ impl MapData {
         }
 
         Ok(())
+    }
+
+    /// Places a tile at the given position on the specified layer.
+    /// Returns an `EditCommand` capturing the old value for undo.
+    pub fn place_tile(
+        &mut self,
+        layer_index: usize,
+        x: u32,
+        y: u32,
+        tile_index: TileIndex,
+    ) -> Result<EditCommand, EditorError> {
+        let layer = self
+            .layers
+            .get_mut(layer_index)
+            .ok_or(EditorError::ProjectValidationError(format!(
+                "layer index {} out of bounds",
+                layer_index
+            )))?;
+
+        let row = layer
+            .tiles
+            .get_mut(y as usize)
+            .ok_or(EditorError::ProjectValidationError(format!(
+                "y={} out of bounds (height={})",
+                y, self.height
+            )))?;
+
+        let cell = row
+            .get_mut(x as usize)
+            .ok_or(EditorError::ProjectValidationError(format!(
+                "x={} out of bounds (width={})",
+                x, self.width
+            )))?;
+
+        let old_tile = *cell;
+        *cell = Some(tile_index);
+
+        Ok(EditCommand {
+            kind: EditCommandKind::PlaceTile {
+                layer_index,
+                x,
+                y,
+                old_tile,
+                new_tile: tile_index,
+            },
+        })
+    }
+
+    /// Erases the tile at the given position on the specified layer.
+    /// Returns an `EditCommand` capturing the old value for undo.
+    pub fn erase_tile(
+        &mut self,
+        layer_index: usize,
+        x: u32,
+        y: u32,
+    ) -> Result<EditCommand, EditorError> {
+        let layer = self
+            .layers
+            .get_mut(layer_index)
+            .ok_or(EditorError::ProjectValidationError(format!(
+                "layer index {} out of bounds",
+                layer_index
+            )))?;
+
+        let row = layer
+            .tiles
+            .get_mut(y as usize)
+            .ok_or(EditorError::ProjectValidationError(format!(
+                "y={} out of bounds (height={})",
+                y, self.height
+            )))?;
+
+        let cell = row
+            .get_mut(x as usize)
+            .ok_or(EditorError::ProjectValidationError(format!(
+                "x={} out of bounds (width={})",
+                x, self.width
+            )))?;
+
+        let old_tile = *cell;
+        *cell = None;
+
+        Ok(EditCommand {
+            kind: EditCommandKind::EraseTile {
+                layer_index,
+                x,
+                y,
+                old_tile,
+            },
+        })
     }
 }

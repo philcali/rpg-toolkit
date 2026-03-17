@@ -91,7 +91,8 @@ fn tile_palette_ui(
                                 egui_texture_id,
                                 [display_tile_size, display_tile_size],
                             ))
-                            .uv(uv);
+                            .uv(uv)
+                            .sense(egui::Sense::click());
 
                             // Check if this tile is the active brush
                             let is_selected = editor_state
