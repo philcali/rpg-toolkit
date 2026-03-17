@@ -1,15 +1,16 @@
+mod data;
 mod plugins;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
-use plugins::AppShellPlugin;
+use plugins::{AppShellPlugin, CanvasPlugin};
 
 fn main() {
     App::new()
         .add_plugins(
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
-                    title: "RPG Map Editor".into(),
+                    title: "RPG Toolkit".into(),
                     resize_constraints: WindowResizeConstraints {
                         min_width: 800.0,
                         min_height: 600.0,
@@ -22,10 +23,6 @@ fn main() {
         )
         .add_plugins(EguiPlugin::default())
         .add_plugins(AppShellPlugin)
-        .add_systems(Startup, setup_camera)
+        .add_plugins(CanvasPlugin)
         .run();
-}
-
-fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2d);
 }
