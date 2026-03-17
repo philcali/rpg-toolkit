@@ -309,16 +309,22 @@ fn app_shell_ui(
         }
     }
 
-    // Central panel (canvas placeholder)
-    egui::CentralPanel::default().show(ctx, |ui| {
-        if existing_map.is_some() {
-            // Canvas will be rendered by CanvasPlugin; leave this empty
-        } else {
+    // Central panel — transparent when a map is loaded so Bevy's 2D
+    // camera (gizmo grid, sprites) shows through.
+    if existing_map.is_some() {
+        let frame = egui::Frame::new()
+            .fill(egui::Color32::TRANSPARENT)
+            .inner_margin(0.0);
+        egui::CentralPanel::default().frame(frame).show(ctx, |_ui| {
+            // Bevy renders the grid and tiles behind this transparent panel.
+        });
+    } else {
+        egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Canvas");
             ui.separator();
             ui.label("No map loaded. Use File > New Map to create one.");
-        }
-    });
+        });
+    }
 
     Ok(())
 }

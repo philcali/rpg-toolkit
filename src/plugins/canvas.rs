@@ -47,12 +47,16 @@ fn zoom_to_fit_on_new_map(
         .clamp(0.25, 8.0);
 
     editor.set_zoom(zoom);
-    editor.camera_offset = Vec2::ZERO;
 
-    // Apply to camera transform
+    // Center the camera on the middle of the map.
+    // The grid spans x: [0, map_pixel_w], y: [-map_pixel_h, 0],
+    // so the center is (map_pixel_w / 2, -map_pixel_h / 2).
+    let center = Vec2::new(map_pixel_w / 2.0, -map_pixel_h / 2.0);
+    editor.camera_offset = center;
+
     if let Ok(mut transform) = camera_q.single_mut() {
         transform.scale = Vec3::splat(1.0 / zoom);
-        transform.translation = Vec3::ZERO;
+        transform.translation = Vec3::new(center.x, center.y, 0.0);
     }
 }
 
