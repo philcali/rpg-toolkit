@@ -5,7 +5,7 @@ mod systems;
 use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
-use plugins::{AppShellPlugin, CanvasPlugin, LayerPanelPlugin, PaintingPlugin, TilePalettePlugin};
+use plugins::{AppShellPlugin, CanvasPlugin, LayerPanelPlugin, PaintingPlugin, TilePalettePlugin, UndoRedoPlugin};
 
 fn main() {
     App::new()
@@ -34,6 +34,7 @@ fn main() {
         .add_plugins(TilePalettePlugin)
         .add_plugins(LayerPanelPlugin)
         .add_plugins(PaintingPlugin)
+        .add_plugins(UndoRedoPlugin)
         .init_resource::<systems::input::CursorWorldState>()
         .add_systems(
             Update,

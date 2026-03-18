@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::path::PathBuf;
 
-use super::map::{Layer, TileIndex};
+use super::map::{Layer, MapData, TileIndex};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EditorError {
@@ -92,4 +92,162 @@ pub enum EditCommandKind {
         layer_index: usize,
         layer_data: Layer,
     },
+}
+
+impl EditCommand {
+    /// Applies this command to the map (forward direction).
+    pub fn apply(&self, map: &mut MapData) {
+        match &self.kind {
+            EditCommandKind::PlaceTile {
+                layer_index,
+                x,
+                y,
+                new_tile,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index) {
+                    if let Some(row) = layer.tiles.get_mut(*y as usize) {
+                        if let Some(cell) = row.get_mut(*x as usize) {
+                            *cell = Some(*new_tile);
+                        }
+                    }
+                }
+            }
+            EditCommandKind::EraseTile {
+                layer_index, x, y, ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index) {
+                    if let Some(row) = layer.tiles.get_mut(*y as usize) {
+                        if let Some(cell) = row.get_mut(*x as usize) {
+                            *cell = None;
+                        }
+                    }
+                }
+            }
+            EditCommandKind::AddLayer { layer_index, name } => {
+                let tiles = vec![vec![None; map.width as usize]; map.height as usize];
+                let layer = Layer {
+                    name: name.clone(),
+                    visible: true,
+                    tiles,
+                };
+                let idx = (*layer_index).min(map.layers.len());
+                map.layers.insert(idx, layer);
+                map.active_layer_index = idx;
+            }
+            EditCommandKind::DeleteLayer { layer_index, .. } => {
+                if map.layers.len() > 1 && *layer_index < map.layers.len() {
+                    map.layers.remove(*layer_index);
+                    if map.active_layer_index >= map.layers.len() {
+                        map.active_layer_index = map.layers.len() - 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Applies the inverse of this command (undo direction).
+    pub fn apply_inverse(&self, map: &mut MapData) {
+        match &self.kind {
+            EditCommandKind::PlaceTile {
+                layer_index,
+                x,
+                y,
+                old_tile,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index) {
+                    if let Some(row) = layer.tiles.get_mut(*y as usize) {
+                        if let Some(cell) = row.get_mut(*x as usize) {
+                            *cell = *old_tile;
+                        }
+                    }
+                }
+            }
+            EditCommandKind::EraseTile {
+                layer_index,
+                x,
+                y,
+                old_tile,
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index) {
+                    if let Some(row) = layer.tiles.get_mut(*y as usize) {
+                        if let Some(cell) = row.get_mut(*x as usize) {
+                            *cell = *old_tile;
+                        }
+                    }
+                }
+            }
+            EditCommandKind::AddLayer { layer_index, .. } => {
+                // Inverse of add = delete
+                if *layer_index < map.layers.len() {
+                    map.layers.remove(*layer_index);
+                    if map.active_layer_index >= map.layers.len() {
+                        map.active_layer_index = map.layers.len().saturating_sub(1);
+                    }
+                }
+            }
+            EditCommandKind::DeleteLayer {
+                layer_index,
+                layer_data,
+            } => {
+                // Inverse of delete = re-insert
+                let idx = (*layer_index).min(map.layers.len());
+                map.layers.insert(idx, layer_data.clone());
+                map.active_layer_index = idx;
+            }
+        }
+    }
+}
+
+/// Undo/redo history resource. Maintains two stacks capped at `max_history`.
+#[derive(Resource)]
+pub struct UndoHistory {
+    pub undo_stack: Vec<EditCommand>,
+    pub redo_stack: Vec<EditCommand>,
+    pub max_history: usize,
+}
+
+impl Default for UndoHistory {
+    fn default() -> Self {
+        Self {
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            max_history: 50,
+        }
+    }
+}
+
+impl UndoHistory {
+    /// Pushes a command onto the undo stack, clears the redo stack,
+    /// and enforces the maximum history size.
+    pub fn push_command(&mut self, cmd: EditCommand) {
+        self.redo_stack.clear();
+        self.undo_stack.push(cmd);
+        if self.undo_stack.len() > self.max_history {
+            self.undo_stack.remove(0);
+        }
+    }
+
+    /// Undoes the most recent command. Returns `true` if an undo was performed.
+    pub fn undo(&mut self, map: &mut MapData) -> bool {
+        if let Some(cmd) = self.undo_stack.pop() {
+            cmd.apply_inverse(map);
+            self.redo_stack.push(cmd);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Redoes the most recently undone command. Returns `true` if a redo was performed.
+    pub fn redo(&mut self, map: &mut MapData) -> bool {
+        if let Some(cmd) = self.redo_stack.pop() {
+            cmd.apply(map);
+            self.undo_stack.push(cmd);
+            true
+        } else {
+            false
+        }
+    }
 }

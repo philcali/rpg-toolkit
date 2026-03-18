@@ -39,13 +39,35 @@ fn painting_system(
 
     if left_pressed {
         if let Some(brush) = editor_state.active_brush {
-            if let Ok(cmd) = map.place_tile(layer_index, col, row, brush) {
-                edit_events.write(cmd);
+            // Skip if the cell already contains the same tile (avoids duplicate undo entries from held clicks)
+            let already_set = map
+                .layers
+                .get(layer_index)
+                .and_then(|l| l.tiles.get(row as usize))
+                .and_then(|r| r.get(col as usize))
+                .copied()
+                .flatten()
+                == Some(brush);
+            if !already_set {
+                if let Ok(cmd) = map.place_tile(layer_index, col, row, brush) {
+                    edit_events.write(cmd);
+                }
             }
         }
     } else if right_pressed {
-        if let Ok(cmd) = map.erase_tile(layer_index, col, row) {
-            edit_events.write(cmd);
+        // Skip if the cell is already empty
+        let already_empty = map
+            .layers
+            .get(layer_index)
+            .and_then(|l| l.tiles.get(row as usize))
+            .and_then(|r| r.get(col as usize))
+            .copied()
+            .flatten()
+            .is_none();
+        if !already_empty {
+            if let Ok(cmd) = map.erase_tile(layer_index, col, row) {
+                edit_events.write(cmd);
+            }
         }
     }
 }
