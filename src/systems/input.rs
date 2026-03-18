@@ -28,8 +28,12 @@ pub fn update_cursor_state(
     cursor_state.tile_pos = None;
 
     let Ok(window) = windows.single() else { return };
-    let Some(cursor_pos) = window.cursor_position() else { return };
-    let Ok((camera, cam_transform)) = camera_q.single() else { return };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+    let Ok((camera, cam_transform)) = camera_q.single() else {
+        return;
+    };
 
     let Ok(world_pos) = camera.viewport_to_world_2d(cam_transform, cursor_pos) else {
         return;

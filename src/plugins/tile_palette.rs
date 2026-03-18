@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::data::{EditorState, TilesetData};
 
@@ -50,7 +50,12 @@ fn tile_palette_ui(
 
             // Tile size info
             ui.label(format!("Tile size: {}x{}", tile_w, tile_h));
-            ui.label(format!("Grid: {} × {} ({} tiles)", columns, rows, columns * rows));
+            ui.label(format!(
+                "Grid: {} × {} ({} tiles)",
+                columns,
+                rows,
+                columns * rows
+            ));
             ui.separator();
 
             // Active brush indicator
@@ -70,8 +75,7 @@ fn tile_palette_ui(
             let display_tile_size = (available_width / columns as f32).floor().max(8.0);
 
             egui::ScrollArea::vertical().show(ui, |ui| {
-                let grid = egui::Grid::new("tile_grid")
-                    .spacing([1.0, 1.0]);
+                let grid = egui::Grid::new("tile_grid").spacing([1.0, 1.0]);
 
                 grid.show(ui, |ui| {
                     for row in 0..rows {
@@ -99,10 +103,9 @@ fn tile_palette_ui(
                                 .active_brush
                                 .map_or(false, |b| b.col == col && b.row == row);
 
-                            let response = ui.add(tile_image).on_hover_text(format!(
-                                "Tile ({}, {})",
-                                col, row
-                            ));
+                            let response = ui
+                                .add(tile_image)
+                                .on_hover_text(format!("Tile ({}, {})", col, row));
 
                             // Draw selection highlight
                             if is_selected {

@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::data::{EditorState, MapData, TilesetData};
+use crate::systems::camera::{self, PanState};
 
 /// Default tile size in pixels (used when no tileset is loaded).
 const DEFAULT_TILE_SIZE: f32 = 16.0;
@@ -10,12 +11,29 @@ const DEFAULT_TILE_SIZE: f32 = 16.0;
 pub struct EditorCamera;
 
 /// Plugin that manages the 2D camera, grid overlay, and zoom-to-fit on map creation.
+///
+/// TODO: Add a canvas toolbar with selectable tools (Pan, Zoom, Paint, Erase, etc.)
+/// so that panning doesn't require a middle-mouse button — important for laptop users
+/// without a three-button mouse.
 pub struct CanvasPlugin;
 
 impl Plugin for CanvasPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_camera)
-            .add_systems(Update, (zoom_to_fit_on_new_map, draw_grid));
+        app.init_resource::<PanState>()
+            .add_systems(Startup, spawn_camera)
+            .add_systems(
+                Update,
+                (
+                    zoom_to_fit_on_new_map,
+                    camera::zoom_system.after(zoom_to_fit_on_new_map),
+                    camera::pan_system.after(zoom_to_fit_on_new_map),
+                    camera::apply_camera_transform
+                        .after(camera::zoom_system)
+                        .after(camera::pan_system),
+                    draw_grid.after(camera::apply_camera_transform),
+                )
+                    .before(crate::systems::input::update_cursor_state),
+            );
     }
 }
 
@@ -24,11 +42,13 @@ fn spawn_camera(mut commands: Commands) {
 }
 
 /// When a `MapData` resource is first inserted, compute zoom-to-fit and apply it.
+///
+/// This system only writes to `EditorState`; the `apply_camera_transform` system
+/// handles syncing the actual camera `Transform`.
 fn zoom_to_fit_on_new_map(
     map: Option<Res<MapData>>,
     tileset: Option<Res<TilesetData>>,
     mut editor: ResMut<EditorState>,
-    mut camera_q: Query<&mut Transform, With<EditorCamera>>,
     windows: Query<&Window>,
 ) {
     let Some(map) = map else { return };
@@ -59,19 +79,10 @@ fn zoom_to_fit_on_new_map(
     // so the center is (map_pixel_w / 2, -map_pixel_h / 2).
     let center = Vec2::new(map_pixel_w / 2.0, -map_pixel_h / 2.0);
     editor.camera_offset = center;
-
-    if let Ok(mut transform) = camera_q.single_mut() {
-        transform.scale = Vec3::splat(1.0 / zoom);
-        transform.translation = Vec3::new(center.x, center.y, 0.0);
-    }
 }
 
 /// Draw a grid overlay aligned to tile boundaries using gizmos.
-fn draw_grid(
-    map: Option<Res<MapData>>,
-    tileset: Option<Res<TilesetData>>,
-    mut gizmos: Gizmos,
-) {
+fn draw_grid(map: Option<Res<MapData>>, tileset: Option<Res<TilesetData>>, mut gizmos: Gizmos) {
     let Some(map) = map else { return };
 
     let tile = tileset
@@ -83,8 +94,6 @@ fn draw_grid(
     let total_w = cols * tile;
     let total_h = rows * tile;
 
-    // Origin at top-left of the map, so map spans x: [0, total_w], y: [-total_h, 0]
-    // (Bevy's Y axis points up, so we go negative for "down")
     let left = 0.0;
     let right = total_w;
     let top = 0.0;

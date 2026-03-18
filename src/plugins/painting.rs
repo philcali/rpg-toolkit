@@ -8,8 +8,10 @@ pub struct PaintingPlugin;
 
 impl Plugin for PaintingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<EditCommand>()
-            .add_systems(Update, painting_system.after(crate::systems::input::update_cursor_state));
+        app.add_message::<EditCommand>().add_systems(
+            Update,
+            painting_system.after(crate::systems::input::update_cursor_state),
+        );
     }
 }
 

@@ -34,9 +34,12 @@ fn main() {
         .add_plugins(TilePalettePlugin)
         .add_plugins(PaintingPlugin)
         .init_resource::<systems::input::CursorWorldState>()
-        .add_systems(Update, (
-            systems::input::update_cursor_state,
-            systems::render::sync_tile_sprites,
-        ))
+        .add_systems(
+            Update,
+            (
+                systems::input::update_cursor_state,
+                systems::render::sync_tile_sprites,
+            ),
+        )
         .run();
 }
