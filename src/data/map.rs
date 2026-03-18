@@ -194,4 +194,78 @@ impl MapData {
             },
         })
     }
+
+    /// Adds a new empty layer above the active layer.
+    /// Returns an `EditCommand` for undo support.
+    pub fn add_layer(&mut self, name: impl Into<String>) -> EditCommand {
+        let insert_index = (self.active_layer_index + 1).min(self.layers.len());
+        let name = name.into();
+        let tiles = vec![vec![None; self.width as usize]; self.height as usize];
+        let layer = Layer {
+            name: name.clone(),
+            visible: true,
+            tiles,
+        };
+        self.layers.insert(insert_index, layer);
+        self.active_layer_index = insert_index;
+
+        EditCommand {
+            kind: EditCommandKind::AddLayer {
+                layer_index: insert_index,
+                name,
+            },
+        }
+    }
+
+    /// Deletes the layer at the given index.
+    /// Returns `Err` if it's the last remaining layer.
+    /// Returns an `EditCommand` containing the removed layer data for undo.
+    pub fn delete_layer(&mut self, index: usize) -> Result<EditCommand, EditorError> {
+        if self.layers.len() <= 1 {
+            return Err(EditorError::ProjectValidationError(
+                "cannot delete the last layer".to_string(),
+            ));
+        }
+        if index >= self.layers.len() {
+            return Err(EditorError::ProjectValidationError(format!(
+                "layer index {} out of bounds (count: {})",
+                index,
+                self.layers.len()
+            )));
+        }
+
+        let removed = self.layers.remove(index);
+
+        // Adjust active layer index
+        if self.active_layer_index >= self.layers.len() {
+            self.active_layer_index = self.layers.len() - 1;
+        }
+
+        Ok(EditCommand {
+            kind: EditCommandKind::DeleteLayer {
+                layer_index: index,
+                layer_data: removed,
+            },
+        })
+    }
+
+    /// Toggles the visibility of the layer at the given index.
+    pub fn toggle_layer_visibility(&mut self, index: usize) {
+        if let Some(layer) = self.layers.get_mut(index) {
+            layer.visible = !layer.visible;
+        }
+    }
+
+    /// Sets the active layer index, validating that it's in bounds.
+    pub fn set_active_layer(&mut self, index: usize) -> Result<(), EditorError> {
+        if index >= self.layers.len() {
+            return Err(EditorError::ProjectValidationError(format!(
+                "layer index {} out of bounds (count: {})",
+                index,
+                self.layers.len()
+            )));
+        }
+        self.active_layer_index = index;
+        Ok(())
+    }
 }
