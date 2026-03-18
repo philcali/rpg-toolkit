@@ -9,8 +9,6 @@ pub enum EditorError {
     InvalidDimensions,
     #[error("Unsupported image format. Supported: PNG, JPEG")]
     UnsupportedFormat,
-    #[error("Failed to read image: {0}")]
-    ImageReadError(String),
     #[error("Failed to parse project file: {0}")]
     ProjectParseError(String),
     #[error("Invalid project data: {0}")]
@@ -21,16 +19,9 @@ pub enum EditorError {
 const MIN_ZOOM: f32 = 0.25;
 const MAX_ZOOM: f32 = 8.0;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ToolMode {
-    Paint,
-    Erase,
-}
-
 #[derive(Resource)]
 pub struct EditorState {
     pub active_brush: Option<TileIndex>,
-    pub tool_mode: ToolMode,
     pub zoom_level: f32, // 0.25..=8.0
     pub camera_offset: Vec2,
     pub has_unsaved_changes: bool,
@@ -41,7 +32,6 @@ impl Default for EditorState {
     fn default() -> Self {
         Self {
             active_brush: None,
-            tool_mode: ToolMode::Paint,
             zoom_level: 1.0,
             camera_offset: Vec2::ZERO,
             has_unsaved_changes: false,
@@ -105,24 +95,20 @@ impl EditCommand {
                 new_tile,
                 ..
             } => {
-                if let Some(layer) = map.layers.get_mut(*layer_index) {
-                    if let Some(row) = layer.tiles.get_mut(*y as usize) {
-                        if let Some(cell) = row.get_mut(*x as usize) {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.tiles.get_mut(*y as usize)
+                        && let Some(cell) = row.get_mut(*x as usize) {
                             *cell = Some(*new_tile);
                         }
-                    }
-                }
             }
             EditCommandKind::EraseTile {
                 layer_index, x, y, ..
             } => {
-                if let Some(layer) = map.layers.get_mut(*layer_index) {
-                    if let Some(row) = layer.tiles.get_mut(*y as usize) {
-                        if let Some(cell) = row.get_mut(*x as usize) {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.tiles.get_mut(*y as usize)
+                        && let Some(cell) = row.get_mut(*x as usize) {
                             *cell = None;
                         }
-                    }
-                }
             }
             EditCommandKind::AddLayer { layer_index, name } => {
                 let tiles = vec![vec![None; map.width as usize]; map.height as usize];
@@ -156,13 +142,11 @@ impl EditCommand {
                 old_tile,
                 ..
             } => {
-                if let Some(layer) = map.layers.get_mut(*layer_index) {
-                    if let Some(row) = layer.tiles.get_mut(*y as usize) {
-                        if let Some(cell) = row.get_mut(*x as usize) {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.tiles.get_mut(*y as usize)
+                        && let Some(cell) = row.get_mut(*x as usize) {
                             *cell = *old_tile;
                         }
-                    }
-                }
             }
             EditCommandKind::EraseTile {
                 layer_index,
@@ -170,13 +154,11 @@ impl EditCommand {
                 y,
                 old_tile,
             } => {
-                if let Some(layer) = map.layers.get_mut(*layer_index) {
-                    if let Some(row) = layer.tiles.get_mut(*y as usize) {
-                        if let Some(cell) = row.get_mut(*x as usize) {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.tiles.get_mut(*y as usize)
+                        && let Some(cell) = row.get_mut(*x as usize) {
                             *cell = *old_tile;
                         }
-                    }
-                }
             }
             EditCommandKind::AddLayer { layer_index, .. } => {
                 // Inverse of add = delete

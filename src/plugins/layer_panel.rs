@@ -63,7 +63,10 @@ fn layer_panel_ui(
                 }
 
                 let can_delete = layer_count > 1;
-                if ui.add_enabled(can_delete, egui::Button::new("− Delete")).clicked() {
+                if ui
+                    .add_enabled(can_delete, egui::Button::new("− Delete"))
+                    .clicked()
+                {
                     should_delete = true;
                 }
             });
@@ -85,11 +88,7 @@ fn layer_panel_ui(
 
                         // Layer name — highlight active layer
                         let label = egui::RichText::new(&layer.name);
-                        let label = if is_active {
-                            label.strong()
-                        } else {
-                            label
-                        };
+                        let label = if is_active { label.strong() } else { label };
 
                         let response = ui.selectable_label(is_active, label);
                         if response.clicked() {

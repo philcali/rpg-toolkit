@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::data::{MapData, TilesetData};
 
 /// Marker component for tile sprites managed by the render system.
+#[allow(dead_code)]
 #[derive(Component)]
 pub struct TileSprite {
     pub layer_index: usize,

@@ -39,15 +39,11 @@ fn undo_redo_keyboard(
         return;
     }
 
-    if keyboard.just_pressed(KeyCode::KeyZ) {
-        if history.undo(map) {
-            editor_state.has_unsaved_changes = true;
-        }
+    if keyboard.just_pressed(KeyCode::KeyZ) && history.undo(map) {
+        editor_state.has_unsaved_changes = true;
     }
 
-    if keyboard.just_pressed(KeyCode::KeyY) {
-        if history.redo(map) {
-            editor_state.has_unsaved_changes = true;
-        }
+    if keyboard.just_pressed(KeyCode::KeyY) && history.redo(map) {
+        editor_state.has_unsaved_changes = true;
     }
 }

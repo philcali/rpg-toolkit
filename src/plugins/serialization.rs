@@ -23,11 +23,11 @@ pub struct SerializationAction {
 #[derive(Debug, Clone)]
 pub enum SerializationRequest {
     Save,
-    SaveAs,
     Open,
 }
 
 /// System that processes pending serialization actions (save/load).
+#[allow(clippy::too_many_arguments)]
 fn handle_serialization_actions(
     mut action: ResMut<SerializationAction>,
     mut commands: Commands,
@@ -54,9 +54,6 @@ fn handle_serialization_actions(
                 // No path yet — fall through to Save As
                 save_project_with_dialog(&map, &tileset, &mut editor_state);
             }
-        }
-        SerializationRequest::SaveAs => {
-            save_project_with_dialog(&map, &tileset, &mut editor_state);
         }
         SerializationRequest::Open => {
             load_project_with_dialog(

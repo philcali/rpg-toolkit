@@ -48,11 +48,10 @@ fn painting_system(
                 .copied()
                 .flatten()
                 == Some(brush);
-            if !already_set {
-                if let Ok(cmd) = map.place_tile(layer_index, col, row, brush) {
+            if !already_set
+                && let Ok(cmd) = map.place_tile(layer_index, col, row, brush) {
                     edit_events.write(cmd);
                 }
-            }
         }
     } else if right_pressed {
         // Skip if the cell is already empty
@@ -64,10 +63,9 @@ fn painting_system(
             .copied()
             .flatten()
             .is_none();
-        if !already_empty {
-            if let Ok(cmd) = map.erase_tile(layer_index, col, row) {
+        if !already_empty
+            && let Ok(cmd) = map.erase_tile(layer_index, col, row) {
                 edit_events.write(cmd);
             }
-        }
     }
 }

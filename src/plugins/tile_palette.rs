@@ -101,7 +101,7 @@ fn tile_palette_ui(
                             // Check if this tile is the active brush
                             let is_selected = editor_state
                                 .active_brush
-                                .map_or(false, |b| b.col == col && b.row == row);
+                                .is_some_and(|b| b.col == col && b.row == row);
 
                             let response = ui
                                 .add(tile_image)

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::data::{EditorState, MapData, TilesetData, TilesetMeta};
 use crate::plugins::serialization::{SerializationAction, SerializationRequest};
@@ -77,6 +77,7 @@ impl Default for LoadTilesetDialog {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn app_shell_ui(
     mut contexts: EguiContexts,
     mut new_map_dialog: ResMut<NewMapDialog>,
@@ -276,7 +277,7 @@ fn app_shell_ui(
                     new_map_dialog.height = "32".to_string();
                 }
             }
-            Some("cancel") | _ if choice.is_some() => {
+            Some("cancel") => {
                 unsaved_dialog.open = false;
                 unsaved_dialog.pending_action = None;
             }

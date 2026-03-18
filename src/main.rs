@@ -5,7 +5,10 @@ mod systems;
 use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
-use plugins::{AppShellPlugin, CanvasPlugin, LayerPanelPlugin, PaintingPlugin, SerializationPlugin, TilePalettePlugin, UndoRedoPlugin};
+use plugins::{
+    AppShellPlugin, CanvasPlugin, LayerPanelPlugin, PaintingPlugin, SerializationPlugin,
+    TilePalettePlugin, UndoRedoPlugin,
+};
 
 fn main() {
     App::new()
