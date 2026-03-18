@@ -50,30 +50,27 @@ fn layer_panel_ui(
 
             let layer_count = map.layers.len();
 
+            // Deferred mutation flags — collected during UI, applied after rendering
+            let mut should_add = false;
+            let mut should_delete = false;
+            let mut toggle_vis: Option<usize> = None;
+            let mut select: Option<usize> = None;
+
             // Add / Delete buttons
             ui.horizontal(|ui| {
                 if ui.button("+ Add").clicked() {
-                    let name = format!("Layer {}", counter.next_id);
-                    counter.next_id += 1;
-                    let cmd = map.add_layer(name);
-                    edit_events.write(cmd);
+                    should_add = true;
                 }
 
                 let can_delete = layer_count > 1;
                 if ui.add_enabled(can_delete, egui::Button::new("− Delete")).clicked() {
-                    let idx = map.active_layer_index;
-                    if let Ok(cmd) = map.delete_layer(idx) {
-                        edit_events.write(cmd);
-                    }
+                    should_delete = true;
                 }
             });
 
             ui.separator();
 
             // Layer list — top-to-bottom = highest to lowest in stacking order
-            let mut toggle_vis: Option<usize> = None;
-            let mut select: Option<usize> = None;
-
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for i in (0..layer_count).rev() {
                     let layer = &map.layers[i];
@@ -102,7 +99,19 @@ fn layer_panel_ui(
                 }
             });
 
-            // Apply deferred mutations outside the borrow of map.layers
+            // Apply all deferred mutations after the UI has finished reading map.layers
+            if should_add {
+                let name = format!("Layer {}", counter.next_id);
+                counter.next_id += 1;
+                let cmd = map.add_layer(name);
+                edit_events.write(cmd);
+            }
+            if should_delete {
+                let idx = map.active_layer_index;
+                if let Ok(cmd) = map.delete_layer(idx) {
+                    edit_events.write(cmd);
+                }
+            }
             if let Some(idx) = toggle_vis {
                 map.toggle_layer_visibility(idx);
             }

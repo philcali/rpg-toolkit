@@ -1,7 +1,8 @@
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
 
 use crate::data::{EditorState, MapData, TilesetData, TilesetMeta};
+use crate::plugins::serialization::{SerializationAction, SerializationRequest};
 
 /// Plugin that provides the application shell: menu bar, canvas area, and side panel.
 pub struct AppShellPlugin;
@@ -11,6 +12,7 @@ impl Plugin for AppShellPlugin {
         app.init_resource::<NewMapDialog>()
             .init_resource::<ErrorDialog>()
             .init_resource::<LoadTilesetDialog>()
+            .init_resource::<UnsavedChangesDialog>()
             .init_resource::<EditorState>()
             .add_systems(EguiPrimaryContextPass, app_shell_ui);
     }
@@ -43,6 +45,19 @@ pub struct ErrorDialog {
     pub message: String,
 }
 
+/// The pending action that triggered the unsaved changes prompt.
+#[derive(Clone, Debug)]
+pub enum PendingAction {
+    NewMap,
+}
+
+/// State for the unsaved changes confirmation dialog.
+#[derive(Resource, Default)]
+pub struct UnsavedChangesDialog {
+    pub open: bool,
+    pub pending_action: Option<PendingAction>,
+}
+
 /// Valid tile sizes for the tile size picker.
 const TILE_SIZE_OPTIONS: [u32; 4] = [8, 16, 32, 64];
 
@@ -67,8 +82,11 @@ fn app_shell_ui(
     mut new_map_dialog: ResMut<NewMapDialog>,
     mut error_dialog: ResMut<ErrorDialog>,
     mut load_tileset_dialog: ResMut<LoadTilesetDialog>,
+    mut unsaved_dialog: ResMut<UnsavedChangesDialog>,
+    mut serialization_action: ResMut<SerializationAction>,
     mut commands: Commands,
     existing_map: Option<Res<MapData>>,
+    editor_state: Res<EditorState>,
     asset_server: Res<AssetServer>,
     mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) -> Result {
@@ -79,10 +97,15 @@ fn app_shell_ui(
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
                 if ui.button("New Map").clicked() {
-                    new_map_dialog.open = true;
-                    new_map_dialog.name = "Untitled".to_string();
-                    new_map_dialog.width = "32".to_string();
-                    new_map_dialog.height = "32".to_string();
+                    if editor_state.has_unsaved_changes {
+                        unsaved_dialog.open = true;
+                        unsaved_dialog.pending_action = Some(PendingAction::NewMap);
+                    } else {
+                        new_map_dialog.open = true;
+                        new_map_dialog.name = "Untitled".to_string();
+                        new_map_dialog.width = "32".to_string();
+                        new_map_dialog.height = "32".to_string();
+                    }
                     ui.close();
                 }
                 if ui.button("Load Tileset").clicked() {
@@ -92,9 +115,14 @@ fn app_shell_ui(
                 }
                 ui.separator();
                 if ui.button("Save Project").clicked() {
+                    serialization_action.pending = Some(SerializationRequest::Save);
                     ui.close();
                 }
                 if ui.button("Open Project").clicked() {
+                    if editor_state.has_unsaved_changes {
+                        // For now, just open directly — could add unsaved prompt for Open too
+                    }
+                    serialization_action.pending = Some(SerializationRequest::Open);
                     ui.close();
                 }
             });
@@ -191,6 +219,68 @@ fn app_shell_ui(
             });
         if !still_open {
             error_dialog.open = false;
+        }
+    }
+
+    // Unsaved changes dialog
+    if unsaved_dialog.open {
+        let mut still_open = true;
+        let mut choice: Option<&str> = None;
+
+        egui::Window::new("Unsaved Changes")
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut still_open)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.label("You have unsaved changes. What would you like to do?");
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.button("Save").clicked() {
+                        choice = Some("save");
+                    }
+                    if ui.button("Discard").clicked() {
+                        choice = Some("discard");
+                    }
+                    if ui.button("Cancel").clicked() {
+                        choice = Some("cancel");
+                    }
+                });
+            });
+
+        if !still_open {
+            unsaved_dialog.open = false;
+            unsaved_dialog.pending_action = None;
+        }
+
+        match choice {
+            Some("save") => {
+                // Trigger save, then proceed with the pending action
+                serialization_action.pending = Some(SerializationRequest::Save);
+                let pending = unsaved_dialog.pending_action.take();
+                unsaved_dialog.open = false;
+                if let Some(PendingAction::NewMap) = pending {
+                    new_map_dialog.open = true;
+                    new_map_dialog.name = "Untitled".to_string();
+                    new_map_dialog.width = "32".to_string();
+                    new_map_dialog.height = "32".to_string();
+                }
+            }
+            Some("discard") => {
+                let pending = unsaved_dialog.pending_action.take();
+                unsaved_dialog.open = false;
+                if let Some(PendingAction::NewMap) = pending {
+                    new_map_dialog.open = true;
+                    new_map_dialog.name = "Untitled".to_string();
+                    new_map_dialog.width = "32".to_string();
+                    new_map_dialog.height = "32".to_string();
+                }
+            }
+            Some("cancel") | _ if choice.is_some() => {
+                unsaved_dialog.open = false;
+                unsaved_dialog.pending_action = None;
+            }
+            _ => {}
         }
     }
 
