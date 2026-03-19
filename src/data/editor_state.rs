@@ -97,18 +97,20 @@ impl EditCommand {
             } => {
                 if let Some(layer) = map.layers.get_mut(*layer_index)
                     && let Some(row) = layer.tiles.get_mut(*y as usize)
-                        && let Some(cell) = row.get_mut(*x as usize) {
-                            *cell = Some(*new_tile);
-                        }
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    *cell = Some(*new_tile);
+                }
             }
             EditCommandKind::EraseTile {
                 layer_index, x, y, ..
             } => {
                 if let Some(layer) = map.layers.get_mut(*layer_index)
                     && let Some(row) = layer.tiles.get_mut(*y as usize)
-                        && let Some(cell) = row.get_mut(*x as usize) {
-                            *cell = None;
-                        }
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    *cell = None;
+                }
             }
             EditCommandKind::AddLayer { layer_index, name } => {
                 let tiles = vec![vec![None; map.width as usize]; map.height as usize];
@@ -144,9 +146,10 @@ impl EditCommand {
             } => {
                 if let Some(layer) = map.layers.get_mut(*layer_index)
                     && let Some(row) = layer.tiles.get_mut(*y as usize)
-                        && let Some(cell) = row.get_mut(*x as usize) {
-                            *cell = *old_tile;
-                        }
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    *cell = *old_tile;
+                }
             }
             EditCommandKind::EraseTile {
                 layer_index,
@@ -156,9 +159,10 @@ impl EditCommand {
             } => {
                 if let Some(layer) = map.layers.get_mut(*layer_index)
                     && let Some(row) = layer.tiles.get_mut(*y as usize)
-                        && let Some(cell) = row.get_mut(*x as usize) {
-                            *cell = *old_tile;
-                        }
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    *cell = *old_tile;
+                }
             }
             EditCommandKind::AddLayer { layer_index, .. } => {
                 // Inverse of add = delete
