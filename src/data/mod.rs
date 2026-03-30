@@ -3,7 +3,6 @@ pub mod map;
 pub mod project;
 pub mod tileset;
 
-pub use editor_state::{EditCommand, EditorState, UndoHistory};
-pub use map::MapData;
-pub use project::ProjectFile;
-pub use tileset::{TilesetData, TilesetMeta};
+pub use editor_state::{EditCommand, EditorState};
+pub use project::{Project, ProjectFile};
+pub use tileset::TilesetMeta;

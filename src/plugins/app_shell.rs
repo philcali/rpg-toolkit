@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-use crate::data::{EditorState, MapData, TilesetData, TilesetMeta};
+use crate::data::project::Project;
+use crate::data::{EditorState, TilesetMeta};
 use crate::plugins::serialization::{SerializationAction, SerializationRequest};
 
 /// Plugin that provides the application shell: menu bar, canvas area, and side panel.
@@ -25,6 +26,8 @@ pub struct NewMapDialog {
     pub name: String,
     pub width: String,
     pub height: String,
+    pub tile_width: u32,
+    pub tile_height: u32,
 }
 
 impl Default for NewMapDialog {
@@ -34,6 +37,8 @@ impl Default for NewMapDialog {
             name: "Untitled".to_string(),
             width: "32".to_string(),
             height: "32".to_string(),
+            tile_width: 16,
+            tile_height: 16,
         }
     }
 }
@@ -48,7 +53,8 @@ pub struct ErrorDialog {
 /// The pending action that triggered the unsaved changes prompt.
 #[derive(Clone, Debug)]
 pub enum PendingAction {
-    NewMap,
+    OpenProject,
+    NewProject,
 }
 
 /// State for the unsaved changes confirmation dialog.
@@ -60,6 +66,12 @@ pub struct UnsavedChangesDialog {
 
 /// Valid tile sizes for the tile size picker.
 const TILE_SIZE_OPTIONS: [u32; 4] = [8, 16, 32, 64];
+
+/// Action to perform on a map tab (deferred to avoid borrow conflicts).
+enum MapTabAction {
+    Select(usize),
+    Close(usize),
+}
 
 /// State for the "Load Tileset" dialog (tile size picker).
 #[derive(Resource)]
@@ -85,11 +97,11 @@ fn app_shell_ui(
     mut load_tileset_dialog: ResMut<LoadTilesetDialog>,
     mut unsaved_dialog: ResMut<UnsavedChangesDialog>,
     mut serialization_action: ResMut<SerializationAction>,
-    mut commands: Commands,
-    existing_map: Option<Res<MapData>>,
-    editor_state: Res<EditorState>,
+    _commands: Commands,
+    mut editor_state: ResMut<EditorState>,
     asset_server: Res<AssetServer>,
     mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    mut project: ResMut<Project>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -97,16 +109,24 @@ fn app_shell_ui(
     egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
-                if ui.button("New Map").clicked() {
-                    if editor_state.has_unsaved_changes {
+                if ui.button("New Project").clicked() {
+                    let has_unsaved = project.has_unsaved_changes.values().any(|&v| v);
+                    if has_unsaved {
                         unsaved_dialog.open = true;
-                        unsaved_dialog.pending_action = Some(PendingAction::NewMap);
+                        unsaved_dialog.pending_action = Some(PendingAction::NewProject);
                     } else {
-                        new_map_dialog.open = true;
-                        new_map_dialog.name = "Untitled".to_string();
-                        new_map_dialog.width = "32".to_string();
-                        new_map_dialog.height = "32".to_string();
+                        serialization_action.pending = Some(SerializationRequest::NewProject);
                     }
+                    ui.close();
+                }
+                ui.separator();
+                if ui.button("New Map").clicked() {
+                    new_map_dialog.open = true;
+                    new_map_dialog.name = "Untitled".to_string();
+                    new_map_dialog.width = "32".to_string();
+                    new_map_dialog.height = "32".to_string();
+                    new_map_dialog.tile_width = 16;
+                    new_map_dialog.tile_height = 16;
                     ui.close();
                 }
                 if ui.button("Load Tileset").clicked() {
@@ -119,11 +139,18 @@ fn app_shell_ui(
                     serialization_action.pending = Some(SerializationRequest::Save);
                     ui.close();
                 }
+                if ui.button("Save As").clicked() {
+                    serialization_action.pending = Some(SerializationRequest::SaveAs);
+                    ui.close();
+                }
                 if ui.button("Open Project").clicked() {
-                    if editor_state.has_unsaved_changes {
-                        // For now, just open directly — could add unsaved prompt for Open too
+                    let has_unsaved = project.has_unsaved_changes.values().any(|&v| v);
+                    if has_unsaved {
+                        unsaved_dialog.open = true;
+                        unsaved_dialog.pending_action = Some(PendingAction::OpenProject);
+                    } else {
+                        serialization_action.pending = Some(SerializationRequest::Open);
                     }
-                    serialization_action.pending = Some(SerializationRequest::Open);
                     ui.close();
                 }
             });
@@ -164,6 +191,35 @@ fn app_shell_ui(
                 ui.label("Dimensions must be between 1 and 256.");
                 ui.separator();
                 ui.horizontal(|ui| {
+                    ui.label("Tile Width:");
+                    egui::ComboBox::from_id_salt("new_map_tile_width")
+                        .selected_text(format!("{}", new_map_dialog.tile_width))
+                        .show_ui(ui, |ui| {
+                            for &size in &TILE_SIZE_OPTIONS {
+                                ui.selectable_value(
+                                    &mut new_map_dialog.tile_width,
+                                    size,
+                                    format!("{}", size),
+                                );
+                            }
+                        });
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Tile Height:");
+                    egui::ComboBox::from_id_salt("new_map_tile_height")
+                        .selected_text(format!("{}", new_map_dialog.tile_height))
+                        .show_ui(ui, |ui| {
+                            for &size in &TILE_SIZE_OPTIONS {
+                                ui.selectable_value(
+                                    &mut new_map_dialog.tile_height,
+                                    size,
+                                    format!("{}", size),
+                                );
+                            }
+                        });
+                });
+                ui.separator();
+                ui.horizontal(|ui| {
                     if ui.button("Create").clicked() {
                         should_create = true;
                     }
@@ -181,11 +237,12 @@ fn app_shell_ui(
             let name = new_map_dialog.name.trim().to_string();
             let w = new_map_dialog.width.trim().parse::<u32>();
             let h = new_map_dialog.height.trim().parse::<u32>();
+            let tile_w = new_map_dialog.tile_width;
+            let tile_h = new_map_dialog.tile_height;
 
             match (w, h) {
-                (Ok(w), Ok(h)) => match MapData::new(name, w, h) {
-                    Ok(map) => {
-                        commands.insert_resource(map);
+                (Ok(w), Ok(h)) => match project.add_map(name, w, h, tile_w, tile_h) {
+                    Ok(_map_id) => {
                         new_map_dialog.open = false;
                     }
                     Err(e) => {
@@ -260,21 +317,27 @@ fn app_shell_ui(
                 serialization_action.pending = Some(SerializationRequest::Save);
                 let pending = unsaved_dialog.pending_action.take();
                 unsaved_dialog.open = false;
-                if let Some(PendingAction::NewMap) = pending {
-                    new_map_dialog.open = true;
-                    new_map_dialog.name = "Untitled".to_string();
-                    new_map_dialog.width = "32".to_string();
-                    new_map_dialog.height = "32".to_string();
+                match pending {
+                    Some(PendingAction::OpenProject) => {
+                        serialization_action.pending = Some(SerializationRequest::Open);
+                    }
+                    Some(PendingAction::NewProject) => {
+                        serialization_action.pending = Some(SerializationRequest::NewProject);
+                    }
+                    None => {}
                 }
             }
             Some("discard") => {
                 let pending = unsaved_dialog.pending_action.take();
                 unsaved_dialog.open = false;
-                if let Some(PendingAction::NewMap) = pending {
-                    new_map_dialog.open = true;
-                    new_map_dialog.name = "Untitled".to_string();
-                    new_map_dialog.width = "32".to_string();
-                    new_map_dialog.height = "32".to_string();
+                match pending {
+                    Some(PendingAction::OpenProject) => {
+                        serialization_action.pending = Some(SerializationRequest::Open);
+                    }
+                    Some(PendingAction::NewProject) => {
+                        serialization_action.pending = Some(SerializationRequest::NewProject);
+                    }
+                    None => {}
                 }
             }
             Some("cancel") => {
@@ -377,12 +440,12 @@ fn app_shell_ui(
                                     let texture_handle: Handle<Image> =
                                         asset_server.load(path.to_string_lossy().to_string());
 
-                                    let tileset_data = TilesetData {
-                                        meta,
-                                        texture: texture_handle,
-                                        atlas_layout: atlas_handle,
-                                    };
-                                    commands.insert_resource(tileset_data);
+                                    // Add tileset to Project and auto-switch tab
+                                    {
+                                        let new_id =
+                                            project.add_tileset(meta, texture_handle, atlas_handle);
+                                        editor_state.active_tileset_tab = Some(new_id);
+                                    }
                                 }
                                 Err(e) => {
                                     error_dialog.open = true;
@@ -400,9 +463,58 @@ fn app_shell_ui(
         }
     }
 
+    // Map Tab Bar — horizontal tab strip above the canvas
+    if !project.open_tabs.is_empty() {
+        let mut tab_action: Option<MapTabAction> = None;
+
+        egui::TopBottomPanel::top("map_tab_bar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                for (idx, map_id) in project.open_tabs.iter().enumerate() {
+                    let is_active = project.active_tab == Some(idx);
+                    let map_name = project
+                        .maps
+                        .get(map_id)
+                        .map(|m| m.name.as_str())
+                        .unwrap_or("???");
+                    let has_unsaved = project
+                        .has_unsaved_changes
+                        .get(map_id)
+                        .copied()
+                        .unwrap_or(false);
+
+                    let label = if has_unsaved {
+                        format!("● {}", map_name)
+                    } else {
+                        map_name.to_string()
+                    };
+
+                    let tab = ui.selectable_label(is_active, &label);
+                    if tab.clicked() {
+                        tab_action = Some(MapTabAction::Select(idx));
+                    }
+
+                    // Close button
+                    if ui.small_button("×").clicked() {
+                        tab_action = Some(MapTabAction::Close(idx));
+                    }
+
+                    ui.separator();
+                }
+            });
+        });
+
+        if let Some(action) = tab_action {
+            match action {
+                MapTabAction::Select(idx) => project.set_active_tab(idx),
+                MapTabAction::Close(idx) => project.close_map_tab(idx),
+            }
+        }
+    }
+
     // Central panel — transparent when a map is loaded so Bevy's 2D
     // camera (gizmo grid, sprites) shows through.
-    if existing_map.is_some() {
+    let has_active_map = project.active_map().is_some();
+    if has_active_map {
         let frame = egui::Frame::new()
             .fill(egui::Color32::TRANSPARENT)
             .inner_margin(0.0);
@@ -411,9 +523,9 @@ fn app_shell_ui(
         });
     } else {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Canvas");
-            ui.separator();
-            ui.label("No map loaded. Use File > New Map to create one.");
+            ui.centered_and_justified(|ui| {
+                ui.label("No map open");
+            });
         });
     }
 

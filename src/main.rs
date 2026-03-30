@@ -39,6 +39,7 @@ fn main() {
         .add_plugins(PaintingPlugin)
         .add_plugins(UndoRedoPlugin)
         .add_plugins(SerializationPlugin)
+        .init_resource::<data::Project>()
         .init_resource::<systems::input::CursorWorldState>()
         .add_systems(
             Update,

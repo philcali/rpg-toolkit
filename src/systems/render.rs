@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::data::{MapData, TilesetData};
+use crate::data::Project;
 
 /// Marker component for tile sprites managed by the render system.
 #[allow(dead_code)]
@@ -11,21 +11,17 @@ pub struct TileSprite {
     pub y: u32,
 }
 
-/// System that synchronizes tile sprites with the current `MapData` and `TilesetData`.
+/// System that synchronizes tile sprites with the active map in the `Project`.
 ///
-/// On each frame where `MapData` has changed, this despawns all existing tile sprites
-/// and respawns them from scratch. This is simple and correct for the current scope;
-/// incremental updates can be added later if performance requires it.
+/// On each frame where `Project` has changed, this despawns all existing tile sprites
+/// and respawns them from scratch. For each `TileRef`, the correct tileset is looked up
+/// from `project.tilesets` to resolve the texture and atlas index.
 pub fn sync_tile_sprites(
     mut commands: Commands,
-    map: Option<Res<MapData>>,
-    tileset: Option<Res<TilesetData>>,
+    project: Res<Project>,
     existing_tiles: Query<Entity, With<TileSprite>>,
 ) {
-    let Some(map) = map else { return };
-    let Some(tileset) = tileset else { return };
-
-    if !map.is_changed() {
+    if !project.is_changed() {
         return;
     }
 
@@ -34,11 +30,14 @@ pub fn sync_tile_sprites(
         commands.entity(entity).despawn();
     }
 
-    let tile_size = tileset.meta.tile_width as f32;
-    let cols = tileset.meta.columns;
+    let Some(active_map) = project.active_map() else {
+        return;
+    };
+
+    let tile_size = active_map.tile_width as f32;
 
     // Spawn sprites for each placed tile across all visible layers
-    for (layer_idx, layer) in map.layers.iter().enumerate() {
+    for (layer_idx, layer) in active_map.layers.iter().enumerate() {
         if !layer.visible {
             continue;
         }
@@ -48,10 +47,19 @@ pub fn sync_tile_sprites(
 
         for (row_idx, row) in layer.tiles.iter().enumerate() {
             for (col_idx, cell) in row.iter().enumerate() {
-                let Some(tile_index) = cell else { continue };
+                let Some(tile_ref) = cell else { continue };
+
+                // Look up the tileset for this TileRef
+                let Some(tileset) = project.tilesets.get(&tile_ref.tileset_id) else {
+                    warn!(
+                        "TileRef at ({}, {}) layer {} references unknown tileset '{}'",
+                        col_idx, row_idx, layer_idx, tile_ref.tileset_id
+                    );
+                    continue;
+                };
 
                 // Compute atlas index (row-major)
-                let atlas_index = (tile_index.row * cols + tile_index.col) as usize;
+                let atlas_index = (tile_ref.row * tileset.meta.columns + tile_ref.col) as usize;
 
                 // World position: x goes right, y goes down (negative in Bevy)
                 let world_x = col_idx as f32 * tile_size + tile_size / 2.0;

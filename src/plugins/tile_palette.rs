@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-use crate::data::{EditorState, TilesetData};
+use crate::data::EditorState;
+use crate::data::map::TileRef;
+use crate::data::project::Project;
 
 /// Plugin that renders the tile palette side panel.
 pub struct TilePalettePlugin;
@@ -14,11 +16,13 @@ impl Plugin for TilePalettePlugin {
 
 fn tile_palette_ui(
     mut contexts: EguiContexts,
-    tileset: Option<Res<TilesetData>>,
+    project: Res<Project>,
     mut editor_state: ResMut<EditorState>,
 ) -> Result {
-    let Some(tileset) = tileset else {
-        // No tileset loaded — show placeholder
+    // If project has no tilesets, show placeholder
+    let has_tilesets = !project.tilesets.is_empty();
+
+    if !has_tilesets {
         let ctx = contexts.ctx_mut()?;
         egui::SidePanel::right("tile_palette")
             .default_width(200.0)
@@ -28,17 +32,37 @@ fn tile_palette_ui(
                 ui.label("No tileset loaded.");
             });
         return Ok(());
-    };
+    }
 
-    let meta = &tileset.meta;
-    let tile_w = meta.tile_width;
-    let tile_h = meta.tile_height;
-    let columns = meta.columns;
-    let rows = meta.rows;
+    // Collect and sort tileset entries by name (then ID for stability)
+    let mut sorted_tilesets: Vec<_> = project.tilesets.iter().collect();
+    sorted_tilesets.sort_by(|(id_a, entry_a), (id_b, entry_b)| {
+        entry_a
+            .meta
+            .file_path
+            .cmp(&entry_b.meta.file_path)
+            .then_with(|| id_a.cmp(id_b))
+    });
 
-    // Register the tileset texture with egui so we can render it
-    let texture_handle = tileset.texture.clone();
-    let egui_texture_id = contexts.add_image(bevy_egui::EguiTextureHandle::Strong(texture_handle));
+    // Auto-select first tileset if active_tileset_tab is None or invalid
+    let active_tab_valid = editor_state
+        .active_tileset_tab
+        .as_ref()
+        .is_some_and(|id| project.tilesets.contains_key(id));
+
+    if !active_tab_valid {
+        editor_state.active_tileset_tab = sorted_tilesets.first().map(|(id, _)| (*id).clone());
+    }
+
+    let active_tileset_id = editor_state.active_tileset_tab.clone();
+
+    // Register textures with egui for each tileset and find the active one
+    let mut tileset_textures: Vec<(String, egui::TextureId)> = Vec::new();
+    for (id, entry) in &sorted_tilesets {
+        let texture_handle = entry.texture.clone();
+        let egui_tex_id = contexts.add_image(bevy_egui::EguiTextureHandle::Strong(texture_handle));
+        tileset_textures.push(((*id).clone(), egui_tex_id));
+    }
 
     let ctx = contexts.ctx_mut()?;
 
@@ -47,6 +71,46 @@ fn tile_palette_ui(
         .show(ctx, |ui| {
             ui.heading("Tile Palette");
             ui.separator();
+
+            // Tileset Tab Bar
+            ui.horizontal_wrapped(|ui| {
+                for (id, entry) in &sorted_tilesets {
+                    let label = tileset_tab_label(&entry.meta.file_path);
+                    let is_active = active_tileset_id.as_deref() == Some(*id);
+                    if ui.selectable_label(is_active, &label).clicked() {
+                        editor_state.active_tileset_tab = Some((*id).clone());
+                    }
+                }
+            });
+            ui.separator();
+
+            // Find the active tileset entry and its egui texture
+            let Some(active_id) = &editor_state.active_tileset_tab else {
+                ui.label("No tileset selected.");
+                return;
+            };
+            let active_id = active_id.clone();
+
+            let Some(entry) = project.tilesets.get(&active_id) else {
+                ui.label("No tileset selected.");
+                return;
+            };
+
+            let egui_texture_id = tileset_textures
+                .iter()
+                .find(|(id, _)| id == &active_id)
+                .map(|(_, tex_id)| *tex_id);
+
+            let Some(egui_texture_id) = egui_texture_id else {
+                ui.label("Texture not available.");
+                return;
+            };
+
+            let meta = &entry.meta;
+            let tile_w = meta.tile_width;
+            let tile_h = meta.tile_height;
+            let columns = meta.columns;
+            let rows = meta.rows;
 
             // Tile size info
             ui.label(format!("Tile size: {}x{}", tile_w, tile_h));
@@ -60,7 +124,11 @@ fn tile_palette_ui(
 
             // Active brush indicator
             if let Some(ref brush) = editor_state.active_brush {
-                ui.label(format!("Selected: ({}, {})", brush.col, brush.row));
+                if brush.tileset_id == active_id {
+                    ui.label(format!("Selected: ({}, {})", brush.col, brush.row));
+                } else {
+                    ui.label("No tile selected");
+                }
             } else {
                 ui.label("No tile selected");
             }
@@ -99,9 +167,9 @@ fn tile_palette_ui(
                             .sense(egui::Sense::click());
 
                             // Check if this tile is the active brush
-                            let is_selected = editor_state
-                                .active_brush
-                                .is_some_and(|b| b.col == col && b.row == row);
+                            let is_selected = editor_state.active_brush.as_ref().is_some_and(|b| {
+                                b.tileset_id == active_id && b.col == col && b.row == row
+                            });
 
                             let response = ui
                                 .add(tile_image)
@@ -118,9 +186,13 @@ fn tile_palette_ui(
                                 );
                             }
 
+                            // Subtask 6.2: produce TileRef with tileset_id
                             if response.clicked() {
-                                editor_state.active_brush =
-                                    Some(crate::data::map::TileIndex { col, row });
+                                editor_state.active_brush = Some(TileRef {
+                                    tileset_id: active_id.clone(),
+                                    col,
+                                    row,
+                                });
                             }
                         }
                         ui.end_row();
@@ -130,4 +202,13 @@ fn tile_palette_ui(
         });
 
     Ok(())
+}
+
+/// Extracts a short label from a file path for the tileset tab.
+fn tileset_tab_label(file_path: &str) -> String {
+    std::path::Path::new(file_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Tileset")
+        .to_string()
 }

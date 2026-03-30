@@ -1,12 +1,14 @@
 use bevy::prelude::*;
 use std::path::PathBuf;
 
-use super::map::{Layer, MapData, TileIndex};
+use super::map::{Layer, MapData, TileRef, TilesetId};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EditorError {
     #[error("Invalid map dimensions: width and height must be between 1 and 256")]
     InvalidDimensions,
+    #[error("Invalid tile size: must be one of 8, 16, 32, 64")]
+    InvalidTileSize,
     #[error("Unsupported image format. Supported: PNG, JPEG")]
     UnsupportedFormat,
     #[error("Failed to parse project file: {0}")]
@@ -21,10 +23,10 @@ const MAX_ZOOM: f32 = 8.0;
 
 #[derive(Resource)]
 pub struct EditorState {
-    pub active_brush: Option<TileIndex>,
+    pub active_brush: Option<TileRef>,
+    pub active_tileset_tab: Option<TilesetId>,
     pub zoom_level: f32, // 0.25..=8.0
     pub camera_offset: Vec2,
-    pub has_unsaved_changes: bool,
     pub current_save_path: Option<PathBuf>,
 }
 
@@ -32,9 +34,9 @@ impl Default for EditorState {
     fn default() -> Self {
         Self {
             active_brush: None,
+            active_tileset_tab: None,
             zoom_level: 1.0,
             camera_offset: Vec2::ZERO,
-            has_unsaved_changes: false,
             current_save_path: None,
         }
     }
@@ -65,14 +67,14 @@ pub enum EditCommandKind {
         layer_index: usize,
         x: u32,
         y: u32,
-        old_tile: Option<TileIndex>,
-        new_tile: TileIndex,
+        old_tile: Option<TileRef>,
+        new_tile: TileRef,
     },
     EraseTile {
         layer_index: usize,
         x: u32,
         y: u32,
-        old_tile: Option<TileIndex>,
+        old_tile: Option<TileRef>,
     },
     AddLayer {
         layer_index: usize,
@@ -99,7 +101,7 @@ impl EditCommand {
                     && let Some(row) = layer.tiles.get_mut(*y as usize)
                     && let Some(cell) = row.get_mut(*x as usize)
                 {
-                    *cell = Some(*new_tile);
+                    *cell = Some(new_tile.clone());
                 }
             }
             EditCommandKind::EraseTile {
@@ -148,7 +150,7 @@ impl EditCommand {
                     && let Some(row) = layer.tiles.get_mut(*y as usize)
                     && let Some(cell) = row.get_mut(*x as usize)
                 {
-                    *cell = *old_tile;
+                    *cell = old_tile.clone();
                 }
             }
             EditCommandKind::EraseTile {
@@ -161,7 +163,7 @@ impl EditCommand {
                     && let Some(row) = layer.tiles.get_mut(*y as usize)
                     && let Some(cell) = row.get_mut(*x as usize)
                 {
-                    *cell = *old_tile;
+                    *cell = old_tile.clone();
                 }
             }
             EditCommandKind::AddLayer { layer_index, .. } => {
