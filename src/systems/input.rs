@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
+use crate::data::Project;
 use crate::plugins::canvas::EditorCamera;
 
 /// Resource tracking the current cursor position in world and tile coordinates.
@@ -12,16 +13,12 @@ pub struct CursorWorldState {
     pub tile_pos: Option<(u32, u32)>,
 }
 
-/// Default tile size in pixels (used when no tileset is loaded).
-const DEFAULT_TILE_SIZE: f32 = 16.0;
-
 /// System that updates `CursorWorldState` each frame by projecting the screen
 /// cursor through the camera into world/tile coordinates.
 pub fn update_cursor_state(
     windows: Query<&Window, With<PrimaryWindow>>,
     camera_q: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
-    map: Option<Res<crate::data::MapData>>,
-    tileset: Option<Res<crate::data::TilesetData>>,
+    project: Res<Project>,
     mut cursor_state: ResMut<CursorWorldState>,
 ) {
     cursor_state.world_pos = None;
@@ -40,12 +37,11 @@ pub fn update_cursor_state(
     };
     cursor_state.world_pos = Some(world_pos);
 
-    let Some(map) = map else { return };
+    let Some(map) = project.active_map() else {
+        return;
+    };
 
-    let tile_size = tileset
-        .as_ref()
-        .map(|ts| ts.meta.tile_width as f32)
-        .unwrap_or(DEFAULT_TILE_SIZE);
+    let tile_size = map.tile_width as f32;
 
     let col = (world_pos.x / tile_size).floor();
     let row = (-world_pos.y / tile_size).floor();

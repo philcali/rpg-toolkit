@@ -3,15 +3,22 @@ use serde::{Deserialize, Serialize};
 
 use super::editor_state::{EditCommand, EditCommandKind, EditorError};
 
-/// A coordinate identifying a tile graphic within a tileset image.
+/// Type alias for map identifiers (UUID v4 strings).
+pub type MapId = String;
+
+/// Type alias for tileset identifiers (UUID v4 strings).
+pub type TilesetId = String;
+
+/// Valid tile sizes in pixels.
+const VALID_TILE_SIZES: [u32; 4] = [8, 16, 32, 64];
+
+/// A reference to a specific tile within a specific tileset.
 ///
-/// Currently assumes a single tileset per project. To support multiple tilesets
-/// per map, this struct should evolve into a `TileRef { tileset_id, col, row }`
-/// so each cell can reference tiles from different tilesets. That change would
-/// also require a tileset registry, multi-tileset palette UI, and updated
-/// serialization. Tracked for a future iteration.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct TileIndex {
+/// Each placed tile cell stores a `TileRef` so that maps can mix tiles
+/// from different tilesets without ambiguity.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TileRef {
+    pub tileset_id: TilesetId,
     pub col: u32,
     pub row: u32,
 }
@@ -22,26 +29,39 @@ pub struct Layer {
     pub name: String,
     pub visible: bool,
     /// Row-major grid: tiles[y][x]
-    pub tiles: Vec<Vec<Option<TileIndex>>>,
+    pub tiles: Vec<Vec<Option<TileRef>>>,
 }
 
 /// The complete map data.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Resource)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct MapData {
     pub name: String,
     pub width: u32,
     pub height: u32,
+    pub tile_width: u32,
+    pub tile_height: u32,
     pub layers: Vec<Layer>,
     pub active_layer_index: usize,
 }
 
 impl MapData {
-    /// Creates a new map with the given name and dimensions.
+    /// Creates a new map with the given name, dimensions, and tile size.
     /// Width and height must be in the range 1..=256.
+    /// Tile width and height must be in {8, 16, 32, 64}.
     /// The map starts with a single "Ground" layer filled with empty tiles.
-    pub fn new(name: impl Into<String>, width: u32, height: u32) -> Result<Self, EditorError> {
+    pub fn new(
+        name: impl Into<String>,
+        width: u32,
+        height: u32,
+        tile_width: u32,
+        tile_height: u32,
+    ) -> Result<Self, EditorError> {
         if !(1..=256).contains(&width) || !(1..=256).contains(&height) {
             return Err(EditorError::InvalidDimensions);
+        }
+
+        if !VALID_TILE_SIZES.contains(&tile_width) || !VALID_TILE_SIZES.contains(&tile_height) {
+            return Err(EditorError::InvalidTileSize);
         }
 
         let tiles = vec![vec![None; width as usize]; height as usize];
@@ -55,6 +75,8 @@ impl MapData {
             name: name.into(),
             width,
             height,
+            tile_width,
+            tile_height,
             layers: vec![ground_layer],
             active_layer_index: 0,
         })
@@ -112,7 +134,7 @@ impl MapData {
         layer_index: usize,
         x: u32,
         y: u32,
-        tile_index: TileIndex,
+        tile_ref: TileRef,
     ) -> Result<EditCommand, EditorError> {
         let layer = self
             .layers
@@ -137,8 +159,8 @@ impl MapData {
                 x, self.width
             )))?;
 
-        let old_tile = *cell;
-        *cell = Some(tile_index);
+        let old_tile = cell.clone();
+        *cell = Some(tile_ref.clone());
 
         Ok(EditCommand {
             kind: EditCommandKind::PlaceTile {
@@ -146,7 +168,7 @@ impl MapData {
                 x,
                 y,
                 old_tile,
-                new_tile: tile_index,
+                new_tile: tile_ref,
             },
         })
     }
@@ -182,7 +204,7 @@ impl MapData {
                 x, self.width
             )))?;
 
-        let old_tile = *cell;
+        let old_tile = cell.clone();
         *cell = None;
 
         Ok(EditCommand {

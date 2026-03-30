@@ -48,11 +48,10 @@ impl TilesetMeta {
     }
 }
 
-/// Runtime tileset data (not serialized — the texture handle is runtime-only).
-#[derive(Resource)]
-pub struct TilesetData {
+/// A tileset entry stored inside the `Project` resource.
+/// Replaces the singleton `TilesetData` resource for multi-tileset support.
+pub struct TilesetEntry {
     pub meta: TilesetMeta,
     pub texture: Handle<Image>,
-    /// Pre-computed atlas layout for each tile
     pub atlas_layout: Handle<TextureAtlasLayout>,
 }

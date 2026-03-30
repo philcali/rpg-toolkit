@@ -15,7 +15,6 @@ const ZOOM_SPEED: f32 = 0.1;
 pub fn zoom_system(
     mut scroll_events: MessageReader<MouseWheel>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    camera_q: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
     mut editor: ResMut<EditorState>,
 ) {
     let scroll_y: f32 = scroll_events.read().map(|e| e.y).sum();
@@ -27,44 +26,26 @@ pub fn zoom_system(
     let Some(cursor_screen) = window.cursor_position() else {
         return;
     };
-    let Ok((camera, cam_gt)) = camera_q.single() else {
-        return;
-    };
-
-    // World position under cursor BEFORE zoom change
-    let Ok(world_before) = camera.viewport_to_world_2d(cam_gt, cursor_screen) else {
-        return;
-    };
 
     let old_zoom = editor.zoom_level;
     let new_zoom = (old_zoom * (1.0 + scroll_y * ZOOM_SPEED)).clamp(0.25, 8.0);
     editor.set_zoom(new_zoom);
 
-    // After changing zoom, the camera scale changes. We need to adjust the
-    // offset so that `world_before` still maps to the same screen pixel.
-    //
-    // Camera transform: world_pos = screen_pos / zoom + offset - viewport_center / zoom
-    // Rearranging for offset to keep world_before at cursor_screen:
-    //   offset_new = world_before - (cursor_screen - viewport_center) / new_zoom
-    //   offset_old = world_before - (cursor_screen - viewport_center) / old_zoom
-    // But it's simpler to compute the world position that cursor_screen would
-    // map to with the NEW zoom (keeping old offset), then shift the offset by
-    // the difference.
-    let new_scale = 1.0 / new_zoom;
-
     // The viewport center in screen coords
     let vp_center = Vec2::new(window.width() / 2.0, window.height() / 2.0);
 
     // Screen offset from center (Bevy's camera is centered on the viewport)
+    // Bevy Y is flipped: screen Y goes down, world Y goes up
     let screen_offset = cursor_screen - vp_center;
+    let world_offset = Vec2::new(screen_offset.x, -screen_offset.y);
 
-    // World position the cursor would point to after zoom change, without offset adjustment
-    // world = camera_offset + screen_offset_from_center * scale
-    // (Bevy Y is flipped: screen Y goes down, world Y goes up)
-    let world_after =
-        editor.camera_offset + Vec2::new(screen_offset.x, -screen_offset.y) * new_scale;
+    // Compute world position under cursor using our own offset/zoom state
+    // (not the camera's GlobalTransform, which may be stale this frame).
+    // world = camera_offset + screen_offset_from_center / zoom
+    let world_before = editor.camera_offset + world_offset / old_zoom;
+    let world_after = editor.camera_offset + world_offset / new_zoom;
 
-    // Shift offset so world_before stays under the cursor
+    // Shift offset so the world point under the cursor stays fixed
     editor.camera_offset += world_before - world_after;
 }
 

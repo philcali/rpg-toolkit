@@ -1,8 +1,11 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::data::{EditorState, MapData, ProjectFile, TilesetData, UndoHistory};
+use crate::data::editor_state::UndoHistory;
+use crate::data::tileset::TilesetEntry;
+use crate::data::{EditorState, Project, ProjectFile};
 
 /// Plugin that handles project save/load via JSON serialization and native file dialogs.
 pub struct SerializationPlugin;
@@ -23,18 +26,17 @@ pub struct SerializationAction {
 #[derive(Debug, Clone)]
 pub enum SerializationRequest {
     Save,
+    SaveAs,
     Open,
+    NewProject,
 }
 
 /// System that processes pending serialization actions (save/load).
 #[allow(clippy::too_many_arguments)]
 fn handle_serialization_actions(
     mut action: ResMut<SerializationAction>,
-    mut commands: Commands,
-    map: Option<Res<MapData>>,
-    tileset: Option<Res<TilesetData>>,
+    mut project: ResMut<Project>,
     mut editor_state: ResMut<EditorState>,
-    mut undo_history: ResMut<UndoHistory>,
     asset_server: Res<AssetServer>,
     mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut contexts: EguiContexts,
@@ -49,20 +51,28 @@ fn handle_serialization_actions(
     match request {
         SerializationRequest::Save => {
             if let Some(ref path) = editor_state.current_save_path.clone() {
-                save_project_to_path(path, &map, &tileset, &mut editor_state);
+                save_project_to_path(path, &mut project, &mut editor_state);
             } else {
-                // No path yet — fall through to Save As
-                save_project_with_dialog(&map, &tileset, &mut editor_state);
+                save_project_with_dialog(&mut project, &mut editor_state);
             }
+        }
+        SerializationRequest::SaveAs => {
+            save_project_with_dialog(&mut project, &mut editor_state);
         }
         SerializationRequest::Open => {
             load_project_with_dialog(
-                &mut commands,
+                &mut project,
                 &mut editor_state,
-                &mut undo_history,
                 &asset_server,
                 &mut atlas_layouts,
             );
+        }
+        SerializationRequest::NewProject => {
+            *project = Project::default();
+            editor_state.current_save_path = None;
+            editor_state.active_brush = None;
+            editor_state.active_tileset_tab = None;
+            info!("New project created");
         }
     }
 
@@ -70,40 +80,42 @@ fn handle_serialization_actions(
 }
 
 /// Opens a file dialog and saves the project to the chosen path.
-fn save_project_with_dialog(
-    map: &Option<Res<MapData>>,
-    tileset: &Option<Res<TilesetData>>,
-    editor_state: &mut ResMut<EditorState>,
-) {
+fn save_project_with_dialog(project: &mut ResMut<Project>, editor_state: &mut ResMut<EditorState>) {
     let file = rfd::FileDialog::new()
         .add_filter("RPG Project", &["json"])
         .set_file_name("project.json")
         .save_file();
 
     if let Some(path) = file {
-        save_project_to_path(&path, map, tileset, editor_state);
+        save_project_to_path(&path, project, editor_state);
     }
 }
 
 /// Saves the project to a specific path.
 fn save_project_to_path(
     path: &PathBuf,
-    map: &Option<Res<MapData>>,
-    tileset: &Option<Res<TilesetData>>,
+    project: &mut ResMut<Project>,
     editor_state: &mut ResMut<EditorState>,
 ) {
-    let Some(map) = map else {
-        warn!("Cannot save: no map loaded");
-        return;
-    };
+    // Extract maps (clone the HashMap)
+    let maps = project.maps.clone();
 
-    let tileset_meta = tileset.as_ref().map(|ts| ts.meta.clone());
-    let project = ProjectFile::new((**map).clone(), tileset_meta);
+    // Extract tileset metas only (runtime handles are not serialized)
+    let tilesets_meta: HashMap<_, _> = project
+        .tilesets
+        .iter()
+        .map(|(id, entry)| (id.clone(), entry.meta.clone()))
+        .collect();
 
-    match project.serialize() {
+    let project_file = ProjectFile::new(maps, tilesets_meta);
+
+    match project_file.serialize() {
         Ok(json) => match std::fs::write(path, &json) {
             Ok(()) => {
-                editor_state.has_unsaved_changes = false;
+                // Mark all maps as having no unsaved changes
+                for (_id, has_changes) in project.has_unsaved_changes.iter_mut() {
+                    *has_changes = false;
+                }
                 editor_state.current_save_path = Some(path.clone());
                 info!("Project saved to {}", path.display());
             }
@@ -119,9 +131,8 @@ fn save_project_to_path(
 
 /// Opens a file dialog and loads a project from the chosen file.
 fn load_project_with_dialog(
-    commands: &mut Commands,
+    project: &mut ResMut<Project>,
     editor_state: &mut ResMut<EditorState>,
-    undo_history: &mut ResMut<UndoHistory>,
     asset_server: &Res<AssetServer>,
     atlas_layouts: &mut ResMut<Assets<TextureAtlasLayout>>,
 ) {
@@ -139,7 +150,7 @@ fn load_project_with_dialog(
         }
     };
 
-    let project = match ProjectFile::deserialize(&json) {
+    let project_file = match ProjectFile::deserialize(&json) {
         Ok(p) => p,
         Err(e) => {
             warn!("Failed to deserialize project: {}", e);
@@ -147,20 +158,9 @@ fn load_project_with_dialog(
         }
     };
 
-    // Insert the loaded map data
-    commands.insert_resource(project.map);
-
-    // Clear undo history for the new project
-    undo_history.undo_stack.clear();
-    undo_history.redo_stack.clear();
-
-    // Update editor state
-    editor_state.has_unsaved_changes = false;
-    editor_state.current_save_path = Some(path);
-    editor_state.active_brush = None;
-
-    // Reload tileset if the project references one
-    if let Some(meta) = project.tileset {
+    // Reconstruct tilesets with runtime handles from the serialized metas
+    let mut tilesets = HashMap::new();
+    for (id, meta) in &project_file.tilesets {
         let tileset_path = &meta.file_path;
         if !tileset_path.is_empty() && std::path::Path::new(tileset_path).exists() {
             let layout = TextureAtlasLayout::from_grid(
@@ -173,19 +173,47 @@ fn load_project_with_dialog(
             let atlas_handle = atlas_layouts.add(layout);
             let texture_handle: Handle<Image> = asset_server.load(tileset_path.to_string());
 
-            let tileset_data = TilesetData {
-                meta,
-                texture: texture_handle,
-                atlas_layout: atlas_handle,
-            };
-            commands.insert_resource(tileset_data);
+            tilesets.insert(
+                id.clone(),
+                TilesetEntry {
+                    meta: meta.clone(),
+                    texture: texture_handle,
+                    atlas_layout: atlas_handle,
+                },
+            );
         } else {
             warn!(
-                "Tileset file not found: {}. Tileset will not be loaded.",
-                tileset_path
+                "Tileset file not found: {}. Tileset '{}' will not be loaded.",
+                tileset_path, id
             );
         }
     }
+
+    // Initialize empty undo histories and unsaved-changes flags for each map
+    let mut undo_histories = HashMap::new();
+    let mut has_unsaved_changes = HashMap::new();
+    for map_id in project_file.maps.keys() {
+        undo_histories.insert(map_id.clone(), UndoHistory::default());
+        has_unsaved_changes.insert(map_id.clone(), false);
+    }
+
+    // Build open_tabs from all map IDs and set active_tab
+    let open_tabs: Vec<_> = project_file.maps.keys().cloned().collect();
+    let active_tab = if open_tabs.is_empty() { None } else { Some(0) };
+
+    // Replace the current project resource with the loaded one
+    **project = Project {
+        maps: project_file.maps,
+        tilesets,
+        open_tabs,
+        active_tab,
+        undo_histories,
+        has_unsaved_changes,
+    };
+
+    // Reset editor state
+    editor_state.current_save_path = Some(path);
+    editor_state.active_brush = None;
 
     info!("Project loaded successfully");
 }
