@@ -1,3 +1,4 @@
+mod algorithms;
 mod data;
 mod plugins;
 mod systems;
@@ -7,7 +8,7 @@ use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use plugins::{
     AppShellPlugin, CanvasPlugin, LayerPanelPlugin, PaintingPlugin, SerializationPlugin,
-    TilePalettePlugin, UndoRedoPlugin,
+    TilePalettePlugin, ToolbarPlugin, UndoRedoPlugin,
 };
 
 fn main() {
@@ -39,6 +40,7 @@ fn main() {
         .add_plugins(PaintingPlugin)
         .add_plugins(UndoRedoPlugin)
         .add_plugins(SerializationPlugin)
+        .add_plugins(ToolbarPlugin)
         .init_resource::<data::Project>()
         .init_resource::<systems::input::CursorWorldState>()
         .add_systems(

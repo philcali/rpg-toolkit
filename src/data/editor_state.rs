@@ -3,6 +3,31 @@ use std::path::PathBuf;
 
 use super::map::{Layer, MapData, TileRef, TilesetId};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Resource)]
+pub enum EditorTool {
+    #[default]
+    Paint,
+    Erase,
+    Pan,
+    FloodFill,
+    StampBrush,
+}
+
+#[derive(Clone, Debug)]
+pub struct StampBrushSelection {
+    pub tileset_id: TilesetId,
+    pub top_left_col: u32,
+    pub top_left_row: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct LineDragState {
+    pub active: bool,
+    pub start_tile: Option<(u32, u32)>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum EditorError {
     #[error("Invalid map dimensions: width and height must be between 1 and 256")]
@@ -28,6 +53,8 @@ pub struct EditorState {
     pub zoom_level: f32, // 0.25..=8.0
     pub camera_offset: Vec2,
     pub current_save_path: Option<PathBuf>,
+    pub stamp_brush: Option<StampBrushSelection>,
+    pub line_drag: LineDragState,
 }
 
 impl Default for EditorState {
@@ -38,6 +65,8 @@ impl Default for EditorState {
             zoom_level: 1.0,
             camera_offset: Vec2::ZERO,
             current_save_path: None,
+            stamp_brush: None,
+            line_drag: LineDragState::default(),
         }
     }
 }

@@ -4,6 +4,7 @@ pub mod layer_panel;
 pub mod painting;
 pub mod serialization;
 pub mod tile_palette;
+pub mod toolbar;
 pub mod undo_redo;
 
 pub use app_shell::AppShellPlugin;
@@ -12,4 +13,5 @@ pub use layer_panel::LayerPanelPlugin;
 pub use painting::PaintingPlugin;
 pub use serialization::SerializationPlugin;
 pub use tile_palette::TilePalettePlugin;
+pub use toolbar::ToolbarPlugin;
 pub use undo_redo::UndoRedoPlugin;
