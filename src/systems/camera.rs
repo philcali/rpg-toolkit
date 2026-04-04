@@ -2,7 +2,7 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::data::EditorState;
+use crate::data::{EditorState, EditorTool};
 use crate::plugins::canvas::EditorCamera;
 
 /// Zoom speed factor applied to each scroll tick.
@@ -49,36 +49,72 @@ pub fn zoom_system(
     editor.camera_offset += world_before - world_after;
 }
 
-/// Resource tracking middle-mouse pan state.
+/// Resource tracking pan state for both middle-mouse and left-click (Pan tool) panning.
 #[derive(Resource, Default)]
 pub struct PanState {
-    /// Whether the middle mouse button is currently held.
-    pub is_panning: bool,
+    /// Whether a middle-mouse pan is in progress.
+    pub middle_panning: bool,
+    /// Whether a left-click pan is in progress (Pan tool mode only).
+    pub left_panning: bool,
     /// Last known cursor screen position during a pan drag.
     pub last_cursor_pos: Option<Vec2>,
 }
 
-/// System that handles middle-mouse-button drag for panning.
+impl PanState {
+    /// Whether any pan drag is currently active.
+    pub fn is_panning(&self) -> bool {
+        self.middle_panning || self.left_panning
+    }
+}
+
+/// System that handles middle-mouse-button drag and left-click drag (in Pan mode) for panning.
 pub fn pan_system(
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut pan_state: ResMut<PanState>,
     mut editor: ResMut<EditorState>,
+    tool: Res<EditorTool>,
 ) {
+    // --- Middle-mouse: unconditional, regardless of active tool ---
     if mouse.just_pressed(MouseButton::Middle) {
-        pan_state.is_panning = true;
+        pan_state.middle_panning = true;
         let cursor = windows.single().ok().and_then(|w| w.cursor_position());
         pan_state.last_cursor_pos = cursor;
         return;
     }
-
     if mouse.just_released(MouseButton::Middle) {
-        pan_state.is_panning = false;
-        pan_state.last_cursor_pos = None;
+        pan_state.middle_panning = false;
+        if !pan_state.left_panning {
+            pan_state.last_cursor_pos = None;
+        }
         return;
     }
 
-    if !pan_state.is_panning {
+    // --- Left-click: only when EditorTool::Pan ---
+    if *tool == EditorTool::Pan {
+        if mouse.just_pressed(MouseButton::Left) {
+            pan_state.left_panning = true;
+            let cursor = windows.single().ok().and_then(|w| w.cursor_position());
+            pan_state.last_cursor_pos = cursor;
+            return;
+        }
+        if mouse.just_released(MouseButton::Left) {
+            pan_state.left_panning = false;
+            if !pan_state.middle_panning {
+                pan_state.last_cursor_pos = None;
+            }
+            return;
+        }
+    } else if pan_state.left_panning {
+        // Tool changed away from Pan while left-dragging — cancel left pan.
+        pan_state.left_panning = false;
+        if !pan_state.middle_panning {
+            pan_state.last_cursor_pos = None;
+        }
+        return;
+    }
+
+    if !pan_state.is_panning() {
         return;
     }
 

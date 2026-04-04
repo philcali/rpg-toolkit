@@ -1,11 +1,18 @@
 use bevy::prelude::*;
 
-use crate::data::{EditorState, Project};
+use crate::algorithms::line_engine::bresenham_line;
+use crate::data::map::MapId;
+use crate::data::{EditorState, EditorTool, Project};
 use crate::systems::camera::{self, PanState};
+use crate::systems::input::CursorWorldState;
 
 /// Marker component for the editor's 2D camera.
 #[derive(Component)]
 pub struct EditorCamera;
+
+/// Tracks which map was last zoom-to-fitted so we only re-fit on actual map switches.
+#[derive(Resource, Default)]
+struct LastFittedMap(Option<MapId>);
 
 /// Plugin that manages the 2D camera, grid overlay, and zoom-to-fit on map creation.
 ///
@@ -17,6 +24,7 @@ pub struct CanvasPlugin;
 impl Plugin for CanvasPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PanState>()
+            .init_resource::<LastFittedMap>()
             .add_systems(Startup, spawn_camera)
             .add_systems(
                 Update,
@@ -28,6 +36,7 @@ impl Plugin for CanvasPlugin {
                         .after(camera::zoom_system)
                         .after(camera::pan_system),
                     draw_grid.after(camera::apply_camera_transform),
+                    draw_preview_gizmos.after(draw_grid),
                 )
                     .before(crate::systems::input::update_cursor_state),
             );
@@ -46,14 +55,22 @@ fn zoom_to_fit_on_new_map(
     project: Res<Project>,
     mut editor: ResMut<EditorState>,
     windows: Query<&Window>,
+    mut last_fitted: ResMut<LastFittedMap>,
 ) {
-    let Some(active) = project.active_map() else {
+    let Some(active_id) = project.active_map_id().cloned() else {
+        last_fitted.0 = None;
         return;
     };
 
-    if !project.is_changed() {
+    // Only re-fit when the active map actually changes, not on every Project mutation.
+    if last_fitted.0.as_ref() == Some(&active_id) {
         return;
     }
+    last_fitted.0 = Some(active_id.clone());
+
+    let Some(active) = project.maps.get(&active_id) else {
+        return;
+    };
 
     let tile_size = active.tile_width as f32;
     let Ok(window) = windows.single() else { return };
@@ -106,4 +123,57 @@ fn draw_grid(project: Res<Project>, mut gizmos: Gizmos) {
         let y = top - row as f32 * tile;
         gizmos.line_2d(Vec2::new(left, y), Vec2::new(right, y), grid_color);
     }
+}
+
+/// Draw preview gizmos for line drag and stamp brush.
+fn draw_preview_gizmos(
+    editor: Res<EditorState>,
+    tool: Res<EditorTool>,
+    cursor: Res<CursorWorldState>,
+    project: Res<Project>,
+    mut gizmos: Gizmos,
+) {
+    let Some(map) = project.active_map() else {
+        return;
+    };
+    let tile = map.tile_width as f32;
+    let highlight = Color::srgba(1.0, 1.0, 0.0, 0.35);
+
+    // Line preview: when a Ctrl+drag line operation is active
+    if editor.line_drag.active
+        && let (Some((sx, sy)), Some((cx, cy))) = (editor.line_drag.start_tile, cursor.tile_pos)
+    {
+        let coords = bresenham_line(sx, sy, cx, cy);
+        for (x, y) in coords {
+            if x < map.width && y < map.height {
+                draw_tile_highlight(&mut gizmos, x, y, tile, highlight);
+            }
+        }
+    }
+
+    // Stamp brush preview: show footprint at cursor when in StampBrush mode
+    if *tool == EditorTool::StampBrush
+        && let (Some(stamp), Some((cx, cy))) = (&editor.stamp_brush, cursor.tile_pos)
+    {
+        for dy in 0..stamp.height {
+            for dx in 0..stamp.width {
+                let tx = cx + dx;
+                let ty = cy + dy;
+                if tx < map.width && ty < map.height {
+                    draw_tile_highlight(&mut gizmos, tx, ty, tile, highlight);
+                }
+            }
+        }
+    }
+}
+
+/// Draw a semi-transparent highlight rectangle over a single tile.
+fn draw_tile_highlight(gizmos: &mut Gizmos, col: u32, row: u32, tile_size: f32, color: Color) {
+    let x = col as f32 * tile_size + tile_size / 2.0;
+    let y = -(row as f32 * tile_size + tile_size / 2.0);
+    gizmos.rect_2d(
+        Isometry2d::from_translation(Vec2::new(x, y)),
+        Vec2::splat(tile_size),
+        color,
+    );
 }

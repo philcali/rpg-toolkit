@@ -1,9 +1,16 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-use crate::data::EditorState;
 use crate::data::map::TileRef;
 use crate::data::project::Project;
+use crate::data::{EditorState, StampBrushSelection};
+
+/// Tracks the drag start tile position in egui memory for stamp brush selection.
+#[derive(Clone, Default)]
+struct PaletteDragState {
+    /// The (col, row) where the drag started, if a drag is in progress.
+    start: Option<(u32, u32)>,
+}
 
 /// Plugin that renders the tile palette side panel.
 pub struct TilePalettePlugin;
@@ -122,8 +129,23 @@ fn tile_palette_ui(
             ));
             ui.separator();
 
-            // Active brush indicator
-            if let Some(ref brush) = editor_state.active_brush {
+            // Active brush / stamp indicator
+            if let Some(ref stamp) = editor_state.stamp_brush {
+                if stamp.tileset_id == active_id {
+                    ui.label(format!(
+                        "Stamp: ({},{}) {}×{}",
+                        stamp.top_left_col, stamp.top_left_row, stamp.width, stamp.height
+                    ));
+                } else if let Some(ref brush) = editor_state.active_brush {
+                    if brush.tileset_id == active_id {
+                        ui.label(format!("Selected: ({}, {})", brush.col, brush.row));
+                    } else {
+                        ui.label("No tile selected");
+                    }
+                } else {
+                    ui.label("No tile selected");
+                }
+            } else if let Some(ref brush) = editor_state.active_brush {
                 if brush.tileset_id == active_id {
                     ui.label(format!("Selected: ({}, {})", brush.col, brush.row));
                 } else {
@@ -142,7 +164,16 @@ fn tile_palette_ui(
             let available_width = ui.available_width();
             let display_tile_size = (available_width / columns as f32).floor().max(8.0);
 
+            // Read drag state from egui memory
+            let drag_id = egui::Id::new("palette_drag_state");
+            let mut drag_state = ui
+                .memory(|mem| mem.data.get_temp::<PaletteDragState>(drag_id))
+                .unwrap_or_default();
+
             egui::ScrollArea::vertical().show(ui, |ui| {
+                // Collect tile responses so we can process drag logic after the grid
+                let mut tile_responses: Vec<(u32, u32, egui::Response)> = Vec::new();
+
                 let grid = egui::Grid::new("tile_grid").spacing([1.0, 1.0]);
 
                 grid.show(ui, |ui| {
@@ -164,41 +195,168 @@ fn tile_palette_ui(
                                 [display_tile_size, display_tile_size],
                             ))
                             .uv(uv)
-                            .sense(egui::Sense::click());
-
-                            // Check if this tile is the active brush
-                            let is_selected = editor_state.active_brush.as_ref().is_some_and(|b| {
-                                b.tileset_id == active_id && b.col == col && b.row == row
-                            });
+                            .sense(egui::Sense::click_and_drag());
 
                             let response = ui
                                 .add(tile_image)
                                 .on_hover_text(format!("Tile ({}, {})", col, row));
 
-                            // Draw selection highlight
-                            if is_selected {
-                                let rect = response.rect;
-                                ui.painter().rect_stroke(
-                                    rect,
-                                    0.0,
-                                    egui::Stroke::new(2.0, egui::Color32::YELLOW),
-                                    egui::StrokeKind::Outside,
-                                );
-                            }
-
-                            // Subtask 6.2: produce TileRef with tileset_id
-                            if response.clicked() {
-                                editor_state.active_brush = Some(TileRef {
-                                    tileset_id: active_id.clone(),
-                                    col,
-                                    row,
-                                });
-                            }
+                            tile_responses.push((col, row, response));
                         }
                         ui.end_row();
                     }
                 });
+
+                // --- Process drag logic across all tile responses ---
+
+                // Detect drag start: any tile that just got a primary press
+                for (col, row, resp) in &tile_responses {
+                    if resp.drag_started_by(egui::PointerButton::Primary) {
+                        drag_state.start = Some((*col, *row));
+                    }
+                }
+
+                // Determine the current hover tile (for live preview during drag)
+                let current_hover: Option<(u32, u32)> = tile_responses
+                    .iter()
+                    .find(|(_, _, resp)| resp.hovered())
+                    .map(|(col, row, _)| (*col, *row));
+
+                // Compute the selection rectangle for highlighting during drag
+                let selection_rect: Option<(u32, u32, u32, u32)> =
+                    if let (Some((sc, sr)), Some((hc, hr))) = (drag_state.start, current_hover) {
+                        let min_c = sc.min(hc);
+                        let max_c = sc.max(hc);
+                        let min_r = sr.min(hr);
+                        let max_r = sr.max(hr);
+                        Some((min_c, min_r, max_c, max_r))
+                    } else {
+                        None
+                    };
+
+                // Draw highlights
+                for (col, row, resp) in &tile_responses {
+                    let c = *col;
+                    let r = *row;
+
+                    // During active drag, highlight the selection rectangle
+                    if let Some((min_c, min_r, max_c, max_r)) = selection_rect
+                        && drag_state.start.is_some()
+                        && c >= min_c
+                        && c <= max_c
+                        && r >= min_r
+                        && r <= max_r
+                    {
+                        ui.painter().rect_stroke(
+                            resp.rect,
+                            0.0,
+                            egui::Stroke::new(
+                                2.0,
+                                egui::Color32::from_rgba_unmultiplied(0, 200, 255, 200),
+                            ),
+                            egui::StrokeKind::Outside,
+                        );
+                        continue;
+                    }
+
+                    // Highlight stamp brush selection
+                    if let Some(ref stamp) = editor_state.stamp_brush
+                        && stamp.tileset_id == active_id
+                        && c >= stamp.top_left_col
+                        && c < stamp.top_left_col + stamp.width
+                        && r >= stamp.top_left_row
+                        && r < stamp.top_left_row + stamp.height
+                    {
+                        ui.painter().rect_stroke(
+                            resp.rect,
+                            0.0,
+                            egui::Stroke::new(
+                                2.0,
+                                egui::Color32::from_rgba_unmultiplied(0, 255, 128, 200),
+                            ),
+                            egui::StrokeKind::Outside,
+                        );
+                        continue;
+                    }
+
+                    // Highlight single active brush
+                    let is_selected = editor_state
+                        .active_brush
+                        .as_ref()
+                        .is_some_and(|b| b.tileset_id == active_id && b.col == c && b.row == r);
+                    if is_selected {
+                        ui.painter().rect_stroke(
+                            resp.rect,
+                            0.0,
+                            egui::Stroke::new(2.0, egui::Color32::YELLOW),
+                            egui::StrokeKind::Outside,
+                        );
+                    }
+                }
+
+                // Detect drag release or simple click
+                let drag_released = tile_responses
+                    .iter()
+                    .any(|(_, _, resp)| resp.drag_stopped_by(egui::PointerButton::Primary));
+
+                // Also detect simple clicks (no drag movement)
+                let clicked_tile: Option<(u32, u32)> = tile_responses
+                    .iter()
+                    .find(|(_, _, resp)| resp.clicked())
+                    .map(|(col, row, _)| (*col, *row));
+
+                if drag_released {
+                    if let Some((start_col, start_row)) = drag_state.start {
+                        // Find the end tile: use hover position, or fall back to start
+                        let (end_col, end_row) = current_hover.unwrap_or((start_col, start_row));
+
+                        let min_col = start_col.min(end_col);
+                        let max_col = start_col.max(end_col);
+                        let min_row = start_row.min(end_row);
+                        let max_row = start_row.max(end_row);
+                        let w = max_col - min_col + 1;
+                        let h = max_row - min_row + 1;
+
+                        if w == 1 && h == 1 {
+                            // Single-click: set active_brush, clear stamp
+                            editor_state.active_brush = Some(TileRef {
+                                tileset_id: active_id.clone(),
+                                col: min_col,
+                                row: min_row,
+                            });
+                            editor_state.stamp_brush = None;
+                        } else {
+                            // Multi-tile drag: set stamp brush selection
+                            editor_state.stamp_brush = Some(StampBrushSelection {
+                                tileset_id: active_id.clone(),
+                                top_left_col: min_col,
+                                top_left_row: min_row,
+                                width: w,
+                                height: h,
+                            });
+                            // Also set active_brush to top-left tile for fallback
+                            editor_state.active_brush = Some(TileRef {
+                                tileset_id: active_id.clone(),
+                                col: min_col,
+                                row: min_row,
+                            });
+                        }
+                    }
+                    drag_state.start = None;
+                } else if let Some((col, row)) = clicked_tile {
+                    // Simple click with no drag — select single tile
+                    editor_state.active_brush = Some(TileRef {
+                        tileset_id: active_id.clone(),
+                        col,
+                        row,
+                    });
+                    editor_state.stamp_brush = None;
+                    drag_state.start = None;
+                }
             });
+
+            // Persist drag state back to egui memory
+            ui.memory_mut(|mem| mem.data.insert_temp(drag_id, drag_state));
         });
 
     Ok(())

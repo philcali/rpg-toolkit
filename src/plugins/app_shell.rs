@@ -4,6 +4,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use crate::data::project::Project;
 use crate::data::{EditorState, TilesetMeta};
 use crate::plugins::serialization::{SerializationAction, SerializationRequest};
+use crate::plugins::toolbar::CanvasRect;
 
 /// Plugin that provides the application shell: menu bar, canvas area, and side panel.
 pub struct AppShellPlugin;
@@ -102,6 +103,7 @@ fn app_shell_ui(
     asset_server: Res<AssetServer>,
     mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut project: ResMut<Project>,
+    mut canvas_rect: ResMut<CanvasRect>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -510,6 +512,14 @@ fn app_shell_ui(
             }
         }
     }
+
+    // Update canvas rect for toolbar positioning (available_rect reflects
+    // the area remaining after side panels and top bars have been laid out).
+    let avail = ctx.available_rect();
+    canvas_rect.left = avail.left();
+    canvas_rect.top = avail.top();
+    canvas_rect.right = avail.right();
+    canvas_rect.bottom = avail.bottom();
 
     // Central panel — transparent when a map is loaded so Bevy's 2D
     // camera (gizmo grid, sprites) shows through.

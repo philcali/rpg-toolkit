@@ -133,7 +133,9 @@ fn layer_panel_ui(
                 });
 
             // Apply deferred layer mutations via the active map in Project
-            if let Some(map) = project.active_map_mut() {
+            if (should_add || should_delete || toggle_vis.is_some() || select.is_some())
+                && let Some(map) = project.active_map_mut()
+            {
                 if should_add {
                     let name = format!("Layer {}", counter.next_id);
                     counter.next_id += 1;

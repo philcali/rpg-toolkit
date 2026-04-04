@@ -3,6 +3,7 @@ use bevy::window::PrimaryWindow;
 
 use crate::data::Project;
 use crate::plugins::canvas::EditorCamera;
+use crate::plugins::toolbar::CanvasRect;
 
 /// Resource tracking the current cursor position in world and tile coordinates.
 #[derive(Resource, Default)]
@@ -20,6 +21,7 @@ pub fn update_cursor_state(
     camera_q: Query<(&Camera, &GlobalTransform), With<EditorCamera>>,
     project: Res<Project>,
     mut cursor_state: ResMut<CursorWorldState>,
+    canvas_rect: Res<CanvasRect>,
 ) {
     cursor_state.world_pos = None;
     cursor_state.tile_pos = None;
@@ -36,6 +38,18 @@ pub fn update_cursor_state(
         return;
     };
     cursor_state.world_pos = Some(world_pos);
+
+    // Only compute tile_pos when the cursor is within the canvas area
+    // (past the left panels and below the menu bar). This prevents clicks
+    // on egui panels (tile palette, layer panel, toolbar) from being
+    // interpreted as canvas interactions.
+    if cursor_pos.x < canvas_rect.left
+        || cursor_pos.y < canvas_rect.top
+        || cursor_pos.x > canvas_rect.right
+        || cursor_pos.y > canvas_rect.bottom
+    {
+        return;
+    }
 
     let Some(map) = project.active_map() else {
         return;
