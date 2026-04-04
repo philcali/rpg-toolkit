@@ -44,60 +44,61 @@ fn painting_system(
     // --- Line drag commit: mouse released while Ctrl still held ---
     if editor_state.line_drag.active && mouse.just_released(MouseButton::Left) && ctrl_held {
         if let Some(start) = editor_state.line_drag.start_tile
-            && let Some((end_col, end_row)) = cursor_state.tile_pos {
-                let line = bresenham_line(start.0, start.1, end_col, end_row);
+            && let Some((end_col, end_row)) = cursor_state.tile_pos
+        {
+            let line = bresenham_line(start.0, start.1, end_col, end_row);
 
-                // Validate tileset compatibility for paint mode
-                if *tool == EditorTool::Paint {
-                    if let Some(ref brush) = editor_state.active_brush {
-                        if let Some(active_map_id) = project.active_map_id().cloned()
-                            && project
-                                .check_tileset_compatibility(&brush.tileset_id, &active_map_id)
-                                .is_err()
-                            {
-                                editor_state.line_drag.active = false;
-                                editor_state.line_drag.start_tile = None;
-                                return;
-                            }
-                    } else {
-                        // No brush set — don't commit (Req 9.8)
+            // Validate tileset compatibility for paint mode
+            if *tool == EditorTool::Paint {
+                if let Some(ref brush) = editor_state.active_brush {
+                    if let Some(active_map_id) = project.active_map_id().cloned()
+                        && project
+                            .check_tileset_compatibility(&brush.tileset_id, &active_map_id)
+                            .is_err()
+                    {
                         editor_state.line_drag.active = false;
                         editor_state.line_drag.start_tile = None;
                         return;
                     }
+                } else {
+                    // No brush set — don't commit (Req 9.8)
+                    editor_state.line_drag.active = false;
+                    editor_state.line_drag.start_tile = None;
+                    return;
                 }
+            }
 
-                if let Some(map) = project.active_map_mut() {
-                    let layer_index = map.active_layer_index;
-                    for (col, row) in line {
-                        match *tool {
-                            EditorTool::Paint => {
-                                if let Some(ref brush) = editor_state.active_brush
-                                    && let Ok(cmd) =
-                                        map.place_tile(layer_index, col, row, brush.clone())
-                                    {
-                                        edit_events.write(cmd);
-                                    }
+            if let Some(map) = project.active_map_mut() {
+                let layer_index = map.active_layer_index;
+                for (col, row) in line {
+                    match *tool {
+                        EditorTool::Paint => {
+                            if let Some(ref brush) = editor_state.active_brush
+                                && let Ok(cmd) =
+                                    map.place_tile(layer_index, col, row, brush.clone())
+                            {
+                                edit_events.write(cmd);
                             }
-                            EditorTool::Erase => {
-                                // Only emit if not already empty (Req 8.5)
-                                let already_empty = map
-                                    .layers
-                                    .get(layer_index)
-                                    .and_then(|l| l.tiles.get(row as usize))
-                                    .and_then(|r| r.get(col as usize))
-                                    .and_then(|cell| cell.as_ref())
-                                    .is_none();
-                                if !already_empty
-                                    && let Ok(cmd) = map.erase_tile(layer_index, col, row) {
-                                        edit_events.write(cmd);
-                                    }
-                            }
-                            _ => {}
                         }
+                        EditorTool::Erase => {
+                            // Only emit if not already empty (Req 8.5)
+                            let already_empty = map
+                                .layers
+                                .get(layer_index)
+                                .and_then(|l| l.tiles.get(row as usize))
+                                .and_then(|r| r.get(col as usize))
+                                .and_then(|cell| cell.as_ref())
+                                .is_none();
+                            if !already_empty && let Ok(cmd) = map.erase_tile(layer_index, col, row)
+                            {
+                                edit_events.write(cmd);
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
+        }
         editor_state.line_drag.active = false;
         editor_state.line_drag.start_tile = None;
         return;
@@ -135,12 +136,12 @@ fn painting_system(
             // Validate tileset compatibility before placing a tile
             if let Some(ref brush) = editor_state.active_brush
                 && let Some(active_map_id) = project.active_map_id().cloned()
-                    && project
-                        .check_tileset_compatibility(&brush.tileset_id, &active_map_id)
-                        .is_err()
-                {
-                    return;
-                }
+                && project
+                    .check_tileset_compatibility(&brush.tileset_id, &active_map_id)
+                    .is_err()
+            {
+                return;
+            }
 
             let Some(map) = project.active_map_mut() else {
                 return;
@@ -156,9 +157,10 @@ fn painting_system(
                     .and_then(|cell| cell.as_ref())
                     == Some(brush);
                 if !already_set
-                    && let Ok(cmd) = map.place_tile(layer_index, col, row, brush.clone()) {
-                        edit_events.write(cmd);
-                    }
+                    && let Ok(cmd) = map.place_tile(layer_index, col, row, brush.clone())
+                {
+                    edit_events.write(cmd);
+                }
             }
             // Right-click is ignored in Paint mode (Req 3.2)
         }
@@ -177,10 +179,9 @@ fn painting_system(
                 .and_then(|r| r.get(col as usize))
                 .and_then(|cell| cell.as_ref())
                 .is_none();
-            if !already_empty
-                && let Ok(cmd) = map.erase_tile(layer_index, col, row) {
-                    edit_events.write(cmd);
-                }
+            if !already_empty && let Ok(cmd) = map.erase_tile(layer_index, col, row) {
+                edit_events.write(cmd);
+            }
             // Right-click is ignored in Erase mode (Req 8.2)
         }
 
@@ -200,9 +201,9 @@ fn painting_system(
                 && project
                     .check_tileset_compatibility(&brush.tileset_id, &active_map_id)
                     .is_err()
-                {
-                    return;
-                }
+            {
+                return;
+            }
 
             let Some(map) = project.active_map_mut() else {
                 return;
@@ -243,9 +244,9 @@ fn painting_system(
                 && project
                     .check_tileset_compatibility(&stamp.tileset_id, &active_map_id)
                     .is_err()
-                {
-                    return;
-                }
+            {
+                return;
+            }
 
             let Some(map) = project.active_map_mut() else {
                 return;

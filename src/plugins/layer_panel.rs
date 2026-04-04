@@ -134,26 +134,27 @@ fn layer_panel_ui(
 
             // Apply deferred layer mutations via the active map in Project
             if (should_add || should_delete || toggle_vis.is_some() || select.is_some())
-                && let Some(map) = project.active_map_mut() {
-                    if should_add {
-                        let name = format!("Layer {}", counter.next_id);
-                        counter.next_id += 1;
-                        let cmd = map.add_layer(name);
+                && let Some(map) = project.active_map_mut()
+            {
+                if should_add {
+                    let name = format!("Layer {}", counter.next_id);
+                    counter.next_id += 1;
+                    let cmd = map.add_layer(name);
+                    edit_events.write(cmd);
+                }
+                if should_delete {
+                    let idx = map.active_layer_index;
+                    if let Ok(cmd) = map.delete_layer(idx) {
                         edit_events.write(cmd);
                     }
-                    if should_delete {
-                        let idx = map.active_layer_index;
-                        if let Ok(cmd) = map.delete_layer(idx) {
-                            edit_events.write(cmd);
-                        }
-                    }
-                    if let Some(idx) = toggle_vis {
-                        map.toggle_layer_visibility(idx);
-                    }
-                    if let Some(idx) = select {
-                        let _ = map.set_active_layer(idx);
-                    }
                 }
+                if let Some(idx) = toggle_vis {
+                    map.toggle_layer_visibility(idx);
+                }
+                if let Some(idx) = select {
+                    let _ = map.set_active_layer(idx);
+                }
+            }
 
             // ── Map Browser section (below layers) ──
             ui.add_space(8.0);

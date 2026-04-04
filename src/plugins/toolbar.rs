@@ -71,9 +71,10 @@ fn tool_hotkeys(
 ) {
     // Don't intercept keys when egui has a text field focused
     if let Ok(ctx) = contexts.ctx_mut()
-        && ctx.wants_keyboard_input() {
-            return;
-        }
+        && ctx.wants_keyboard_input()
+    {
+        return;
+    }
 
     for &(tool, _, _, key) in TOOLS {
         if keys.just_pressed(key) {

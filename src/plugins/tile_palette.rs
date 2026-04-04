@@ -242,42 +242,42 @@ fn tile_palette_ui(
                     // During active drag, highlight the selection rectangle
                     if let Some((min_c, min_r, max_c, max_r)) = selection_rect
                         && drag_state.start.is_some()
-                            && c >= min_c
-                            && c <= max_c
-                            && r >= min_r
-                            && r <= max_r
-                        {
-                            ui.painter().rect_stroke(
-                                resp.rect,
-                                0.0,
-                                egui::Stroke::new(
-                                    2.0,
-                                    egui::Color32::from_rgba_unmultiplied(0, 200, 255, 200),
-                                ),
-                                egui::StrokeKind::Outside,
-                            );
-                            continue;
-                        }
+                        && c >= min_c
+                        && c <= max_c
+                        && r >= min_r
+                        && r <= max_r
+                    {
+                        ui.painter().rect_stroke(
+                            resp.rect,
+                            0.0,
+                            egui::Stroke::new(
+                                2.0,
+                                egui::Color32::from_rgba_unmultiplied(0, 200, 255, 200),
+                            ),
+                            egui::StrokeKind::Outside,
+                        );
+                        continue;
+                    }
 
                     // Highlight stamp brush selection
                     if let Some(ref stamp) = editor_state.stamp_brush
                         && stamp.tileset_id == active_id
-                            && c >= stamp.top_left_col
-                            && c < stamp.top_left_col + stamp.width
-                            && r >= stamp.top_left_row
-                            && r < stamp.top_left_row + stamp.height
-                        {
-                            ui.painter().rect_stroke(
-                                resp.rect,
-                                0.0,
-                                egui::Stroke::new(
-                                    2.0,
-                                    egui::Color32::from_rgba_unmultiplied(0, 255, 128, 200),
-                                ),
-                                egui::StrokeKind::Outside,
-                            );
-                            continue;
-                        }
+                        && c >= stamp.top_left_col
+                        && c < stamp.top_left_col + stamp.width
+                        && r >= stamp.top_left_row
+                        && r < stamp.top_left_row + stamp.height
+                    {
+                        ui.painter().rect_stroke(
+                            resp.rect,
+                            0.0,
+                            egui::Stroke::new(
+                                2.0,
+                                egui::Color32::from_rgba_unmultiplied(0, 255, 128, 200),
+                            ),
+                            egui::StrokeKind::Outside,
+                        );
+                        continue;
+                    }
 
                     // Highlight single active brush
                     let is_selected = editor_state

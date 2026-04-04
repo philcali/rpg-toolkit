@@ -141,28 +141,30 @@ fn draw_preview_gizmos(
 
     // Line preview: when a Ctrl+drag line operation is active
     if editor.line_drag.active
-        && let (Some((sx, sy)), Some((cx, cy))) = (editor.line_drag.start_tile, cursor.tile_pos) {
-            let coords = bresenham_line(sx, sy, cx, cy);
-            for (x, y) in coords {
-                if x < map.width && y < map.height {
-                    draw_tile_highlight(&mut gizmos, x, y, tile, highlight);
-                }
+        && let (Some((sx, sy)), Some((cx, cy))) = (editor.line_drag.start_tile, cursor.tile_pos)
+    {
+        let coords = bresenham_line(sx, sy, cx, cy);
+        for (x, y) in coords {
+            if x < map.width && y < map.height {
+                draw_tile_highlight(&mut gizmos, x, y, tile, highlight);
             }
         }
+    }
 
     // Stamp brush preview: show footprint at cursor when in StampBrush mode
     if *tool == EditorTool::StampBrush
-        && let (Some(stamp), Some((cx, cy))) = (&editor.stamp_brush, cursor.tile_pos) {
-            for dy in 0..stamp.height {
-                for dx in 0..stamp.width {
-                    let tx = cx + dx;
-                    let ty = cy + dy;
-                    if tx < map.width && ty < map.height {
-                        draw_tile_highlight(&mut gizmos, tx, ty, tile, highlight);
-                    }
+        && let (Some(stamp), Some((cx, cy))) = (&editor.stamp_brush, cursor.tile_pos)
+    {
+        for dy in 0..stamp.height {
+            for dx in 0..stamp.width {
+                let tx = cx + dx;
+                let ty = cy + dy;
+                if tx < map.width && ty < map.height {
+                    draw_tile_highlight(&mut gizmos, tx, ty, tile, highlight);
                 }
             }
         }
+    }
 }
 
 /// Draw a semi-transparent highlight rectangle over a single tile.
