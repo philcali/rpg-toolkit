@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::editor_state::{EditorError, UndoHistory};
-use super::map::{MapData, MapId, TilesetId};
+use super::map::{EventAction, MapData, MapId, SpawnPoint, TilesetId};
 use super::tileset::{TilesetEntry, TilesetMeta};
 
 /// The central project resource holding all maps, tilesets, and editor state.
@@ -16,6 +16,7 @@ pub struct Project {
     pub active_tab: Option<usize>,
     pub undo_histories: HashMap<MapId, UndoHistory>,
     pub has_unsaved_changes: HashMap<MapId, bool>,
+    pub spawn_point: Option<SpawnPoint>,
 }
 
 impl Project {
@@ -70,6 +71,14 @@ impl Project {
             ));
         }
         self.maps.remove(id);
+
+        // Clear spawn point if it references the deleted map
+        if let Some(ref sp) = self.spawn_point
+            && sp.map_id == *id
+        {
+            self.spawn_point = None;
+        }
+
         self.undo_histories.remove(id);
         self.has_unsaved_changes.remove(id);
 
@@ -182,12 +191,22 @@ impl Project {
 pub struct ProjectFile {
     pub maps: HashMap<MapId, MapData>,
     pub tilesets: HashMap<TilesetId, TilesetMeta>,
+    #[serde(default)]
+    pub spawn_point: Option<SpawnPoint>,
 }
 
 impl ProjectFile {
     /// Creates a new empty `ProjectFile`.
-    pub fn new(maps: HashMap<MapId, MapData>, tilesets: HashMap<TilesetId, TilesetMeta>) -> Self {
-        Self { maps, tilesets }
+    pub fn new(
+        maps: HashMap<MapId, MapData>,
+        tilesets: HashMap<TilesetId, TilesetMeta>,
+        spawn_point: Option<SpawnPoint>,
+    ) -> Self {
+        Self {
+            maps,
+            tilesets,
+            spawn_point,
+        }
     }
 
     /// Serializes the project to pretty-printed JSON.
@@ -225,6 +244,29 @@ impl ProjectFile {
                                 "map '{}' layer {} tile ({},{}) references unknown tileset '{}'",
                                 map_id, layer_idx, x, y, tile_ref.tileset_id
                             )));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Warn about JumpTo actions referencing non-existent maps (preserve data, just log)
+        for (map_id, map) in &project.maps {
+            for (layer_idx, layer) in map.layers.iter().enumerate() {
+                for (y, row) in layer.attributes.cells.iter().enumerate() {
+                    for (x, attrs) in row.iter().enumerate() {
+                        for action in &attrs.event_trigger {
+                            match action {
+                                EventAction::JumpTo { target_map_id, .. }
+                                    if !project.maps.contains_key(target_map_id) =>
+                                {
+                                    warn!(
+                                        "map '{}' layer {} tile ({},{}) has JumpTo referencing non-existent map '{}'",
+                                        map_id, layer_idx, x, y, target_map_id
+                                    );
+                                }
+                                _ => {}
+                            }
                         }
                     }
                 }

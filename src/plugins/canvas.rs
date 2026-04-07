@@ -91,7 +91,7 @@ fn zoom_to_fit_on_new_map(
 }
 
 /// Draw a grid overlay aligned to tile boundaries using gizmos.
-fn draw_grid(project: Res<Project>, mut gizmos: Gizmos) {
+pub(crate) fn draw_grid(project: Res<Project>, mut gizmos: Gizmos) {
     let Some(active) = project.active_map() else {
         return;
     };

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-use crate::data::EditorTool;
+use crate::data::{AttributeTool, EditorMode, EditorState, EditorTool};
 
 /// Resource storing the canvas area bounds for toolbar positioning and input gating.
 /// Written by the app shell after panels are laid out.
@@ -36,6 +36,7 @@ const TOOLS: &[(EditorTool, &str, &str, KeyCode)] = &[
 fn toolbar_ui(
     mut contexts: EguiContexts,
     mut active_tool: ResMut<EditorTool>,
+    mut editor_state: ResMut<EditorState>,
     canvas_rect: Res<CanvasRect>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
@@ -46,15 +47,68 @@ fn toolbar_ui(
         .title_bar(false)
         .resizable(false)
         .movable(false)
+        .fixed_size(egui::vec2(32.0, 0.0))
         .anchor(egui::Align2::LEFT_TOP, offset)
         .show(ctx, |ui| {
-            ui.vertical(|ui| {
-                for &(tool, icon, key, _) in TOOLS {
-                    let resp = ui.selectable_label(*active_tool == tool, icon);
-                    if resp.clicked() {
-                        *active_tool = tool;
+            ui.vertical_centered(|ui| {
+                // Mode toggle button
+                let mode_label = match editor_state.editor_mode {
+                    EditorMode::Paint => "🎨",
+                    EditorMode::Attribute => "⚙",
+                };
+                let resp = ui
+                    .button(mode_label)
+                    .on_hover_text(match editor_state.editor_mode {
+                        EditorMode::Paint => "Switch to Attribute mode",
+                        EditorMode::Attribute => "Switch to Paint mode",
+                    });
+                if resp.clicked() {
+                    match editor_state.editor_mode {
+                        EditorMode::Paint => {
+                            // Switch to Attribute mode: save current tool
+                            editor_state.previous_tool = Some(*active_tool);
+                            editor_state.editor_mode = EditorMode::Attribute;
+                        }
+                        EditorMode::Attribute => {
+                            // Switch back to Paint mode: restore previous tool
+                            if let Some(prev) = editor_state.previous_tool.take() {
+                                *active_tool = prev;
+                            }
+                            editor_state.editor_mode = EditorMode::Paint;
+                        }
                     }
-                    resp.on_hover_text(format!("{tool:?} ({key})"));
+                }
+
+                ui.separator();
+
+                match editor_state.editor_mode {
+                    EditorMode::Paint => {
+                        // Show paint tools
+                        for &(tool, icon, key, _) in TOOLS {
+                            let resp = ui.selectable_label(*active_tool == tool, icon);
+                            if resp.clicked() {
+                                *active_tool = tool;
+                            }
+                            resp.on_hover_text(format!("{tool:?} ({key})"));
+                        }
+                    }
+                    EditorMode::Attribute => {
+                        // Show attribute tools
+                        let attr_tools: &[(AttributeTool, &str, &str)] = &[
+                            (AttributeTool::Opacity, "🔒", "Opacity"),
+                            (AttributeTool::EventTrigger, "⚡", "Event Trigger"),
+                            (AttributeTool::SpawnPoint, "📍", "Spawn Point"),
+                        ];
+
+                        for &(tool, icon, label) in attr_tools {
+                            let resp =
+                                ui.selectable_label(editor_state.attribute_tool == tool, icon);
+                            if resp.clicked() {
+                                editor_state.attribute_tool = tool;
+                            }
+                            resp.on_hover_text(label);
+                        }
+                    }
                 }
             });
         });
@@ -63,12 +117,18 @@ fn toolbar_ui(
 }
 
 /// Switch the active tool via keyboard shortcuts (B, E, G, H, S).
-/// Only fires when egui is not capturing keyboard input.
+/// Only fires when egui is not capturing keyboard input and in Paint mode.
 fn tool_hotkeys(
     keys: Res<ButtonInput<KeyCode>>,
     mut active_tool: ResMut<EditorTool>,
     mut contexts: EguiContexts,
+    editor_state: Res<EditorState>,
 ) {
+    // Don't intercept keys when in attribute mode
+    if editor_state.editor_mode == EditorMode::Attribute {
+        return;
+    }
+
     // Don't intercept keys when egui has a text field focused
     if let Ok(ctx) = contexts.ctx_mut()
         && ctx.wants_keyboard_input()

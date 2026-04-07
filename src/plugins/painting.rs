@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::algorithms::flood_fill::flood_fill;
 use crate::algorithms::line_engine::bresenham_line;
 use crate::data::map::TileRef;
-use crate::data::{EditCommand, EditorState, EditorTool, Project};
+use crate::data::{EditCommand, EditorMode, EditorState, EditorTool, Project};
 use crate::systems::input::CursorWorldState;
 
 /// Plugin that handles tile painting and erasure via mouse input on the canvas.
@@ -27,6 +27,11 @@ fn painting_system(
     tool: Res<EditorTool>,
     mut edit_events: MessageWriter<EditCommand>,
 ) {
+    // Attribute mode: early return, no painting
+    if editor_state.editor_mode == EditorMode::Attribute {
+        return;
+    }
+
     // Pan mode: early return, no painting
     if *tool == EditorTool::Pan {
         return;

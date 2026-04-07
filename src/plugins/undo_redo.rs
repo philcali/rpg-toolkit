@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::data::editor_state::EditCommandKind;
 use crate::data::{EditCommand, Project};
 
 /// Plugin that manages undo/redo history and keyboard shortcuts.
@@ -21,6 +22,10 @@ fn consume_edit_commands(mut project: ResMut<Project>, mut reader: MessageReader
     };
 
     for cmd in reader.read() {
+        // SetSpawnPoint operates on Project, not MapData
+        if let EditCommandKind::SetSpawnPoint { new_spawn, .. } = &cmd.kind {
+            project.spawn_point = new_spawn.clone();
+        }
         if let Some(history) = project.undo_histories.get_mut(&active_map_id) {
             history.push_command(cmd.clone());
         }
@@ -48,11 +53,17 @@ fn undo_redo_keyboard(keyboard: Res<ButtonInput<KeyCode>>, mut project: ResMut<P
             project.maps.get_mut(&active_map_id),
             project.undo_histories.get_mut(&active_map_id),
         )
-        && history.undo(map)
     {
-        project
-            .has_unsaved_changes
-            .insert(active_map_id.clone(), true);
+        if let Some(cmd) = history.undo_stack.last()
+            && let EditCommandKind::SetSpawnPoint { old_spawn, .. } = &cmd.kind
+        {
+            project.spawn_point = old_spawn.clone();
+        }
+        if history.undo(map) {
+            project
+                .has_unsaved_changes
+                .insert(active_map_id.clone(), true);
+        }
     }
 
     if keyboard.just_pressed(KeyCode::KeyY)
@@ -60,10 +71,16 @@ fn undo_redo_keyboard(keyboard: Res<ButtonInput<KeyCode>>, mut project: ResMut<P
             project.maps.get_mut(&active_map_id),
             project.undo_histories.get_mut(&active_map_id),
         )
-        && history.redo(map)
     {
-        project
-            .has_unsaved_changes
-            .insert(active_map_id.clone(), true);
+        if let Some(cmd) = history.redo_stack.last()
+            && let EditCommandKind::SetSpawnPoint { new_spawn, .. } = &cmd.kind
+        {
+            project.spawn_point = new_spawn.clone();
+        }
+        if history.redo(map) {
+            project
+                .has_unsaved_changes
+                .insert(active_map_id.clone(), true);
+        }
     }
 }
