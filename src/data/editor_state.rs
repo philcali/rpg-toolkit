@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::path::PathBuf;
 
-use super::map::{Layer, MapData, TileRef, TilesetId};
+use super::map::{EventAction, Layer, MapData, SpawnPoint, TileAttributeLayer, TileRef, TilesetId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Resource)]
 pub enum EditorTool {
@@ -11,6 +11,21 @@ pub enum EditorTool {
     Pan,
     FloodFill,
     StampBrush,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EditorMode {
+    #[default]
+    Paint,
+    Attribute,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AttributeTool {
+    #[default]
+    Opacity,
+    EventTrigger,
+    SpawnPoint,
 }
 
 #[derive(Clone, Debug)]
@@ -55,6 +70,9 @@ pub struct EditorState {
     pub current_save_path: Option<PathBuf>,
     pub stamp_brush: Option<StampBrushSelection>,
     pub line_drag: LineDragState,
+    pub editor_mode: EditorMode,
+    pub attribute_tool: AttributeTool,
+    pub previous_tool: Option<EditorTool>,
 }
 
 impl Default for EditorState {
@@ -67,6 +85,9 @@ impl Default for EditorState {
             current_save_path: None,
             stamp_brush: None,
             line_drag: LineDragState::default(),
+            editor_mode: EditorMode::default(),
+            attribute_tool: AttributeTool::default(),
+            previous_tool: None,
         }
     }
 }
@@ -113,6 +134,24 @@ pub enum EditCommandKind {
         layer_index: usize,
         layer_data: Layer,
     },
+    SetOpacity {
+        layer_index: usize,
+        x: u32,
+        y: u32,
+        old_value: bool,
+        new_value: bool,
+    },
+    SetEventTrigger {
+        layer_index: usize,
+        x: u32,
+        y: u32,
+        old_trigger: Vec<EventAction>,
+        new_trigger: Vec<EventAction>,
+    },
+    SetSpawnPoint {
+        old_spawn: Option<SpawnPoint>,
+        new_spawn: Option<SpawnPoint>,
+    },
 }
 
 impl EditCommand {
@@ -149,6 +188,7 @@ impl EditCommand {
                     name: name.clone(),
                     visible: true,
                     tiles,
+                    attributes: TileAttributeLayer::new(map.width, map.height),
                 };
                 let idx = (*layer_index).min(map.layers.len());
                 map.layers.insert(idx, layer);
@@ -161,6 +201,37 @@ impl EditCommand {
                         map.active_layer_index = map.layers.len() - 1;
                     }
                 }
+            }
+            EditCommandKind::SetOpacity {
+                layer_index,
+                x,
+                y,
+                new_value,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.attributes.cells.get_mut(*y as usize)
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    cell.opacity = *new_value;
+                }
+            }
+            EditCommandKind::SetEventTrigger {
+                layer_index,
+                x,
+                y,
+                new_trigger,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.attributes.cells.get_mut(*y as usize)
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    cell.event_trigger = new_trigger.clone();
+                }
+            }
+            EditCommandKind::SetSpawnPoint { .. } => {
+                // No-op on MapData; handled at Project level by undo_redo plugin
             }
         }
     }
@@ -212,6 +283,37 @@ impl EditCommand {
                 let idx = (*layer_index).min(map.layers.len());
                 map.layers.insert(idx, layer_data.clone());
                 map.active_layer_index = idx;
+            }
+            EditCommandKind::SetOpacity {
+                layer_index,
+                x,
+                y,
+                old_value,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.attributes.cells.get_mut(*y as usize)
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    cell.opacity = *old_value;
+                }
+            }
+            EditCommandKind::SetEventTrigger {
+                layer_index,
+                x,
+                y,
+                old_trigger,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.attributes.cells.get_mut(*y as usize)
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    cell.event_trigger = old_trigger.clone();
+                }
+            }
+            EditCommandKind::SetSpawnPoint { .. } => {
+                // No-op on MapData; handled at Project level by undo_redo plugin
             }
         }
     }

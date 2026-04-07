@@ -107,7 +107,7 @@ fn save_project_to_path(
         .map(|(id, entry)| (id.clone(), entry.meta.clone()))
         .collect();
 
-    let project_file = ProjectFile::new(maps, tilesets_meta);
+    let project_file = ProjectFile::new(maps, tilesets_meta, project.spawn_point.clone());
 
     match project_file.serialize() {
         Ok(json) => match std::fs::write(path, &json) {
@@ -209,6 +209,7 @@ fn load_project_with_dialog(
         active_tab,
         undo_histories,
         has_unsaved_changes,
+        spawn_point: project_file.spawn_point,
     };
 
     // Reset editor state

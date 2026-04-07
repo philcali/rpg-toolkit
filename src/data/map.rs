@@ -12,6 +12,49 @@ pub type TilesetId = String;
 /// Valid tile sizes in pixels.
 const VALID_TILE_SIZES: [u32; 4] = [8, 16, 32, 64];
 
+/// A single action within an event trigger sequence.
+/// Uses `#[serde(tag = "type")]` for clean, forward-compatible JSON.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum EventAction {
+    JumpTo {
+        target_map_id: MapId,
+        target_x: u32,
+        target_y: u32,
+    },
+}
+
+/// Per-tile attribute data: opacity flag and event trigger list.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct TileAttributes {
+    pub opacity: bool,
+    #[serde(default)]
+    pub event_trigger: Vec<EventAction>,
+}
+
+/// A parallel grid of `TileAttributes` matching a layer's tile dimensions.
+/// `cells[y][x]` — row-major, same as `Layer.tiles`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+pub struct TileAttributeLayer {
+    pub cells: Vec<Vec<TileAttributes>>,
+}
+
+impl TileAttributeLayer {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self {
+            cells: vec![vec![TileAttributes::default(); width as usize]; height as usize],
+        }
+    }
+}
+
+/// A project-wide spawn point: one per project, always on layer 0.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpawnPoint {
+    pub map_id: MapId,
+    pub x: u32,
+    pub y: u32,
+}
+
 /// A reference to a specific tile within a specific tileset.
 ///
 /// Each placed tile cell stores a `TileRef` so that maps can mix tiles
@@ -30,6 +73,9 @@ pub struct Layer {
     pub visible: bool,
     /// Row-major grid: tiles[y][x]
     pub tiles: Vec<Vec<Option<TileRef>>>,
+    /// Per-tile attributes grid, parallel to `tiles`.
+    #[serde(default)]
+    pub attributes: TileAttributeLayer,
 }
 
 /// The complete map data.
@@ -69,6 +115,7 @@ impl MapData {
             name: "Ground".to_string(),
             visible: true,
             tiles,
+            attributes: TileAttributeLayer::new(width, height),
         };
 
         Ok(Self {
@@ -227,6 +274,7 @@ impl MapData {
             name: name.clone(),
             visible: true,
             tiles,
+            attributes: TileAttributeLayer::new(self.width, self.height),
         };
         self.layers.insert(insert_index, layer);
         self.active_layer_index = insert_index;
