@@ -5160,7 +5160,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
-name = "rpg_map_editor"
+name = "rpg-toolkit-common"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "rpg-toolkit-editor"
 version = "0.1.0"
 dependencies = [
  "bevy",
@@ -5168,10 +5179,30 @@ dependencies = [
  "image",
  "proptest",
  "rfd",
+ "rpg-toolkit-common",
+ "rpg-toolkit-renderer",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "uuid",
+]
+
+[[package]]
+name = "rpg-toolkit-launcher"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "rpg-toolkit-common",
+ "rpg-toolkit-renderer",
+]
+
+[[package]]
+name = "rpg-toolkit-renderer"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "proptest",
+ "rpg-toolkit-common",
 ]
 
 [[package]]

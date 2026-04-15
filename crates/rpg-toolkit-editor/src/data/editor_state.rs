@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use std::path::PathBuf;
 
-use super::map::{EventAction, Layer, MapData, SpawnPoint, TileAttributeLayer, TileRef, TilesetId};
+use rpg_toolkit_common::{
+    CommonError, EventAction, Layer, MapData, SpawnPoint, TileAttributeLayer, TileRef, TilesetId,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Resource)]
 pub enum EditorTool {
@@ -44,6 +46,7 @@ pub struct LineDragState {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[allow(dead_code)]
 pub enum EditorError {
     #[error("Invalid map dimensions: width and height must be between 1 and 256")]
     InvalidDimensions,
@@ -55,6 +58,8 @@ pub enum EditorError {
     ProjectParseError(String),
     #[error("Invalid project data: {0}")]
     ProjectValidationError(String),
+    #[error(transparent)]
+    Common(#[from] CommonError),
 }
 
 /// Zoom level boundaries.

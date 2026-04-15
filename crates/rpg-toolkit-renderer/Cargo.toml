@@ -1,0 +1,11 @@
+[package]
+name = "rpg-toolkit-renderer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = { workspace = true }
+rpg-toolkit-common = { path = "../rpg-toolkit-common" }
+
+[dev-dependencies]
+proptest = { workspace = true }

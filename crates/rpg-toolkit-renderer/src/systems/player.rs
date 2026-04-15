@@ -1,0 +1,164 @@
+use bevy::prelude::*;
+
+use crate::components::{MoveAnimation, PlayerCharacter};
+use crate::events::PlayerMoved;
+use crate::input::{Direction, MovementIntent};
+use crate::resources::{MovementConfig, PlayerVisual, RendererProjectData, RendererState};
+use crate::systems::collision::is_tile_blocked;
+
+/// Converts grid coordinates to world-space position using the map's tile dimensions.
+pub fn grid_to_world(x: u32, y: u32, tile_width: u32, tile_height: u32) -> Vec2 {
+    let wx = x as f32 * tile_width as f32 + tile_width as f32 / 2.0;
+    let wy = -(y as f32 * tile_height as f32 + tile_height as f32 / 2.0);
+    Vec2::new(wx, wy)
+}
+
+/// Startup system: spawns the player character at the project's spawn point.
+pub fn spawn_player(
+    mut commands: Commands,
+    project_data: Res<RendererProjectData>,
+    mut renderer_state: ResMut<RendererState>,
+    player_visual: Res<PlayerVisual>,
+) {
+    let Some(spawn) = &project_data.project_file.spawn_point else {
+        warn!("No spawn point defined in project; skipping player spawn");
+        return;
+    };
+
+    let Some(map) = project_data.project_file.maps.get(&spawn.map_id) else {
+        warn!(
+            "Spawn point references non-existent map '{}'; skipping player spawn",
+            spawn.map_id
+        );
+        return;
+    };
+
+    // Clamp spawn coordinates to map bounds
+    let grid_x = spawn.x.min(map.width.saturating_sub(1));
+    let grid_y = spawn.y.min(map.height.saturating_sub(1));
+
+    // Set the active map
+    renderer_state.active_map_id = Some(spawn.map_id.clone());
+
+    let world_pos = grid_to_world(grid_x, grid_y, map.tile_width, map.tile_height);
+    let z = map.layers.len() as f32 + 1.0;
+
+    commands.spawn((
+        PlayerCharacter {
+            grid_x,
+            grid_y,
+            move_animation: None,
+        },
+        Sprite {
+            color: player_visual.color,
+            custom_size: Some(Vec2::new(map.tile_width as f32, map.tile_height as f32)),
+            ..default()
+        },
+        Transform::from_xyz(world_pos.x, world_pos.y, z),
+    ));
+}
+
+/// Update system: reads movement intent and initiates tile-to-tile movement
+/// if the target tile is in bounds and not blocked.
+pub fn player_movement(
+    intent: Res<MovementIntent>,
+    project_data: Res<RendererProjectData>,
+    renderer_state: Res<RendererState>,
+    movement_config: Res<MovementConfig>,
+    mut query: Query<&mut PlayerCharacter>,
+) {
+    let Some(direction) = intent.direction else {
+        return;
+    };
+
+    let Some(map_id) = &renderer_state.active_map_id else {
+        return;
+    };
+
+    let Some(map) = project_data.project_file.maps.get(map_id) else {
+        return;
+    };
+
+    for mut player in query.iter_mut() {
+        // Animation exclusivity: ignore input while animating
+        if player.move_animation.is_some() {
+            continue;
+        }
+
+        let (dx, dy): (i64, i64) = match direction {
+            Direction::Up => (0, -1),
+            Direction::Down => (0, 1),
+            Direction::Left => (-1, 0),
+            Direction::Right => (1, 0),
+        };
+
+        let target_x = player.grid_x as i64 + dx;
+        let target_y = player.grid_y as i64 + dy;
+
+        // Bounds check
+        if target_x < 0
+            || target_y < 0
+            || target_x >= map.width as i64
+            || target_y >= map.height as i64
+        {
+            continue;
+        }
+
+        let target_x = target_x as u32;
+        let target_y = target_y as u32;
+
+        // Collision check
+        if is_tile_blocked(map, target_x, target_y) {
+            continue;
+        }
+
+        let from_grid = (player.grid_x, player.grid_y);
+        let from = grid_to_world(from_grid.0, from_grid.1, map.tile_width, map.tile_height);
+        let to = grid_to_world(target_x, target_y, map.tile_width, map.tile_height);
+
+        player.grid_x = target_x;
+        player.grid_y = target_y;
+        player.move_animation = Some(MoveAnimation {
+            from,
+            to,
+            from_grid,
+            to_grid: (target_x, target_y),
+            elapsed: 0.0,
+            duration: movement_config.move_duration,
+        });
+    }
+}
+
+/// Update system: advances movement animation and fires `PlayerMoved` on completion.
+pub fn animate_player(
+    time: Res<Time>,
+    mut query: Query<(&mut PlayerCharacter, &mut Transform)>,
+    mut player_moved: MessageWriter<PlayerMoved>,
+) {
+    for (mut player, mut transform) in query.iter_mut() {
+        let Some(ref mut anim) = player.move_animation else {
+            continue;
+        };
+
+        anim.elapsed += time.delta_secs();
+        let t = (anim.elapsed / anim.duration).clamp(0.0, 1.0);
+        let pos = anim.from.lerp(anim.to, t);
+        transform.translation.x = pos.x;
+        transform.translation.y = pos.y;
+
+        if anim.elapsed >= anim.duration {
+            // Snap to final position
+            transform.translation.x = anim.to.x;
+            transform.translation.y = anim.to.y;
+
+            let from_grid = anim.from_grid;
+            let to_grid = anim.to_grid;
+            player.move_animation = None;
+
+            player_moved.write(PlayerMoved {
+                from: from_grid,
+                to: to_grid,
+            });
+        }
+    }
+}

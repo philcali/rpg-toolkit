@@ -1,7 +1,6 @@
-use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::editor_state::EditorError;
+use crate::error::CommonError;
 
 /// Valid tile sizes in pixels.
 const VALID_TILE_SIZES: [u32; 4] = [8, 16, 32, 64];
@@ -26,16 +25,16 @@ impl TilesetMeta {
         img_h: u32,
         tile_w: u32,
         tile_h: u32,
-    ) -> Result<Self, EditorError> {
+    ) -> Result<Self, CommonError> {
         if !VALID_TILE_SIZES.contains(&tile_w) || !VALID_TILE_SIZES.contains(&tile_h) {
-            return Err(EditorError::UnsupportedFormat);
+            return Err(CommonError::InvalidTileSize);
         }
 
         let columns = img_w / tile_w;
         let rows = img_h / tile_h;
 
         if columns == 0 || rows == 0 {
-            return Err(EditorError::UnsupportedFormat);
+            return Err(CommonError::InvalidTileSize);
         }
 
         Ok(Self {
@@ -46,12 +45,4 @@ impl TilesetMeta {
             rows,
         })
     }
-}
-
-/// A tileset entry stored inside the `Project` resource.
-/// Replaces the singleton `TilesetData` resource for multi-tileset support.
-pub struct TilesetEntry {
-    pub meta: TilesetMeta,
-    pub texture: Handle<Image>,
-    pub atlas_layout: Handle<TextureAtlasLayout>,
 }

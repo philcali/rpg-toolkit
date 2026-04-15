@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-use crate::data::EditCommand;
 use crate::data::map::MapId;
 use crate::data::project::Project;
+use crate::data::{EditCommand, MapDataEditorExt};
 
 /// Plugin that renders the layer management panel and the map browser,
 /// combined into a single left side panel.
