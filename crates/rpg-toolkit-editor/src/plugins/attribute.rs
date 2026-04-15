@@ -123,6 +123,7 @@ fn attribute_overlay_system(
 
 /// Handles left-click in attribute mode for opacity toggle, event trigger selection,
 /// and spawn point placement.
+#[allow(clippy::too_many_arguments)]
 fn attribute_click_system(
     mouse: Res<ButtonInput<MouseButton>>,
     editor_state: Res<EditorState>,
@@ -131,7 +132,17 @@ fn attribute_click_system(
     mut edit_events: MessageWriter<EditCommand>,
     mut event_trigger_dialog: ResMut<EventTriggerDialog>,
     mut spawn_confirm_dialog: ResMut<SpawnPointConfirmDialog>,
+    mut contexts: EguiContexts,
 ) {
+    // Don't process clicks when an egui dialog is open and consuming pointer input
+    if (event_trigger_dialog.open || spawn_confirm_dialog.open)
+        && contexts
+            .ctx_mut()
+            .is_ok_and(|ctx| ctx.is_pointer_over_area())
+    {
+        return;
+    }
+
     if editor_state.editor_mode != EditorMode::Attribute {
         return;
     }
