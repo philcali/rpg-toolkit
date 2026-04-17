@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use rpg_toolkit_common::FacingDirection;
 
 /// Marker + state for the player character entity.
 #[derive(Component)]
@@ -32,6 +33,21 @@ pub struct RendererTileSprite {
     pub layer_index: usize,
     pub x: u32,
     pub y: u32,
+}
+
+/// Marker for NPC sprite entities spawned by the renderer.
+#[derive(Component)]
+pub struct NpcSprite {
+    pub npc_index: usize,
+}
+
+/// Tracks the player's sprite animation state when using a spritesheet.
+#[derive(Component)]
+pub struct PlayerSpriteState {
+    pub facing: FacingDirection,
+    pub animation_frame: usize,
+    pub animation_timer: f32,
+    pub is_moving: bool,
 }
 
 /// Marker for the game camera (distinct from the editor camera).

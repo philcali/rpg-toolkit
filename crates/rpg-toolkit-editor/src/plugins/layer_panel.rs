@@ -13,6 +13,7 @@ impl Plugin for LayerPanelPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LayerCounter>()
             .init_resource::<MapBrowserState>()
+            .init_resource::<MapDeleteDialogOpen>()
             .add_systems(EguiPrimaryContextPass, layer_panel_ui);
     }
 }
@@ -37,6 +38,11 @@ struct MapBrowserState {
     pending_delete: Option<MapId>,
 }
 
+/// Whether the map delete confirmation dialog is currently open.
+/// Exposed so the `AnyDialogOpen` system can aggregate dialog state.
+#[derive(Resource, Default)]
+pub struct MapDeleteDialogOpen(pub bool);
+
 /// Deferred action from the map browser UI.
 enum BrowserAction {
     Open(MapId),
@@ -54,6 +60,7 @@ fn layer_panel_ui(
     mut edit_events: MessageWriter<EditCommand>,
     mut project: ResMut<Project>,
     mut browser_state: ResMut<MapBrowserState>,
+    mut delete_dialog_open: ResMut<MapDeleteDialogOpen>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -229,6 +236,9 @@ fn layer_panel_ui(
             }
         }
     }
+
+    // Keep the public dialog-open flag in sync
+    delete_dialog_open.0 = browser_state.pending_delete.is_some();
 
     Ok(())
 }

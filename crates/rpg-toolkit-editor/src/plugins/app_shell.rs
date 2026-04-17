@@ -2,8 +2,10 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::data::project::Project;
-use crate::data::{EditorState, TilesetMeta};
+use crate::data::{AnyDialogOpen, EditorState, TilesetMeta};
+use crate::plugins::attribute::{EventTriggerDialog, NpcPlacementDialog, SpawnPointConfirmDialog};
 use crate::plugins::serialization::{SerializationAction, SerializationRequest};
+use crate::plugins::spritesheet::{RemoveSpritesheetDialog, SpritesheetPanel};
 use crate::plugins::toolbar::CanvasRect;
 
 /// Plugin that provides the application shell: menu bar, canvas area, and side panel.
@@ -16,7 +18,11 @@ impl Plugin for AppShellPlugin {
             .init_resource::<LoadTilesetDialog>()
             .init_resource::<UnsavedChangesDialog>()
             .init_resource::<EditorState>()
-            .add_systems(EguiPrimaryContextPass, app_shell_ui);
+            .init_resource::<AnyDialogOpen>()
+            .add_systems(
+                EguiPrimaryContextPass,
+                (app_shell_ui, update_any_dialog_open).chain(),
+            );
     }
 }
 
@@ -540,4 +546,35 @@ fn app_shell_ui(
     }
 
     Ok(())
+}
+
+/// Aggregates all dialog-open flags into a single `AnyDialogOpen` resource.
+///
+/// Canvas interaction systems check this instead of `ctx.wants_pointer_input()`
+/// so that side panels and toolbar remain clickable while dialogs still block
+/// canvas input.
+#[allow(clippy::too_many_arguments)]
+fn update_any_dialog_open(
+    new_map: Res<NewMapDialog>,
+    error: Res<ErrorDialog>,
+    load_tileset: Res<LoadTilesetDialog>,
+    unsaved: Res<UnsavedChangesDialog>,
+    event_trigger: Res<EventTriggerDialog>,
+    spawn_confirm: Res<SpawnPointConfirmDialog>,
+    npc_placement: Res<NpcPlacementDialog>,
+    remove_spritesheet: Res<RemoveSpritesheetDialog>,
+    spritesheet_panel: Res<SpritesheetPanel>,
+    map_delete: Res<crate::plugins::layer_panel::MapDeleteDialogOpen>,
+    mut any_open: ResMut<AnyDialogOpen>,
+) {
+    any_open.0 = new_map.open
+        || error.open
+        || load_tileset.open
+        || unsaved.open
+        || event_trigger.open
+        || spawn_confirm.open
+        || npc_placement.open
+        || remove_spritesheet.open
+        || spritesheet_panel.open
+        || map_delete.0;
 }

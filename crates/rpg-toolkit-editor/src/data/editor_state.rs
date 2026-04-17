@@ -2,7 +2,8 @@ use bevy::prelude::*;
 use std::path::PathBuf;
 
 use rpg_toolkit_common::{
-    CommonError, EventAction, Layer, MapData, SpawnPoint, TileAttributeLayer, TileRef, TilesetId,
+    CommonError, EventAction, Layer, MapData, NpcInstance, SpawnPoint, TileAttributeLayer, TileRef,
+    TilesetId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Resource)]
@@ -28,6 +29,7 @@ pub enum AttributeTool {
     Opacity,
     EventTrigger,
     SpawnPoint,
+    NpcPlacement,
 }
 
 #[derive(Clone, Debug)]
@@ -61,6 +63,15 @@ pub enum EditorError {
     #[error(transparent)]
     Common(#[from] CommonError),
 }
+
+/// Resource that is `true` whenever any modal dialog window is open.
+///
+/// This replaces the overly-broad `ctx.wants_pointer_input()` check that
+/// was blocking canvas interactions whenever *any* egui widget (including
+/// side panels and toolbar) was hovered.  Canvas systems should only be
+/// blocked when an actual dialog is in front of the canvas.
+#[derive(Resource, Default)]
+pub struct AnyDialogOpen(pub bool);
 
 /// Zoom level boundaries.
 const MIN_ZOOM: f32 = 0.25;
@@ -157,6 +168,15 @@ pub enum EditCommandKind {
         old_spawn: Option<SpawnPoint>,
         new_spawn: Option<SpawnPoint>,
     },
+    PlaceNpc {
+        npc_index: Option<usize>, // None = new (appended), Some = edit (replaced at index)
+        old_npc: Option<NpcInstance>, // None for new placement, Some for edit
+        new_npc: NpcInstance,
+    },
+    RemoveNpc {
+        npc_index: usize,
+        removed_npc: NpcInstance,
+    },
 }
 
 impl EditCommand {
@@ -237,6 +257,22 @@ impl EditCommand {
             }
             EditCommandKind::SetSpawnPoint { .. } => {
                 // No-op on MapData; handled at Project level by undo_redo plugin
+            }
+            EditCommandKind::PlaceNpc {
+                npc_index, new_npc, ..
+            } => {
+                if let Some(idx) = npc_index {
+                    if *idx < map.npcs.len() {
+                        map.npcs[*idx] = new_npc.clone();
+                    }
+                } else {
+                    map.npcs.push(new_npc.clone());
+                }
+            }
+            EditCommandKind::RemoveNpc { npc_index, .. } => {
+                if *npc_index < map.npcs.len() {
+                    map.npcs.remove(*npc_index);
+                }
             }
         }
     }
@@ -319,6 +355,26 @@ impl EditCommand {
             }
             EditCommandKind::SetSpawnPoint { .. } => {
                 // No-op on MapData; handled at Project level by undo_redo plugin
+            }
+            EditCommandKind::PlaceNpc {
+                npc_index, old_npc, ..
+            } => {
+                if let Some(idx) = npc_index {
+                    if let Some(old) = old_npc
+                        && *idx < map.npcs.len()
+                    {
+                        map.npcs[*idx] = old.clone();
+                    }
+                } else {
+                    // Was appended, so pop the last element
+                    map.npcs.pop();
+                }
+            }
+            EditCommandKind::RemoveNpc {
+                npc_index,
+                removed_npc,
+            } => {
+                map.npcs.insert(*npc_index, removed_npc.clone());
             }
         }
     }

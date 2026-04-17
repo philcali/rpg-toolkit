@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use rpg_toolkit_common::{MapId, ProjectFile, TilesetId};
+use rpg_toolkit_common::{MapId, ProjectFile, SpritesheetId, TilesetId};
 use std::collections::HashMap;
 
 /// Input resource: consumers insert this before adding the plugin.
@@ -9,6 +9,8 @@ pub struct RendererProjectData {
     pub project_file: ProjectFile,
     pub tileset_textures: HashMap<TilesetId, Handle<Image>>,
     pub tileset_atlas_layouts: HashMap<TilesetId, Handle<TextureAtlasLayout>>,
+    pub spritesheet_textures: HashMap<SpritesheetId, Handle<Image>>,
+    pub spritesheet_atlas_layouts: HashMap<SpritesheetId, Handle<TextureAtlasLayout>>,
 }
 
 /// Runtime state managed by the plugin.
@@ -46,6 +48,21 @@ impl Default for PlayerVisual {
     fn default() -> Self {
         Self {
             color: Color::srgb(0.2, 0.6, 1.0),
+        }
+    }
+}
+
+/// Configuration for sprite walk animation timing.
+#[derive(Resource)]
+pub struct AnimationConfig {
+    /// Duration of each animation frame in seconds.
+    pub frame_duration: f32,
+}
+
+impl Default for AnimationConfig {
+    fn default() -> Self {
+        Self {
+            frame_duration: 0.15,
         }
     }
 }

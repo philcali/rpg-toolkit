@@ -119,6 +119,8 @@ fn load_project_resources(
         project_file: pending.project_file.clone(),
         tileset_textures,
         tileset_atlas_layouts,
+        spritesheet_textures: HashMap::new(),
+        spritesheet_atlas_layouts: HashMap::new(),
     });
 
     commands.remove_resource::<PendingProjectLoad>();

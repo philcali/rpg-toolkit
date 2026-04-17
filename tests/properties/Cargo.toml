@@ -1,0 +1,25 @@
+[package]
+name = "rpg-toolkit-properties"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[test]]
+name = "project_round_trip"
+path = "project_round_trip.rs"
+
+[[test]]
+name = "walk_animation"
+path = "walk_animation.rs"
+
+[[test]]
+name = "dialog_bleedthrough"
+path = "dialog_bleedthrough.rs"
+
+[[test]]
+name = "preservation"
+path = "preservation.rs"
+
+[dev-dependencies]
+proptest = { workspace = true }
+rpg-toolkit-common = { path = "../../crates/rpg-toolkit-common" }

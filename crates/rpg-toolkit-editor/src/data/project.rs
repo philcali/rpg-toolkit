@@ -5,7 +5,9 @@ use bevy::prelude::*;
 // Re-export ProjectFile from common so existing `use crate::data::ProjectFile` paths work.
 pub use rpg_toolkit_common::ProjectFile;
 
-use rpg_toolkit_common::{MapData, MapId, SpawnPoint, TilesetId};
+use rpg_toolkit_common::{
+    CharacterSpritesheet, MapData, MapId, SpawnPoint, SpritesheetId, TilesetId,
+};
 
 use super::editor_state::{EditorError, UndoHistory};
 use super::tileset::{TilesetEntry, TilesetMeta};
@@ -20,6 +22,8 @@ pub struct Project {
     pub undo_histories: HashMap<MapId, UndoHistory>,
     pub has_unsaved_changes: HashMap<MapId, bool>,
     pub spawn_point: Option<SpawnPoint>,
+    pub spritesheets: HashMap<SpritesheetId, CharacterSpritesheet>,
+    pub player_spritesheet: Option<SpritesheetId>,
 }
 
 impl Project {

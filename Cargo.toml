@@ -4,6 +4,8 @@ members = [
     "crates/rpg-toolkit-renderer",
     "crates/rpg-toolkit-editor",
     "crates/rpg-toolkit-launcher",
+    "crates/rpg-toolkit-asset-gen",
+    "tests/properties",
 ]
 resolver = "3"
 

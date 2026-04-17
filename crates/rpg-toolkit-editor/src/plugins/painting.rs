@@ -3,7 +3,9 @@ use bevy::prelude::*;
 use crate::algorithms::flood_fill::flood_fill;
 use crate::algorithms::line_engine::bresenham_line;
 use crate::data::map::TileRef;
-use crate::data::{EditCommand, EditorMode, EditorState, EditorTool, MapDataEditorExt, Project};
+use crate::data::{
+    AnyDialogOpen, EditCommand, EditorMode, EditorState, EditorTool, MapDataEditorExt, Project,
+};
 use crate::systems::input::CursorWorldState;
 
 /// Plugin that handles tile painting and erasure via mouse input on the canvas.
@@ -18,6 +20,7 @@ impl Plugin for PaintingPlugin {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn painting_system(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -26,7 +29,13 @@ fn painting_system(
     mut editor_state: ResMut<EditorState>,
     tool: Res<EditorTool>,
     mut edit_events: MessageWriter<EditCommand>,
+    any_dialog_open: Res<AnyDialogOpen>,
 ) {
+    // Block all painting when a modal dialog is open
+    if any_dialog_open.0 {
+        return;
+    }
+
     // Attribute mode: early return, no painting
     if editor_state.editor_mode == EditorMode::Attribute {
         return;

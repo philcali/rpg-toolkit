@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 
-use crate::components::{MoveAnimation, PlayerCharacter};
+use crate::components::{MoveAnimation, PlayerCharacter, PlayerSpriteState};
 use crate::events::PlayerMoved;
 use crate::input::{Direction, MovementIntent};
 use crate::resources::{MovementConfig, PlayerVisual, RendererProjectData, RendererState};
 use crate::systems::collision::is_tile_blocked;
+use rpg_toolkit_common::{FacingDirection, sprite_atlas_index};
 
 /// Converts grid coordinates to world-space position using the map's tile dimensions.
 pub fn grid_to_world(x: u32, y: u32, tile_width: u32, tile_height: u32) -> Vec2 {
@@ -14,6 +15,9 @@ pub fn grid_to_world(x: u32, y: u32, tile_width: u32, tile_height: u32) -> Vec2 
 }
 
 /// Startup system: spawns the player character at the project's spawn point.
+/// Startup system: spawns the player character at the project's spawn point.
+/// Uses a spritesheet texture atlas if `player_spritesheet` is set and valid,
+/// otherwise falls back to a solid-color rectangle.
 pub fn spawn_player(
     mut commands: Commands,
     project_data: Res<RendererProjectData>,
@@ -43,29 +47,74 @@ pub fn spawn_player(
     let world_pos = grid_to_world(grid_x, grid_y, map.tile_width, map.tile_height);
     let z = map.layers.len() as f32 + 1.0;
 
-    commands.spawn((
-        PlayerCharacter {
-            grid_x,
-            grid_y,
-            move_animation: None,
-        },
-        Sprite {
-            color: player_visual.color,
-            custom_size: Some(Vec2::new(map.tile_width as f32, map.tile_height as f32)),
-            ..default()
-        },
-        Transform::from_xyz(world_pos.x, world_pos.y, z),
-    ));
+    let player = PlayerCharacter {
+        grid_x,
+        grid_y,
+        move_animation: None,
+    };
+
+    // Check if a valid player spritesheet is configured
+    let has_spritesheet = project_data
+        .project_file
+        .player_spritesheet
+        .as_ref()
+        .is_some_and(|ss_id| {
+            project_data.spritesheet_textures.contains_key(ss_id)
+                && project_data.spritesheet_atlas_layouts.contains_key(ss_id)
+        });
+
+    if has_spritesheet {
+        let ss_id = project_data
+            .project_file
+            .player_spritesheet
+            .as_ref()
+            .unwrap();
+        let texture = project_data.spritesheet_textures[ss_id].clone();
+        let atlas_layout = project_data.spritesheet_atlas_layouts[ss_id].clone();
+        let idle_index = sprite_atlas_index(FacingDirection::Down, 1);
+
+        commands.spawn((
+            player,
+            PlayerSpriteState {
+                facing: FacingDirection::Down,
+                animation_frame: 1,
+                animation_timer: 0.0,
+                is_moving: false,
+            },
+            Sprite {
+                image: texture,
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout,
+                    index: idle_index,
+                }),
+                ..default()
+            },
+            Transform::from_xyz(world_pos.x, world_pos.y, z),
+        ));
+    } else {
+        commands.spawn((
+            player,
+            Sprite {
+                color: player_visual.color,
+                custom_size: Some(Vec2::new(map.tile_width as f32, map.tile_height as f32)),
+                ..default()
+            },
+            Transform::from_xyz(world_pos.x, world_pos.y, z),
+        ));
+    }
 }
 
 /// Update system: reads movement intent and initiates tile-to-tile movement
 /// if the target tile is in bounds and not blocked.
+/// Update system: reads movement intent and initiates tile-to-tile movement
+/// if the target tile is in bounds and not blocked.
+/// Also updates `PlayerSpriteState` facing direction and is_moving flag.
 pub fn player_movement(
     intent: Res<MovementIntent>,
     project_data: Res<RendererProjectData>,
     renderer_state: Res<RendererState>,
     movement_config: Res<MovementConfig>,
-    mut query: Query<&mut PlayerCharacter>,
+    mut query: Query<(&mut PlayerCharacter, Option<&mut PlayerSpriteState>)>,
 ) {
     let Some(direction) = intent.direction else {
         return;
@@ -79,7 +128,7 @@ pub fn player_movement(
         return;
     };
 
-    for mut player in query.iter_mut() {
+    for (mut player, sprite_state) in query.iter_mut() {
         // Animation exclusivity: ignore input while animating
         if player.move_animation.is_some() {
             continue;
@@ -112,6 +161,18 @@ pub fn player_movement(
             continue;
         }
 
+        // Update sprite state facing and is_moving before starting animation
+        if let Some(mut ss) = sprite_state {
+            ss.facing = match direction {
+                Direction::Up => FacingDirection::Up,
+                Direction::Down => FacingDirection::Down,
+                Direction::Left => FacingDirection::Left,
+                Direction::Right => FacingDirection::Right,
+            };
+            ss.is_moving = true;
+            ss.animation_timer = 0.0;
+        }
+
         let from_grid = (player.grid_x, player.grid_y);
         let from = grid_to_world(from_grid.0, from_grid.1, map.tile_width, map.tile_height);
         let to = grid_to_world(target_x, target_y, map.tile_width, map.tile_height);
@@ -130,12 +191,17 @@ pub fn player_movement(
 }
 
 /// Update system: advances movement animation and fires `PlayerMoved` on completion.
+/// Clears `is_moving` on `PlayerSpriteState` when the animation finishes.
 pub fn animate_player(
     time: Res<Time>,
-    mut query: Query<(&mut PlayerCharacter, &mut Transform)>,
+    mut query: Query<(
+        &mut PlayerCharacter,
+        &mut Transform,
+        Option<&mut PlayerSpriteState>,
+    )>,
     mut player_moved: MessageWriter<PlayerMoved>,
 ) {
-    for (mut player, mut transform) in query.iter_mut() {
+    for (mut player, mut transform, sprite_state) in query.iter_mut() {
         let Some(ref mut anim) = player.move_animation else {
             continue;
         };
@@ -155,10 +221,43 @@ pub fn animate_player(
             let to_grid = anim.to_grid;
             player.move_animation = None;
 
+            // Clear is_moving so the sprite returns to idle pose
+            if let Some(mut ss) = sprite_state {
+                ss.is_moving = false;
+            }
+
             player_moved.write(PlayerMoved {
                 from: from_grid,
                 to: to_grid,
             });
+        }
+    }
+}
+/// Update system: cycles the player's sprite animation frames while moving,
+/// and resets to idle frame (frame 1) when stationary.
+pub fn animate_player_sprite(
+    time: Res<Time>,
+    animation_config: Res<crate::resources::AnimationConfig>,
+    mut query: Query<(&mut PlayerSpriteState, &mut Sprite)>,
+) {
+    for (mut state, mut sprite) in query.iter_mut() {
+        let Some(ref mut atlas) = sprite.texture_atlas else {
+            continue;
+        };
+
+        if state.is_moving {
+            state.animation_timer += time.delta_secs();
+            let frame = rpg_toolkit_common::walk_animation_frame(
+                state.animation_timer,
+                animation_config.frame_duration,
+            );
+            state.animation_frame = frame;
+            atlas.index = sprite_atlas_index(state.facing, frame);
+        } else {
+            // Idle pose: middle frame (frame 1)
+            state.animation_frame = 1;
+            state.animation_timer = 0.0;
+            atlas.index = sprite_atlas_index(state.facing, 1);
         }
     }
 }
