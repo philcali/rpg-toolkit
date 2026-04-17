@@ -3,8 +3,9 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::data::editor_state::{EditCommand, EditCommandKind};
 use crate::data::map::{EventAction, MapId, SpawnPoint};
-use crate::data::{AttributeTool, EditorMode, EditorState, Project};
+use crate::data::{AnyDialogOpen, AttributeTool, EditorMode, EditorState, Project};
 use crate::systems::input::CursorWorldState;
+use rpg_toolkit_common::{FacingDirection, NpcInstance, SpritesheetId};
 
 /// Resource for the spawn point confirmation dialog.
 #[derive(Resource, Default)]
@@ -30,15 +31,46 @@ pub struct EventTriggerDialog {
     pub new_target_y: String,
 }
 
+/// Resource for the NPC placement/editing dialog.
+#[derive(Resource)]
+pub struct NpcPlacementDialog {
+    pub open: bool,
+    pub tile_x: u32,
+    pub tile_y: u32,
+    pub selected_spritesheet_id: Option<SpritesheetId>,
+    pub selected_facing: FacingDirection,
+    pub editing_index: Option<usize>,
+    pub original_npc: Option<NpcInstance>,
+}
+
+impl Default for NpcPlacementDialog {
+    fn default() -> Self {
+        Self {
+            open: false,
+            tile_x: 0,
+            tile_y: 0,
+            selected_spritesheet_id: None,
+            selected_facing: FacingDirection::Down,
+            editing_index: None,
+            original_npc: None,
+        }
+    }
+}
+
 pub struct AttributePlugin;
 
 impl Plugin for AttributePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpawnPointConfirmDialog>()
             .init_resource::<EventTriggerDialog>()
+            .init_resource::<NpcPlacementDialog>()
             .add_systems(
                 EguiPrimaryContextPass,
-                (event_trigger_panel_ui, spawn_point_confirm_ui),
+                (
+                    event_trigger_panel_ui,
+                    spawn_point_confirm_ui,
+                    npc_placement_dialog_ui,
+                ),
             )
             .add_systems(
                 Update,
@@ -119,6 +151,19 @@ fn attribute_overlay_system(
             Color::srgba(0.0, 1.0, 0.0, 0.8),
         );
     }
+
+    // Draw NPC overlays (purple/magenta) when in NPC placement mode
+    if editor_state.attribute_tool == AttributeTool::NpcPlacement {
+        for npc in &map.npcs {
+            let px = npc.x as f32 * tile + tile / 2.0;
+            let py = -(npc.y as f32 * tile + tile / 2.0);
+            gizmos.rect_2d(
+                Isometry2d::from_translation(Vec2::new(px, py)),
+                Vec2::splat(tile * 0.85),
+                Color::srgba(0.8, 0.2, 0.8, 0.45),
+            );
+        }
+    }
 }
 
 /// Handles left-click in attribute mode for opacity toggle, event trigger selection,
@@ -132,14 +177,11 @@ fn attribute_click_system(
     mut edit_events: MessageWriter<EditCommand>,
     mut event_trigger_dialog: ResMut<EventTriggerDialog>,
     mut spawn_confirm_dialog: ResMut<SpawnPointConfirmDialog>,
-    mut contexts: EguiContexts,
+    mut npc_placement_dialog: ResMut<NpcPlacementDialog>,
+    any_dialog_open: Res<AnyDialogOpen>,
 ) {
-    // Don't process clicks when an egui dialog is open and consuming pointer input
-    if (event_trigger_dialog.open || spawn_confirm_dialog.open)
-        && contexts
-            .ctx_mut()
-            .is_ok_and(|ctx| ctx.is_pointer_over_area())
-    {
+    // Block all attribute clicks when any modal dialog is open
+    if any_dialog_open.0 {
         return;
     }
 
@@ -250,6 +292,41 @@ fn attribute_click_system(
                         new_spawn: new_spawn.clone(),
                     },
                 });
+            }
+        }
+
+        AttributeTool::NpcPlacement => {
+            let Some(map) = project.active_map() else {
+                return;
+            };
+
+            // Check if an NPC already exists at this tile
+            let existing = map
+                .npcs
+                .iter()
+                .enumerate()
+                .find(|(_, npc)| npc.x == col && npc.y == row);
+
+            if let Some((idx, npc)) = existing {
+                // Open dialog pre-populated with existing NPC data for editing
+                npc_placement_dialog.open = true;
+                npc_placement_dialog.tile_x = col;
+                npc_placement_dialog.tile_y = row;
+                npc_placement_dialog.selected_spritesheet_id =
+                    Some(npc.spritesheet_id.clone());
+                npc_placement_dialog.selected_facing = npc.facing;
+                npc_placement_dialog.editing_index = Some(idx);
+                npc_placement_dialog.original_npc = Some(npc.clone());
+            } else {
+                // Open empty dialog for new placement
+                let first_spritesheet = project.spritesheets.keys().next().cloned();
+                npc_placement_dialog.open = true;
+                npc_placement_dialog.tile_x = col;
+                npc_placement_dialog.tile_y = row;
+                npc_placement_dialog.selected_spritesheet_id = first_spritesheet;
+                npc_placement_dialog.selected_facing = FacingDirection::Down;
+                npc_placement_dialog.editing_index = None;
+                npc_placement_dialog.original_npc = None;
             }
         }
     }
@@ -510,6 +587,163 @@ fn spawn_point_confirm_ui(
     if should_cancel {
         dialog.open = false;
         dialog.new_map_id = None;
+    }
+
+    Ok(())
+}
+
+/// Egui dialog for placing or editing an NPC on a tile.
+fn npc_placement_dialog_ui(
+    mut contexts: EguiContexts,
+    mut dialog: ResMut<NpcPlacementDialog>,
+    mut project: ResMut<Project>,
+    mut edit_events: MessageWriter<EditCommand>,
+) -> Result {
+    if !dialog.open {
+        return Ok(());
+    }
+
+    let ctx = contexts.ctx_mut()?;
+
+    let mut should_close = false;
+    let mut should_place = false;
+    let mut should_remove = false;
+
+    // Collect spritesheet data for the combo box (avoid borrow issues)
+    let spritesheet_entries: Vec<(SpritesheetId, String)> = project
+        .spritesheets
+        .iter()
+        .map(|(id, ss)| (id.clone(), ss.file_path.clone()))
+        .collect();
+
+    let is_editing = dialog.editing_index.is_some();
+    let title = if is_editing {
+        "Edit NPC"
+    } else {
+        "Place NPC"
+    };
+
+    egui::Window::new(title)
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .show(ctx, |ui| {
+            ui.label(format!("Tile ({}, {})", dialog.tile_x, dialog.tile_y));
+            ui.separator();
+
+            // Spritesheet selection combo box
+            ui.horizontal(|ui| {
+                ui.label("Spritesheet:");
+                let selected_text = match &dialog.selected_spritesheet_id {
+                    Some(id) => spritesheet_entries
+                        .iter()
+                        .find(|(eid, _)| eid == id)
+                        .map(|(_, path)| path.clone())
+                        .unwrap_or_else(|| "Invalid".to_string()),
+                    None => "None".to_string(),
+                };
+
+                egui::ComboBox::from_id_salt("npc_spritesheet_combo")
+                    .selected_text(&selected_text)
+                    .show_ui(ui, |ui| {
+                        for (id, path) in &spritesheet_entries {
+                            let is_selected = dialog.selected_spritesheet_id.as_ref() == Some(id);
+                            if ui
+                                .selectable_label(is_selected, path)
+                                .clicked()
+                            {
+                                dialog.selected_spritesheet_id = Some(id.clone());
+                            }
+                        }
+                    });
+            });
+
+            // Facing direction selection
+            ui.horizontal(|ui| {
+                ui.label("Facing:");
+                ui.radio_value(&mut dialog.selected_facing, FacingDirection::Down, "Down");
+                ui.radio_value(&mut dialog.selected_facing, FacingDirection::Left, "Left");
+                ui.radio_value(&mut dialog.selected_facing, FacingDirection::Right, "Right");
+                ui.radio_value(&mut dialog.selected_facing, FacingDirection::Up, "Up");
+            });
+
+            ui.separator();
+            ui.horizontal(|ui| {
+                let place_label = if is_editing { "Save" } else { "Place" };
+                let can_place = dialog.selected_spritesheet_id.is_some();
+                if ui
+                    .add_enabled(can_place, egui::Button::new(place_label))
+                    .clicked()
+                {
+                    should_place = true;
+                }
+
+                if is_editing && ui.button("Remove").clicked() {
+                    should_remove = true;
+                }
+
+                if ui.button("Cancel").clicked() {
+                    should_close = true;
+                }
+            });
+        });
+
+    if should_place {
+        if let Some(ref spritesheet_id) = dialog.selected_spritesheet_id {
+            let npc = NpcInstance {
+                spritesheet_id: spritesheet_id.clone(),
+                x: dialog.tile_x,
+                y: dialog.tile_y,
+                facing: dialog.selected_facing,
+                event_triggers: Vec::new(),
+                patrol_path: Vec::new(),
+            };
+
+            if let Some(map) = project.active_map_mut() {
+                if let Some(idx) = dialog.editing_index {
+                    // Replace existing NPC
+                    if idx < map.npcs.len() {
+                        map.npcs[idx] = npc.clone();
+                    }
+                } else {
+                    // Add new NPC
+                    map.npcs.push(npc.clone());
+                }
+            }
+
+            edit_events.write(EditCommand {
+                kind: EditCommandKind::PlaceNpc {
+                    npc_index: dialog.editing_index,
+                    old_npc: dialog.original_npc.clone(),
+                    new_npc: npc,
+                },
+            });
+        }
+        dialog.open = false;
+    }
+
+    if should_remove {
+        if let Some(idx) = dialog.editing_index {
+            if let Some(map) = project.active_map_mut() {
+                if idx < map.npcs.len() {
+                    map.npcs.remove(idx);
+                }
+            }
+
+            if let Some(original) = dialog.original_npc.clone() {
+                edit_events.write(EditCommand {
+                    kind: EditCommandKind::RemoveNpc {
+                        npc_index: idx,
+                        removed_npc: original,
+                    },
+                });
+            }
+        }
+        dialog.open = false;
+    }
+
+    if should_close {
+        dialog.open = false;
     }
 
     Ok(())

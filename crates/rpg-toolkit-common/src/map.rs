@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::CommonError;
+use crate::spritesheet::NpcInstance;
 
 /// Type alias for map identifiers (UUID v4 strings).
 pub type MapId = String;
@@ -84,6 +85,8 @@ pub struct MapData {
     pub tile_height: u32,
     pub layers: Vec<Layer>,
     pub active_layer_index: usize,
+    #[serde(default)]
+    pub npcs: Vec<NpcInstance>,
 }
 
 impl MapData {
@@ -122,6 +125,7 @@ impl MapData {
             tile_height,
             layers: vec![ground_layer],
             active_layer_index: 0,
+            npcs: Vec::new(),
         })
     }
 

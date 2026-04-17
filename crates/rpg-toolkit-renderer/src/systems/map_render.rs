@@ -1,9 +1,10 @@
 use bevy::prelude::*;
 
-use crate::components::RendererTileSprite;
+use crate::components::{NpcSprite, RendererTileSprite};
 use crate::events::MapChanged;
 use crate::resources::RendererProjectData;
 use crate::systems::player::grid_to_world;
+use rpg_toolkit_common::sprite_atlas_index;
 
 /// Reacts to `MapChanged` events: despawns all existing tile sprites and
 /// spawns new tile sprites for the new active map.
@@ -86,5 +87,64 @@ pub fn sync_map_sprites(
                 ));
             }
         }
+    }
+}
+/// Reacts to `MapChanged` events: despawns existing NPC sprites and spawns
+/// new NPC sprites for each `NpcInstance` on the new active map.
+pub fn spawn_npc_sprites(
+    mut map_changed: MessageReader<MapChanged>,
+    project_data: Res<RendererProjectData>,
+    existing_npcs: Query<Entity, With<NpcSprite>>,
+    mut commands: Commands,
+) {
+    let Some(event) = map_changed.read().last() else {
+        return;
+    };
+
+    // Despawn existing NPC sprites from the previous map
+    for entity in existing_npcs.iter() {
+        commands.entity(entity).despawn();
+    }
+
+    let Some(map) = project_data.project_file.maps.get(&event.new_map_id) else {
+        return;
+    };
+
+    let tw = map.tile_width;
+    let th = map.tile_height;
+    // NPC sprites render above tile layers but below the player
+    let npc_z = map.layers.len() as f32 + 0.5;
+
+    for (npc_idx, npc) in map.npcs.iter().enumerate() {
+        let Some(texture) = project_data.spritesheet_textures.get(&npc.spritesheet_id) else {
+            warn!(
+                "NPC {} references spritesheet '{}' with no loaded texture; skipping",
+                npc_idx, npc.spritesheet_id
+            );
+            continue;
+        };
+        let Some(atlas_layout) = project_data
+            .spritesheet_atlas_layouts
+            .get(&npc.spritesheet_id)
+        else {
+            continue;
+        };
+
+        // Idle pose: middle frame (frame 1) for the NPC's facing direction
+        let idle_index = sprite_atlas_index(npc.facing, 1);
+        let world_pos = grid_to_world(npc.x, npc.y, tw, th);
+
+        commands.spawn((
+            NpcSprite { npc_index: npc_idx },
+            Sprite {
+                image: texture.clone(),
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.clone(),
+                    index: idle_index,
+                }),
+                ..default()
+            },
+            Transform::from_xyz(world_pos.x, world_pos.y, npc_z),
+        ));
     }
 }

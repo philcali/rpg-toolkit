@@ -2,7 +2,7 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::data::{EditorState, EditorTool};
+use crate::data::{AnyDialogOpen, EditorState, EditorTool};
 use crate::plugins::canvas::EditorCamera;
 
 /// Zoom speed factor applied to each scroll tick.
@@ -16,7 +16,13 @@ pub fn zoom_system(
     mut scroll_events: MessageReader<MouseWheel>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut editor: ResMut<EditorState>,
+    any_dialog_open: Res<AnyDialogOpen>,
 ) {
+    // Block zoom when a modal dialog is open
+    if any_dialog_open.0 {
+        return;
+    }
+
     let scroll_y: f32 = scroll_events.read().map(|e| e.y).sum();
     if scroll_y == 0.0 {
         return;
@@ -74,7 +80,19 @@ pub fn pan_system(
     mut pan_state: ResMut<PanState>,
     mut editor: ResMut<EditorState>,
     tool: Res<EditorTool>,
+    any_dialog_open: Res<AnyDialogOpen>,
 ) {
+    // Block panning when a modal dialog is open
+    if any_dialog_open.0 {
+        // Cancel any active pan to prevent stuck state
+        if pan_state.is_panning() {
+            pan_state.middle_panning = false;
+            pan_state.left_panning = false;
+            pan_state.last_cursor_pos = None;
+        }
+        return;
+    }
+
     // --- Middle-mouse: unconditional, regardless of active tool ---
     if mouse.just_pressed(MouseButton::Middle) {
         pan_state.middle_panning = true;

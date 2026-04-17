@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::data::Project;
+use crate::data::{AnyDialogOpen, Project};
 use crate::plugins::canvas::EditorCamera;
 use crate::plugins::toolbar::CanvasRect;
 
@@ -22,9 +22,15 @@ pub fn update_cursor_state(
     project: Res<Project>,
     mut cursor_state: ResMut<CursorWorldState>,
     canvas_rect: Res<CanvasRect>,
+    any_dialog_open: Res<AnyDialogOpen>,
 ) {
     cursor_state.world_pos = None;
     cursor_state.tile_pos = None;
+
+    // Block cursor state updates when a modal dialog is open
+    if any_dialog_open.0 {
+        return;
+    }
 
     let Ok(window) = windows.single() else { return };
     let Some(cursor_pos) = window.cursor_position() else {

@@ -107,7 +107,13 @@ fn save_project_to_path(
         .map(|(id, entry)| (id.clone(), entry.meta.clone()))
         .collect();
 
-    let project_file = ProjectFile::new(maps, tilesets_meta, project.spawn_point.clone());
+    let project_file = ProjectFile::new(
+        maps,
+        tilesets_meta,
+        project.spawn_point.clone(),
+        project.spritesheets.clone(),
+        project.player_spritesheet.clone(),
+    );
 
     match project_file.serialize() {
         Ok(json) => match std::fs::write(path, &json) {
@@ -210,6 +216,8 @@ fn load_project_with_dialog(
         undo_histories,
         has_unsaved_changes,
         spawn_point: project_file.spawn_point,
+        spritesheets: project_file.spritesheets,
+        player_spritesheet: project_file.player_spritesheet,
     };
 
     // Reset editor state
