@@ -75,7 +75,6 @@ proptest! {
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // Property 2a-extra: painting preservation — erasing clears tile when no dialog
 // ---------------------------------------------------------------------------
@@ -188,7 +187,6 @@ proptest! {
         );
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // Property 2c: pan preservation — middle-mouse press initiates panning
@@ -336,7 +334,6 @@ proptest! {
         );
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // Property 2e: cursor state preservation — tile_pos computed correctly

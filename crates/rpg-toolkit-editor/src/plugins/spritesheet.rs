@@ -77,8 +77,7 @@ fn spritesheet_panel_ui(
                                 let (img_w, img_h) = (img.width(), img.height());
                                 match validate_spritesheet_dimensions(img_w, img_h) {
                                     Ok(()) => {
-                                        let id: SpritesheetId =
-                                            uuid::Uuid::new_v4().to_string();
+                                        let id: SpritesheetId = uuid::Uuid::new_v4().to_string();
                                         let spritesheet = CharacterSpritesheet {
                                             file_path: path.to_string_lossy().to_string(),
                                             sprite_width: 24,
@@ -96,8 +95,7 @@ fn spritesheet_panel_ui(
                             }
                             Err(e) => {
                                 error_dialog.open = true;
-                                error_dialog.message =
-                                    format!("Failed to read image: {}", e);
+                                error_dialog.message = format!("Failed to read image: {}", e);
                             }
                         }
                     }
@@ -136,18 +134,12 @@ fn spritesheet_panel_ui(
                     egui::ComboBox::from_id_salt("player_spritesheet_combo")
                         .selected_text(&current_label)
                         .show_ui(ui, |ui| {
-                            if ui
-                                .selectable_value(&mut selected, None, "None (solid color)")
-                                .clicked()
-                            {}
+                            ui.selectable_value(&mut selected, None, "None (solid color)")
+                                .clicked();
                             for (idx, id) in spritesheet_ids.iter().enumerate() {
                                 let label = &spritesheet_paths[idx];
                                 if ui
-                                    .selectable_value(
-                                        &mut selected,
-                                        Some(id.clone()),
-                                        label,
-                                    )
+                                    .selectable_value(&mut selected, Some(id.clone()), label)
                                     .clicked()
                                 {}
                             }
@@ -160,8 +152,7 @@ fn spritesheet_panel_ui(
 
                 // List loaded spritesheets
                 ui.label("Loaded Spritesheets:");
-                let ids: Vec<SpritesheetId> =
-                    project.spritesheets.keys().cloned().collect();
+                let ids: Vec<SpritesheetId> = project.spritesheets.keys().cloned().collect();
 
                 if ids.is_empty() {
                     ui.label("No spritesheets loaded.");
@@ -203,8 +194,7 @@ fn spritesheet_panel_ui(
                         project.spritesheets.clone(),
                         project.player_spritesheet.clone(),
                     );
-                    let refs =
-                        temp_project_file.compute_spritesheet_references(&remove_id);
+                    let refs = temp_project_file.compute_spritesheet_references(&remove_id);
 
                     if refs.npc_references.is_empty() && !refs.player_reference {
                         // No references — remove directly

@@ -312,8 +312,7 @@ fn attribute_click_system(
                 npc_placement_dialog.open = true;
                 npc_placement_dialog.tile_x = col;
                 npc_placement_dialog.tile_y = row;
-                npc_placement_dialog.selected_spritesheet_id =
-                    Some(npc.spritesheet_id.clone());
+                npc_placement_dialog.selected_spritesheet_id = Some(npc.spritesheet_id.clone());
                 npc_placement_dialog.selected_facing = npc.facing;
                 npc_placement_dialog.editing_index = Some(idx);
                 npc_placement_dialog.original_npc = Some(npc.clone());
@@ -617,11 +616,7 @@ fn npc_placement_dialog_ui(
         .collect();
 
     let is_editing = dialog.editing_index.is_some();
-    let title = if is_editing {
-        "Edit NPC"
-    } else {
-        "Place NPC"
-    };
+    let title = if is_editing { "Edit NPC" } else { "Place NPC" };
 
     egui::Window::new(title)
         .collapsible(false)
@@ -648,10 +643,7 @@ fn npc_placement_dialog_ui(
                     .show_ui(ui, |ui| {
                         for (id, path) in &spritesheet_entries {
                             let is_selected = dialog.selected_spritesheet_id.as_ref() == Some(id);
-                            if ui
-                                .selectable_label(is_selected, path)
-                                .clicked()
-                            {
+                            if ui.selectable_label(is_selected, path).clicked() {
                                 dialog.selected_spritesheet_id = Some(id.clone());
                             }
                         }
@@ -724,10 +716,10 @@ fn npc_placement_dialog_ui(
 
     if should_remove {
         if let Some(idx) = dialog.editing_index {
-            if let Some(map) = project.active_map_mut() {
-                if idx < map.npcs.len() {
-                    map.npcs.remove(idx);
-                }
+            if let Some(map) = project.active_map_mut()
+                && idx < map.npcs.len()
+            {
+                map.npcs.remove(idx);
             }
 
             if let Some(original) = dialog.original_npc.clone() {

@@ -259,9 +259,7 @@ impl EditCommand {
                 // No-op on MapData; handled at Project level by undo_redo plugin
             }
             EditCommandKind::PlaceNpc {
-                npc_index,
-                new_npc,
-                ..
+                npc_index, new_npc, ..
             } => {
                 if let Some(idx) = npc_index {
                     if *idx < map.npcs.len() {
@@ -359,15 +357,13 @@ impl EditCommand {
                 // No-op on MapData; handled at Project level by undo_redo plugin
             }
             EditCommandKind::PlaceNpc {
-                npc_index,
-                old_npc,
-                ..
+                npc_index, old_npc, ..
             } => {
                 if let Some(idx) = npc_index {
-                    if let Some(old) = old_npc {
-                        if *idx < map.npcs.len() {
-                            map.npcs[*idx] = old.clone();
-                        }
+                    if let Some(old) = old_npc
+                        && *idx < map.npcs.len()
+                    {
+                        map.npcs[*idx] = old.clone();
                     }
                 } else {
                     // Was appended, so pop the last element

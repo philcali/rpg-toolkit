@@ -3,7 +3,10 @@ use image::{Rgba, RgbaImage};
 use rand::Rng;
 
 #[derive(Parser)]
-#[command(name = "rpg-toolkit-asset-gen", about = "Generate placeholder game assets")]
+#[command(
+    name = "rpg-toolkit-asset-gen",
+    about = "Generate placeholder game assets"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -43,10 +46,10 @@ fn main() {
 
 /// Skin/body palette per direction row so you can visually tell them apart.
 const DIR_BODY_COLORS: [Rgba<u8>; 4] = [
-    Rgba([90, 130, 200, 255]),  // Down  – blue-ish
-    Rgba([200, 130, 90, 255]),  // Left  – orange-ish
-    Rgba([130, 200, 90, 255]),  // Right – green-ish
-    Rgba([180, 90, 200, 255]),  // Up    – purple-ish
+    Rgba([90, 130, 200, 255]), // Down  – blue-ish
+    Rgba([200, 130, 90, 255]), // Left  – orange-ish
+    Rgba([130, 200, 90, 255]), // Right – green-ish
+    Rgba([180, 90, 200, 255]), // Up    – purple-ish
 ];
 
 const SKIN: Rgba<u8> = Rgba([240, 200, 160, 255]);
@@ -66,15 +69,19 @@ fn generate_character(path: &str) {
         }
     }
 
-    img.save(path).expect("failed to write character spritesheet");
+    img.save(path)
+        .expect("failed to write character spritesheet");
     println!("Wrote character spritesheet to {path}");
 }
 
 fn draw_character_frame(
     img: &mut RgbaImage,
-    ox: u32, oy: u32,
-    fw: u32, _fh: u32,
-    dir: u32, frame: u32,
+    ox: u32,
+    oy: u32,
+    fw: u32,
+    _fh: u32,
+    dir: u32,
+    frame: u32,
 ) {
     let body = DIR_BODY_COLORS[dir as usize];
     // Slight vertical bob for walk animation: frame 0 & 2 shift body down 1px.
@@ -154,25 +161,29 @@ fn draw_character_frame(
 fn draw_direction_arrow(img: &mut RgbaImage, cx: u32, cy: u32, dir: u32) {
     let white = Rgba([255, 255, 255, 255]);
     match dir {
-        0 => { // Down arrow
+        0 => {
+            // Down arrow
             put(img, cx, cy, white);
             put(img, cx, cy + 1, white);
             put(img, cx - 1, cy, white);
             put(img, cx + 1, cy, white);
         }
-        1 => { // Left arrow
+        1 => {
+            // Left arrow
             put(img, cx, cy, white);
             put(img, cx - 1, cy, white);
             put(img, cx, cy - 1, white);
             put(img, cx, cy + 1, white);
         }
-        2 => { // Right arrow
+        2 => {
+            // Right arrow
             put(img, cx, cy, white);
             put(img, cx + 1, cy, white);
             put(img, cx, cy - 1, white);
             put(img, cx, cy + 1, white);
         }
-        3 => { // Up arrow
+        3 => {
+            // Up arrow
             put(img, cx, cy, white);
             put(img, cx, cy - 1, white);
             put(img, cx - 1, cy, white);
@@ -220,13 +231,7 @@ fn generate_tileset(path: &str, cols: u32, rows: u32) {
     println!("Wrote tileset ({cols}x{rows} tiles, {tile}x{tile}px each) to {path}");
 }
 
-fn fill_tile(
-    img: &mut RgbaImage,
-    ox: u32, oy: u32,
-    size: u32,
-    base: Rgba<u8>,
-    rng: &mut impl Rng,
-) {
+fn fill_tile(img: &mut RgbaImage, ox: u32, oy: u32, size: u32, base: Rgba<u8>, rng: &mut impl Rng) {
     for y in 0..size {
         for x in 0..size {
             // Add per-pixel noise for a hand-drawn pixel art feel.

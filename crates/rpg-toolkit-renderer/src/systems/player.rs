@@ -64,7 +64,11 @@ pub fn spawn_player(
         });
 
     if has_spritesheet {
-        let ss_id = project_data.project_file.player_spritesheet.as_ref().unwrap();
+        let ss_id = project_data
+            .project_file
+            .player_spritesheet
+            .as_ref()
+            .unwrap();
         let texture = project_data.spritesheet_textures[ss_id].clone();
         let atlas_layout = project_data.spritesheet_atlas_layouts[ss_id].clone();
         let idle_index = sprite_atlas_index(FacingDirection::Down, 1);
@@ -190,7 +194,11 @@ pub fn player_movement(
 /// Clears `is_moving` on `PlayerSpriteState` when the animation finishes.
 pub fn animate_player(
     time: Res<Time>,
-    mut query: Query<(&mut PlayerCharacter, &mut Transform, Option<&mut PlayerSpriteState>)>,
+    mut query: Query<(
+        &mut PlayerCharacter,
+        &mut Transform,
+        Option<&mut PlayerSpriteState>,
+    )>,
     mut player_moved: MessageWriter<PlayerMoved>,
 ) {
     for (mut player, mut transform, sprite_state) in query.iter_mut() {

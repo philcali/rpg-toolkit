@@ -553,6 +553,7 @@ fn app_shell_ui(
 /// Canvas interaction systems check this instead of `ctx.wants_pointer_input()`
 /// so that side panels and toolbar remain clickable while dialogs still block
 /// canvas input.
+#[allow(clippy::too_many_arguments)]
 fn update_any_dialog_open(
     new_map: Res<NewMapDialog>,
     error: Res<ErrorDialog>,

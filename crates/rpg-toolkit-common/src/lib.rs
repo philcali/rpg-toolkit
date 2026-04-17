@@ -11,7 +11,7 @@ pub use map::{
 };
 pub use project::{ProjectFile, SpritesheetReferences};
 pub use spritesheet::{
-    CharacterSpritesheet, FacingDirection, NpcInstance, SpritesheetId,
-    sprite_atlas_index, validate_spritesheet_dimensions, walk_animation_frame,
+    CharacterSpritesheet, FacingDirection, NpcInstance, SpritesheetId, sprite_atlas_index,
+    validate_spritesheet_dimensions, walk_animation_frame,
 };
 pub use tileset::TilesetMeta;

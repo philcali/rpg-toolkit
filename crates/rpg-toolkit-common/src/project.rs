@@ -141,10 +141,10 @@ impl ProjectFile {
             }
         }
 
-        if let Some(player_ss) = &self.player_spritesheet {
-            if player_ss == spritesheet_id {
-                refs.player_reference = true;
-            }
+        if let Some(player_ss) = &self.player_spritesheet
+            && player_ss == spritesheet_id
+        {
+            refs.player_reference = true;
         }
 
         refs

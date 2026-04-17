@@ -39,11 +39,7 @@ fn arb_character_spritesheet() -> impl Strategy<Value = CharacterSpritesheet> {
     })
 }
 
-fn arb_npc_instance(
-    ss_count: usize,
-    map_w: u32,
-    map_h: u32,
-) -> impl Strategy<Value = NpcInstance> {
+fn arb_npc_instance(ss_count: usize, map_w: u32, map_h: u32) -> impl Strategy<Value = NpcInstance> {
     (
         arb_spritesheet_id(ss_count),
         0..map_w,
@@ -67,35 +63,31 @@ fn arb_map_data(ss_count: usize) -> impl Strategy<Value = MapData> {
     let height = 1u32..=8;
     let tile_size = prop_oneof![Just(8u32), Just(16), Just(32), Just(64)];
 
-    (width, height, tile_size.clone(), tile_size).prop_flat_map(
-        move |(w, h, tw, th)| {
-            let npc_count = if ss_count > 0 { 0usize..=5 } else { 0usize..=0 };
-            let npcs_strategy = prop::collection::vec(arb_npc_instance(ss_count, w, h), npc_count);
+    (width, height, tile_size.clone(), tile_size).prop_flat_map(move |(w, h, tw, th)| {
+        let npc_count = if ss_count > 0 { 0usize..=5 } else { 0usize..=0 };
+        let npcs_strategy = prop::collection::vec(arb_npc_instance(ss_count, w, h), npc_count);
 
-            (Just(w), Just(h), Just(tw), Just(th), npcs_strategy).prop_map(
-                |(w, h, tw, th, npcs)| {
-                    let tiles = vec![vec![None; w as usize]; h as usize];
-                    let attributes = TileAttributeLayer::new(w, h);
-                    let layer = Layer {
-                        name: "Ground".to_string(),
-                        visible: true,
-                        tiles,
-                        attributes,
-                    };
-                    MapData {
-                        name: "test-map".to_string(),
-                        width: w,
-                        height: h,
-                        tile_width: tw,
-                        tile_height: th,
-                        layers: vec![layer],
-                        active_layer_index: 0,
-                        npcs,
-                    }
-                },
-            )
-        },
-    )
+        (Just(w), Just(h), Just(tw), Just(th), npcs_strategy).prop_map(|(w, h, tw, th, npcs)| {
+            let tiles = vec![vec![None; w as usize]; h as usize];
+            let attributes = TileAttributeLayer::new(w, h);
+            let layer = Layer {
+                name: "Ground".to_string(),
+                visible: true,
+                tiles,
+                attributes,
+            };
+            MapData {
+                name: "test-map".to_string(),
+                width: w,
+                height: h,
+                tile_width: tw,
+                tile_height: th,
+                layers: vec![layer],
+                active_layer_index: 0,
+                npcs,
+            }
+        })
+    })
 }
 
 /// Generates a valid ProjectFile with 0–3 maps, 0–3 spritesheets, 0–5 NPCs
@@ -121,11 +113,7 @@ fn arb_project_file() -> impl Strategy<Value = ProjectFile> {
 
         // Optional player spritesheet (only if spritesheets exist)
         let player_ss_strategy = if ss_count > 0 {
-            prop_oneof![
-                Just(None),
-                arb_spritesheet_id(ss_count).prop_map(Some),
-            ]
-            .boxed()
+            prop_oneof![Just(None), arb_spritesheet_id(ss_count).prop_map(Some),].boxed()
         } else {
             Just(None).boxed()
         };

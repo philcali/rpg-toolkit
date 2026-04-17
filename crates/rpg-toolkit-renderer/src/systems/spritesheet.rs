@@ -16,7 +16,12 @@ pub fn load_spritesheet_assets(
     mut project_data: ResMut<RendererProjectData>,
 ) {
     let layout = build_spritesheet_atlas();
-    let spritesheet_ids: Vec<_> = project_data.project_file.spritesheets.keys().cloned().collect();
+    let spritesheet_ids: Vec<_> = project_data
+        .project_file
+        .spritesheets
+        .keys()
+        .cloned()
+        .collect();
 
     for ss_id in spritesheet_ids {
         let Some(ss) = project_data.project_file.spritesheets.get(&ss_id) else {
@@ -25,7 +30,11 @@ pub fn load_spritesheet_assets(
         let texture: Handle<Image> = asset_server.load(&ss.file_path);
         let atlas_handle = atlas_layouts.add(layout.clone());
 
-        project_data.spritesheet_textures.insert(ss_id.clone(), texture);
-        project_data.spritesheet_atlas_layouts.insert(ss_id, atlas_handle);
+        project_data
+            .spritesheet_textures
+            .insert(ss_id.clone(), texture);
+        project_data
+            .spritesheet_atlas_layouts
+            .insert(ss_id, atlas_handle);
     }
 }
