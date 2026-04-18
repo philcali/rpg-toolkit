@@ -73,6 +73,22 @@ pub fn spawn_player(
         let atlas_layout = project_data.spritesheet_atlas_layouts[ss_id].clone();
         let idle_index = sprite_atlas_index(FacingDirection::Down, 1);
 
+        // Compute sprite scale so the sprite width matches the map tile width
+        let (sprite_scale, y_offset) = project_data
+            .project_file
+            .spritesheets
+            .get(ss_id)
+            .map(|ss| {
+                let scale = map.tile_width as f32 / ss.sprite_width as f32;
+                // The sprite is taller than the tile after scaling. Shift it
+                // up so the feet align with the tile bottom instead of
+                // centering the sprite on the tile.
+                let scaled_height = ss.sprite_height as f32 * scale;
+                let offset = (scaled_height - map.tile_height as f32) / 2.0;
+                (scale, offset)
+            })
+            .unwrap_or((1.0, 0.0));
+
         commands.spawn((
             player,
             PlayerSpriteState {
@@ -80,6 +96,8 @@ pub fn spawn_player(
                 animation_frame: 1,
                 animation_timer: 0.0,
                 is_moving: false,
+                idle_frames: 0,
+                y_offset,
             },
             Sprite {
                 image: texture,
@@ -89,7 +107,8 @@ pub fn spawn_player(
                 }),
                 ..default()
             },
-            Transform::from_xyz(world_pos.x, world_pos.y, z),
+            Transform::from_xyz(world_pos.x, world_pos.y + y_offset, z)
+                .with_scale(Vec3::splat(sprite_scale)),
         ));
     } else {
         commands.spawn((
@@ -169,8 +188,13 @@ pub fn player_movement(
                 Direction::Left => FacingDirection::Left,
                 Direction::Right => FacingDirection::Right,
             };
+            // Only reset the animation timer if starting from a genuine
+            // idle state (idle for more than the 1-frame grace period).
+            if ss.idle_frames > 1 {
+                ss.animation_timer = 0.0;
+            }
             ss.is_moving = true;
-            ss.animation_timer = 0.0;
+            ss.idle_frames = 0;
         }
 
         let from_grid = (player.grid_x, player.grid_y);
@@ -206,16 +230,18 @@ pub fn animate_player(
             continue;
         };
 
+        let y_offset = sprite_state.as_ref().map_or(0.0, |ss| ss.y_offset);
+
         anim.elapsed += time.delta_secs();
         let t = (anim.elapsed / anim.duration).clamp(0.0, 1.0);
         let pos = anim.from.lerp(anim.to, t);
         transform.translation.x = pos.x;
-        transform.translation.y = pos.y;
+        transform.translation.y = pos.y + y_offset;
 
         if anim.elapsed >= anim.duration {
             // Snap to final position
             transform.translation.x = anim.to.x;
-            transform.translation.y = anim.to.y;
+            transform.translation.y = anim.to.y + y_offset;
 
             let from_grid = anim.from_grid;
             let to_grid = anim.to_grid;
@@ -246,18 +272,33 @@ pub fn animate_player_sprite(
         };
 
         if state.is_moving {
+            state.idle_frames = 0;
             state.animation_timer += time.delta_secs();
             let frame = rpg_toolkit_common::walk_animation_frame(
                 state.animation_timer,
-                animation_config.frame_duration,
+                animation_config.clamped_frame_duration(),
             );
             state.animation_frame = frame;
             atlas.index = sprite_atlas_index(state.facing, frame);
         } else {
-            // Idle pose: middle frame (frame 1)
-            state.animation_frame = 1;
-            state.animation_timer = 0.0;
-            atlas.index = sprite_atlas_index(state.facing, 1);
+            state.idle_frames = state.idle_frames.saturating_add(1);
+            if state.idle_frames > 1 {
+                // Genuinely idle — show idle pose and reset timer.
+                state.animation_frame = 1;
+                state.animation_timer = 0.0;
+                atlas.index = sprite_atlas_index(state.facing, 1);
+            } else {
+                // Grace frame between consecutive tile moves —
+                // keep showing the current walk frame so the cycle
+                // isn't interrupted.
+                state.animation_timer += time.delta_secs();
+                let frame = rpg_toolkit_common::walk_animation_frame(
+                    state.animation_timer,
+                    animation_config.clamped_frame_duration(),
+                );
+                state.animation_frame = frame;
+                atlas.index = sprite_atlas_index(state.facing, frame);
+            }
         }
     }
 }

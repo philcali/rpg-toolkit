@@ -64,8 +64,12 @@ pub fn sprite_atlas_index(facing: FacingDirection, frame: usize) -> usize {
     facing as usize * 3 + frame
 }
 
+/// Walk cycle pattern: left step, center, right step, center.
+const WALK_PATTERN: [usize; 4] = [0, 1, 2, 1];
+
 /// Returns the current walk animation frame (0, 1, or 2) based on elapsed time
-/// and frame duration, cycling continuously.
+/// and frame duration, cycling through the `[0, 1, 2, 1]` pattern continuously.
 pub fn walk_animation_frame(elapsed: f32, frame_duration: f32) -> usize {
-    (elapsed / frame_duration).floor() as usize % 3
+    let step = (elapsed / frame_duration).floor() as usize % 4;
+    WALK_PATTERN[step]
 }

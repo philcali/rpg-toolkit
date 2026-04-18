@@ -48,6 +48,15 @@ pub struct PlayerSpriteState {
     pub animation_frame: usize,
     pub animation_timer: f32,
     pub is_moving: bool,
+    /// Counts frames since `is_moving` went false.
+    /// Used to allow a one-frame grace period between consecutive tile
+    /// moves so the walk animation timer isn't reset.
+    pub idle_frames: u32,
+    /// Y offset applied to the sprite so that the character's feet
+    /// align with the bottom of the tile rather than centering the
+    /// sprite on the tile. Computed from the height difference between
+    /// the scaled sprite and the tile.
+    pub y_offset: f32,
 }
 
 /// Marker for the game camera (distinct from the editor camera).

@@ -12,9 +12,10 @@ pub use components::{
 pub use events::{MapChanged, PlayerMoved};
 pub use input::{Direction, MovementIntent, read_input};
 pub use resources::{
-    AnimationConfig, MovementConfig, PlayerVisual, RendererProjectData, RendererState,
+    AnimationConfig, MovementConfig, PixelScaleConfig, PixelScaleMode, PlayerVisual,
+    RendererProjectData, RendererState,
 };
-pub use systems::camera::{spawn_camera, update_camera};
+pub use systems::camera::{apply_pixel_scale, compute_zoom_to_fit, spawn_camera, update_camera};
 pub use systems::collision::is_tile_blocked;
 pub use systems::map_render::{spawn_npc_sprites, sync_map_sprites};
 pub use systems::player::{
@@ -35,6 +36,7 @@ impl Plugin for ProjectRendererPlugin {
             .init_resource::<PlayerVisual>()
             .init_resource::<MovementIntent>()
             .init_resource::<AnimationConfig>()
+            .init_resource::<PixelScaleConfig>()
             // Events
             .add_message::<MapChanged>()
             .add_message::<PlayerMoved>()
@@ -61,7 +63,8 @@ impl Plugin for ProjectRendererPlugin {
                     handle_map_change.after(check_triggers),
                     sync_map_sprites.after(handle_map_change),
                     spawn_npc_sprites.after(sync_map_sprites),
-                    update_camera.after(spawn_npc_sprites),
+                    apply_pixel_scale.after(spawn_npc_sprites),
+                    update_camera.after(apply_pixel_scale),
                 ),
             );
     }

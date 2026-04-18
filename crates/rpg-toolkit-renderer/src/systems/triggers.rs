@@ -108,7 +108,23 @@ pub fn handle_map_change(
             new_map.tile_height,
         );
         let z = new_map.layers.len() as f32 + 1.0;
-        transform.translation = Vec3::new(world_pos.x, world_pos.y, z);
+
+        // Recompute sprite scale and Y offset for the new map's tile dimensions
+        let (sprite_scale, y_offset) = project_data
+            .project_file
+            .player_spritesheet
+            .as_ref()
+            .and_then(|ss_id| project_data.project_file.spritesheets.get(ss_id))
+            .map(|ss| {
+                let scale = new_map.tile_width as f32 / ss.sprite_width as f32;
+                let scaled_height = ss.sprite_height as f32 * scale;
+                let offset = (scaled_height - new_map.tile_height as f32) / 2.0;
+                (scale, offset)
+            })
+            .unwrap_or((1.0, 0.0));
+
+        transform.translation = Vec3::new(world_pos.x, world_pos.y + y_offset, z);
+        transform.scale = Vec3::splat(sprite_scale);
 
         // Update sprite size to match new map's tile dimensions
         sprite.custom_size = Some(Vec2::new(

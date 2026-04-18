@@ -1,7 +1,9 @@
 use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use rpg_toolkit_common::ProjectFile;
-use rpg_toolkit_renderer::{ProjectRendererPlugin, RendererProjectData};
+use rpg_toolkit_renderer::{
+    PixelScaleConfig, PixelScaleMode, ProjectRendererPlugin, RendererProjectData,
+};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -13,16 +15,67 @@ struct PendingProjectLoad {
     tileset_paths: HashMap<String, std::path::PathBuf>,
 }
 
+fn parse_scale_arg(args: &[String]) -> Option<PixelScaleMode> {
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--scale" {
+            let value = args.get(i + 1).unwrap_or_else(|| {
+                eprintln!("Error: --scale requires a value (integer or 'fit')");
+                std::process::exit(1);
+            });
+            return Some(match value.as_str() {
+                "fit" | "auto" => PixelScaleMode::ZoomToFit,
+                other => {
+                    let n: u32 = other.parse().unwrap_or_else(|_| {
+                        eprintln!(
+                            "Error: --scale value must be a positive integer or 'fit', got '{}'",
+                            other
+                        );
+                        std::process::exit(1);
+                    });
+                    if n == 0 {
+                        eprintln!("Error: --scale value must be at least 1");
+                        std::process::exit(1);
+                    }
+                    PixelScaleMode::Fixed(n)
+                }
+            });
+        }
+        i += 1;
+    }
+    None
+}
+
 fn main() {
-    // Parse CLI argument
+    // Parse CLI arguments
     let args: Vec<String> = std::env::args().collect();
-    let project_path_str = args.get(1).unwrap_or_else(|| {
-        eprintln!("Usage: rpg-toolkit-launcher <path-to-project.rpg>");
-        std::process::exit(1);
-    });
+
+    // Find the project path (first positional arg, skipping --scale and its value)
+    let project_path_str = {
+        let mut path = None;
+        let mut i = 1; // skip program name
+        while i < args.len() {
+            if args[i] == "--scale" {
+                i += 2; // skip flag and value
+                continue;
+            }
+            if args[i].starts_with("--") {
+                i += 1;
+                continue;
+            }
+            path = Some(args[i].clone());
+            break;
+        }
+        path.unwrap_or_else(|| {
+            eprintln!("Usage: rpg-toolkit-launcher <path-to-project.rpg> [--scale <N|fit>]");
+            std::process::exit(1);
+        })
+    };
+
+    let scale_mode = parse_scale_arg(&args);
 
     // Read file contents
-    let project_path = Path::new(project_path_str);
+    let project_path = Path::new(&project_path_str);
     let contents = std::fs::read_to_string(project_path).unwrap_or_else(|e| {
         eprintln!("Error: could not read '{}': {}", project_path.display(), e);
         std::process::exit(1);
@@ -58,28 +111,42 @@ fn main() {
         .map(|(id, meta)| (id.clone(), project_dir.join(&meta.file_path)))
         .collect();
 
-    App::new()
-        .add_plugins(
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "RPG Toolkit".into(),
-                        ..default()
-                    }),
-                    ..default()
-                })
-                .set(AssetPlugin {
-                    unapproved_path_mode: UnapprovedPathMode::Allow,
+    let mut app = App::new();
+    app.add_plugins(
+        DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "RPG Toolkit".into(),
                     ..default()
                 }),
-        )
-        .insert_resource(PendingProjectLoad {
-            project_file,
-            tileset_paths,
-        })
-        .add_systems(PreStartup, load_project_resources)
-        .add_plugins(ProjectRendererPlugin)
-        .run();
+                ..default()
+            })
+            .set(AssetPlugin {
+                unapproved_path_mode: UnapprovedPathMode::Allow,
+                ..default()
+            })
+            .set(ImagePlugin::default_nearest()),
+    );
+
+    // Apply pixel scale from CLI if provided (overrides the default zoom-to-fit)
+    if let Some(mode) = scale_mode {
+        let effective = match &mode {
+            PixelScaleMode::Fixed(n) => *n,
+            PixelScaleMode::ZoomToFit => 1,
+        };
+        app.insert_resource(PixelScaleConfig {
+            mode,
+            effective_scale: effective,
+        });
+    }
+
+    app.insert_resource(PendingProjectLoad {
+        project_file,
+        tileset_paths,
+    })
+    .add_systems(PreStartup, load_project_resources)
+    .add_plugins(ProjectRendererPlugin)
+    .run();
 }
 
 /// Startup system that loads tileset textures via the Bevy asset server
