@@ -66,3 +66,39 @@ impl Default for AnimationConfig {
         }
     }
 }
+
+impl AnimationConfig {
+    /// Returns the frame duration, clamped to a minimum of 0.01 seconds.
+    pub fn clamped_frame_duration(&self) -> f32 {
+        self.frame_duration.max(0.01)
+    }
+}
+
+/// Determines how the game world is scaled on screen.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PixelScaleMode {
+    /// Automatically compute the largest integer scale where the
+    /// entire map fits in the window.
+    ZoomToFit,
+    /// Use a fixed integer scale (clamped to >= 1).
+    Fixed(u32),
+}
+
+/// Resource controlling pixel scaling of the game world.
+#[derive(Resource)]
+pub struct PixelScaleConfig {
+    /// The scaling mode: zoom-to-fit or fixed integer.
+    pub mode: PixelScaleMode,
+    /// The currently computed effective integer scale (always >= 1).
+    /// Updated each frame by `apply_pixel_scale`.
+    pub effective_scale: u32,
+}
+
+impl Default for PixelScaleConfig {
+    fn default() -> Self {
+        Self {
+            mode: PixelScaleMode::ZoomToFit,
+            effective_scale: 1,
+        }
+    }
+}

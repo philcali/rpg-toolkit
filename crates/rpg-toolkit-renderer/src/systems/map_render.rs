@@ -134,6 +134,14 @@ pub fn spawn_npc_sprites(
         let idle_index = sprite_atlas_index(npc.facing, 1);
         let world_pos = grid_to_world(npc.x, npc.y, tw, th);
 
+        // Compute sprite scale so the sprite width matches the map tile width
+        let sprite_scale = project_data
+            .project_file
+            .spritesheets
+            .get(&npc.spritesheet_id)
+            .map(|spritesheet| map.tile_width as f32 / spritesheet.sprite_width as f32)
+            .unwrap_or(1.0);
+
         commands.spawn((
             NpcSprite { npc_index: npc_idx },
             Sprite {
@@ -144,7 +152,8 @@ pub fn spawn_npc_sprites(
                 }),
                 ..default()
             },
-            Transform::from_xyz(world_pos.x, world_pos.y, npc_z),
+            Transform::from_xyz(world_pos.x, world_pos.y, npc_z)
+                .with_scale(Vec3::splat(sprite_scale)),
         ));
     }
 }
