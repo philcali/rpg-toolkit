@@ -5,7 +5,7 @@ use crate::data::project::Project;
 use crate::data::{AnyDialogOpen, EditorState, TilesetMeta};
 use crate::plugins::attribute::{EventTriggerDialog, NpcPlacementDialog, SpawnPointConfirmDialog};
 use crate::plugins::serialization::{SerializationAction, SerializationRequest};
-use crate::plugins::spritesheet::{RemoveSpritesheetDialog, SpritesheetPanel};
+use crate::plugins::spritesheet::RemoveSpritesheetDialog;
 use crate::plugins::toolbar::CanvasRect;
 
 /// Plugin that provides the application shell: menu bar, canvas area, and side panel.
@@ -563,7 +563,6 @@ fn update_any_dialog_open(
     spawn_confirm: Res<SpawnPointConfirmDialog>,
     npc_placement: Res<NpcPlacementDialog>,
     remove_spritesheet: Res<RemoveSpritesheetDialog>,
-    spritesheet_panel: Res<SpritesheetPanel>,
     map_delete: Res<crate::plugins::layer_panel::MapDeleteDialogOpen>,
     mut any_open: ResMut<AnyDialogOpen>,
 ) {
@@ -575,6 +574,5 @@ fn update_any_dialog_open(
         || spawn_confirm.open
         || npc_placement.open
         || remove_spritesheet.open
-        || spritesheet_panel.open
         || map_delete.0;
 }
