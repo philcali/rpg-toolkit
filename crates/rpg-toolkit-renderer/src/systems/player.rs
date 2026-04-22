@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::components::{MoveAnimation, PlayerCharacter, PlayerSpriteState};
+use crate::dialog::DialogState;
 use crate::events::PlayerMoved;
 use crate::input::{Direction, MovementIntent};
 use crate::resources::{MovementConfig, PlayerVisual, RendererProjectData, RendererState};
@@ -130,11 +131,19 @@ pub fn spawn_player(
 /// Also updates `PlayerSpriteState` facing direction and is_moving flag.
 pub fn player_movement(
     intent: Res<MovementIntent>,
+    dialog_state: Option<Res<DialogState>>,
     project_data: Res<RendererProjectData>,
     renderer_state: Res<RendererState>,
     movement_config: Res<MovementConfig>,
     mut query: Query<(&mut PlayerCharacter, Option<&mut PlayerSpriteState>)>,
 ) {
+    // Block movement if dialog is active with movement_block
+    if let Some(ref state) = dialog_state
+        && state.movement_blocked
+    {
+        return;
+    }
+
     let Some(direction) = intent.direction else {
         return;
     };
