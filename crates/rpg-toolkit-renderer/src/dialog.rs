@@ -117,6 +117,27 @@ pub struct DialogBox;
 #[derive(Component)]
 pub struct DialogTextNode;
 
+/// Convert common DialogTextData to renderer DialogText.
+pub fn dialog_text_from_data(data: &rpg_toolkit_common::DialogTextData) -> DialogText {
+    match data {
+        rpg_toolkit_common::DialogTextData::Inline(s) => DialogText::Inline(s.clone()),
+        rpg_toolkit_common::DialogTextData::Id(s) => DialogText::Id(s.clone()),
+    }
+}
+
+/// Convert common DialogConfigData to renderer DialogConfig.
+pub fn dialog_config_from_data(data: &rpg_toolkit_common::DialogConfigData) -> DialogConfig {
+    DialogConfig {
+        text_speed: data.text_speed,
+        position: match data.position {
+            rpg_toolkit_common::DialogPositionData::Top => DialogPosition::Top,
+            rpg_toolkit_common::DialogPositionData::Center => DialogPosition::Center,
+            rpg_toolkit_common::DialogPositionData::Bottom => DialogPosition::Bottom,
+        },
+        movement_block: data.movement_block,
+    }
+}
+
 /// Computes the number of visible characters for the typewriter effect.
 /// Returns `min(floor(elapsed * text_speed), total_chars)` for speed > 0,
 /// or `total_chars` for speed <= 0.

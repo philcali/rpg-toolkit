@@ -131,6 +131,7 @@ fn arb_project_file() -> impl Strategy<Value = ProjectFile> {
                     None,           // no spawn point needed
                     spritesheets,
                     player_spritesheet,
+                    HashMap::new(), // no dialog texts needed for this property
                 )
             },
         )

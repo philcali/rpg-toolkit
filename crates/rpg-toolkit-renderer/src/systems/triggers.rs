@@ -1,20 +1,31 @@
 use bevy::prelude::*;
 use rpg_toolkit_common::EventAction;
+use std::collections::VecDeque;
 
 use crate::components::PlayerCharacter;
-use crate::events::{MapChanged, PlayerMoved};
-use crate::resources::{RendererProjectData, RendererState};
+use crate::dialog::{
+    DialogState, DialogTextRegistry, dialog_config_from_data, dialog_text_from_data,
+};
+use crate::events::{MapChanged, PlayerMoved, ShowDialog};
+use crate::resources::{ActionQueue, RendererProjectData, RendererState};
 use crate::systems::player::grid_to_world;
 
 /// Reacts to `PlayerMoved` events: collects event triggers from all layers at the
-/// destination tile and initiates a map change for the first `JumpTo` found.
+/// destination tile and populates the `ActionQueue` for sequential processing.
+/// Does nothing if an `ActionQueue` already exists (sequence in progress).
 pub fn check_triggers(
     mut player_moved: MessageReader<PlayerMoved>,
     project_data: Res<RendererProjectData>,
     renderer_state: Res<RendererState>,
+    action_queue: Option<Res<ActionQueue>>,
     mut commands: Commands,
 ) {
     for event in player_moved.read() {
+        // If a sequence is already in progress, ignore new triggers
+        if action_queue.is_some() {
+            continue;
+        }
+
         let Some(map_id) = &renderer_state.active_map_id else {
             continue;
         };
@@ -25,6 +36,7 @@ pub fn check_triggers(
         let (x, y) = event.to;
 
         // Collect EventAction entries from all layers at the destination tile
+        let mut actions = VecDeque::new();
         for layer in &map.layers {
             let Some(row) = layer.attributes.cells.get(y as usize) else {
                 continue;
@@ -34,34 +46,90 @@ pub fn check_triggers(
             };
 
             for action in &attrs.event_trigger {
-                match action {
-                    EventAction::JumpTo {
-                        target_map_id,
-                        target_x,
-                        target_y,
-                    } => {
-                        // Validate target map exists
-                        if !project_data.project_file.maps.contains_key(target_map_id) {
-                            warn!(
-                                "JumpTo references non-existent map '{}'; ignoring",
-                                target_map_id
-                            );
-                            continue;
-                        }
+                actions.push_back(action.clone());
+            }
+        }
 
-                        // Queue the map change via commands to avoid conflicting borrows
-                        let target_map = target_map_id.clone();
-                        let tx = *target_x;
-                        let ty = *target_y;
-                        commands.queue(move |world: &mut World| {
-                            let mut state = world.resource_mut::<RendererState>();
-                            state.pending_map_change = Some(target_map);
-                            state.pending_target_coords = Some((tx, ty));
-                        });
-                        return; // Execute only the first JumpTo found
+        // If we collected any actions, insert the ActionQueue resource
+        if !actions.is_empty() {
+            commands.insert_resource(ActionQueue {
+                actions,
+                waiting_for_dialog: false,
+            });
+        }
+    }
+}
+
+/// Advances the action queue: fires the next ShowDialog or JumpTo.
+/// Waits for dialog dismissal before advancing past ShowDialog actions.
+pub fn advance_action_queue(
+    mut commands: Commands,
+    action_queue: Option<ResMut<ActionQueue>>,
+    dialog_state: Option<Res<DialogState>>,
+    registry: Option<Res<DialogTextRegistry>>,
+    mut renderer_state: ResMut<RendererState>,
+    mut show_dialog: MessageWriter<ShowDialog>,
+) {
+    let Some(mut queue) = action_queue else {
+        return;
+    };
+
+    // If we're waiting for a dialog to be dismissed...
+    if queue.waiting_for_dialog {
+        if dialog_state.is_some() {
+            // Still waiting — dialog is still active
+            return;
+        }
+        // Dialog was dismissed — pop the completed action and continue
+        queue.waiting_for_dialog = false;
+        queue.actions.pop_front();
+    }
+
+    // If the queue is now empty, remove the resource and return
+    if queue.actions.is_empty() {
+        commands.remove_resource::<ActionQueue>();
+        return;
+    }
+
+    // Peek the next action
+    let action = queue.actions.front().unwrap().clone();
+    match action {
+        EventAction::ShowDialog { text, config } => {
+            let dialog_text = dialog_text_from_data(&text);
+            let dialog_config = dialog_config_from_data(&config);
+
+            // For Id references, check that the registry has the entry
+            if let rpg_toolkit_common::DialogTextData::Id(ref id) = text {
+                let has_entry = registry.as_ref().is_some_and(|reg| reg.get(id).is_some());
+                if !has_entry {
+                    warn!(
+                        "ShowDialog text ID '{}' not found in DialogTextRegistry; skipping action",
+                        id
+                    );
+                    // Skip this action and try the next one
+                    queue.actions.pop_front();
+                    if queue.actions.is_empty() {
+                        commands.remove_resource::<ActionQueue>();
                     }
+                    return;
                 }
             }
+
+            show_dialog.write(ShowDialog {
+                text: dialog_text,
+                config: dialog_config,
+            });
+            queue.waiting_for_dialog = true;
+        }
+        EventAction::JumpTo {
+            target_map_id,
+            target_x,
+            target_y,
+        } => {
+            renderer_state.pending_map_change = Some(target_map_id);
+            renderer_state.pending_target_coords = Some((target_x, target_y));
+            // Clear the queue and remove the resource — JumpTo terminates the sequence
+            commands.remove_resource::<ActionQueue>();
         }
     }
 }

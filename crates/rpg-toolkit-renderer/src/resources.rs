@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use rpg_toolkit_common::{MapId, ProjectFile, SpritesheetId, TilesetId};
-use std::collections::HashMap;
+use rpg_toolkit_common::{EventAction, MapId, ProjectFile, SpritesheetId, TilesetId};
+use std::collections::{HashMap, VecDeque};
 
 /// Input resource: consumers insert this before adding the plugin.
 /// Contains the deserialized project data and tileset texture handles.
@@ -72,6 +72,16 @@ impl AnimationConfig {
     pub fn clamped_frame_duration(&self) -> f32 {
         self.frame_duration.max(0.01)
     }
+}
+
+/// Tracks the remaining EventActions in the current trigger sequence.
+/// Present only while a sequence is being processed.
+#[derive(Resource)]
+pub struct ActionQueue {
+    /// The remaining actions to process (front = next action).
+    pub actions: VecDeque<EventAction>,
+    /// Whether we're currently waiting for a dialog to be dismissed.
+    pub waiting_for_dialog: bool,
 }
 
 /// Determines how the game world is scaled on screen.

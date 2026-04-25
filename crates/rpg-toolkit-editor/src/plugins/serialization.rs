@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use crate::data::editor_state::UndoHistory;
 use crate::data::tileset::TilesetEntry;
 use crate::data::{EditorState, Project, ProjectFile};
+use crate::plugins::dialog_text_panel::{TextIdIndex, rebuild_text_id_index};
 
 /// Plugin that handles project save/load via JSON serialization and native file dialogs.
 pub struct SerializationPlugin;
@@ -40,6 +41,7 @@ fn handle_serialization_actions(
     asset_server: Res<AssetServer>,
     mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut contexts: EguiContexts,
+    mut text_id_index: ResMut<TextIdIndex>,
 ) -> Result {
     let Some(request) = action.pending.take() else {
         return Ok(());
@@ -65,6 +67,7 @@ fn handle_serialization_actions(
                 &mut editor_state,
                 &asset_server,
                 &mut atlas_layouts,
+                &mut text_id_index,
             );
         }
         SerializationRequest::NewProject => {
@@ -113,6 +116,7 @@ fn save_project_to_path(
         project.spawn_point.clone(),
         project.spritesheets.clone(),
         project.player_spritesheet.clone(),
+        project.dialog_texts.clone(),
     );
 
     match project_file.serialize() {
@@ -141,6 +145,7 @@ fn load_project_with_dialog(
     editor_state: &mut ResMut<EditorState>,
     asset_server: &Res<AssetServer>,
     atlas_layouts: &mut ResMut<Assets<TextureAtlasLayout>>,
+    text_id_index: &mut ResMut<TextIdIndex>,
 ) {
     let file = rfd::FileDialog::new()
         .add_filter("RPG Project", &["json"])
@@ -218,11 +223,15 @@ fn load_project_with_dialog(
         spawn_point: project_file.spawn_point,
         spritesheets: project_file.spritesheets,
         player_spritesheet: project_file.player_spritesheet,
+        dialog_texts: project_file.dialog_texts,
     };
 
     // Reset editor state
     editor_state.current_save_path = Some(path);
     editor_state.active_brush = None;
+
+    // Rebuild the TextIdIndex from the loaded maps
+    **text_id_index = rebuild_text_id_index(&project.maps);
 
     info!("Project loaded successfully");
 }

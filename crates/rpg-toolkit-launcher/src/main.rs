@@ -2,7 +2,8 @@ use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use rpg_toolkit_common::ProjectFile;
 use rpg_toolkit_renderer::{
-    PixelScaleConfig, PixelScaleMode, ProjectRendererPlugin, RendererProjectData,
+    DialogTextRegistry, PixelScaleConfig, PixelScaleMode, ProjectRendererPlugin,
+    RendererProjectData,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -189,6 +190,11 @@ fn load_project_resources(
         spritesheet_textures: HashMap::new(),
         spritesheet_atlas_layouts: HashMap::new(),
     });
+
+    // Populate the DialogTextRegistry from the project file's dialog_texts
+    commands.insert_resource(DialogTextRegistry::from_map(
+        pending.project_file.dialog_texts.clone(),
+    ));
 
     commands.remove_resource::<PendingProjectLoad>();
 }

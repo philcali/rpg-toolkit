@@ -6,8 +6,8 @@ pub mod tileset;
 
 pub use error::CommonError;
 pub use map::{
-    EventAction, Layer, MapData, MapId, SpawnPoint, TileAttributeLayer, TileAttributes, TileRef,
-    TilesetId,
+    DialogConfigData, DialogPositionData, DialogTextData, EventAction, Layer, MapData, MapId,
+    SpawnPoint, TileAttributeLayer, TileAttributes, TileRef, TilesetId,
 };
 pub use project::{ProjectFile, SpritesheetReferences};
 pub use spritesheet::{
