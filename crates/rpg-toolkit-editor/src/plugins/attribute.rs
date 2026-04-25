@@ -5,7 +5,26 @@ use crate::data::editor_state::{EditCommand, EditCommandKind};
 use crate::data::map::{EventAction, MapId, SpawnPoint};
 use crate::data::{AnyDialogOpen, AttributeTool, EditorMode, EditorState, Project};
 use crate::systems::input::CursorWorldState;
-use rpg_toolkit_common::{FacingDirection, NpcInstance, SpritesheetId};
+use rpg_toolkit_common::{
+    DialogConfigData, DialogPositionData, DialogTextData, FacingDirection, NpcInstance,
+    SpritesheetId,
+};
+
+/// The type of action being added in the Event Trigger Editor.
+#[derive(Default, PartialEq)]
+pub enum ActionType {
+    #[default]
+    JumpTo,
+    ShowDialog,
+}
+
+/// The text source mode for a ShowDialog action.
+#[derive(Default, PartialEq)]
+pub enum DialogTextMode {
+    #[default]
+    Inline,
+    TextId,
+}
 
 /// Resource for the spawn point confirmation dialog.
 #[derive(Resource, Default)]
@@ -17,7 +36,7 @@ pub struct SpawnPointConfirmDialog {
 }
 
 /// Resource for the event trigger editing dialog.
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct EventTriggerDialog {
     pub open: bool,
     pub layer_index: usize,
@@ -29,6 +48,41 @@ pub struct EventTriggerDialog {
     pub new_target_map_id: String,
     pub new_target_x: String,
     pub new_target_y: String,
+    /// Type of action being added: JumpTo or ShowDialog
+    pub new_action_type: ActionType,
+    /// ShowDialog fields
+    pub new_dialog_text_mode: DialogTextMode,
+    pub new_dialog_inline_text: String,
+    pub new_dialog_text_id: String,
+    pub new_dialog_text_speed: String,
+    pub new_dialog_position: DialogPositionData,
+    pub new_dialog_movement_block: bool,
+    /// Index of the action being edited (None = adding new)
+    pub editing_index: Option<usize>,
+}
+
+impl Default for EventTriggerDialog {
+    fn default() -> Self {
+        Self {
+            open: false,
+            layer_index: 0,
+            tile_x: 0,
+            tile_y: 0,
+            actions: Vec::new(),
+            original_actions: Vec::new(),
+            new_target_map_id: String::new(),
+            new_target_x: String::new(),
+            new_target_y: String::new(),
+            new_action_type: ActionType::JumpTo,
+            new_dialog_text_mode: DialogTextMode::Inline,
+            new_dialog_inline_text: String::new(),
+            new_dialog_text_id: String::new(),
+            new_dialog_text_speed: "30".to_string(),
+            new_dialog_position: DialogPositionData::Bottom,
+            new_dialog_movement_block: true,
+            editing_index: None,
+        }
+    }
 }
 
 /// Resource for the NPC placement/editing dialog.
@@ -58,6 +112,17 @@ impl Default for NpcPlacementDialog {
 }
 
 pub struct AttributePlugin;
+
+/// Truncates a string to at most `max_len` characters, appending "…" if truncated.
+pub fn truncate_preview(s: &str, max_len: usize) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() > max_len {
+        let truncated: String = chars[..max_len].iter().collect();
+        format!("{}…", truncated)
+    } else {
+        s.to_string()
+    }
+}
 
 impl Plugin for AttributePlugin {
     fn build(&self, app: &mut App) {
@@ -257,6 +322,14 @@ fn attribute_click_system(
             event_trigger_dialog.new_target_map_id = String::new();
             event_trigger_dialog.new_target_x = "0".to_string();
             event_trigger_dialog.new_target_y = "0".to_string();
+            event_trigger_dialog.new_action_type = ActionType::JumpTo;
+            event_trigger_dialog.new_dialog_text_mode = DialogTextMode::Inline;
+            event_trigger_dialog.new_dialog_inline_text = String::new();
+            event_trigger_dialog.new_dialog_text_id = String::new();
+            event_trigger_dialog.new_dialog_text_speed = "30".to_string();
+            event_trigger_dialog.new_dialog_position = DialogPositionData::Bottom;
+            event_trigger_dialog.new_dialog_movement_block = true;
+            event_trigger_dialog.editing_index = None;
         }
 
         AttributeTool::SpawnPoint => {
@@ -358,12 +431,14 @@ fn event_trigger_panel_ui(
             ));
             ui.separator();
 
-            // Display existing actions with remove/reorder controls
+            // Display existing actions with remove/reorder/edit controls
             let mut remove_idx: Option<usize> = None;
             let mut swap: Option<(usize, usize)> = None;
+            let mut edit_idx: Option<usize> = None;
             let action_count = dialog.actions.len();
 
             for (i, action) in dialog.actions.iter().enumerate() {
+                let is_being_edited = dialog.editing_index == Some(i);
                 ui.horizontal(|ui| {
                     match action {
                         EventAction::JumpTo {
@@ -371,13 +446,40 @@ fn event_trigger_panel_ui(
                             target_x,
                             target_y,
                         } => {
-                            ui.label(format!(
+                            let label = format!(
                                 "{}. JumpTo → map: {}, ({}, {})",
                                 i + 1,
                                 target_map_id,
                                 target_x,
                                 target_y
-                            ));
+                            );
+                            if is_being_edited {
+                                ui.label(
+                                    egui::RichText::new(label)
+                                        .strong()
+                                        .color(egui::Color32::from_rgb(100, 180, 255)),
+                                );
+                            } else {
+                                ui.label(label);
+                            }
+                        }
+                        EventAction::ShowDialog { text, .. } => {
+                            let preview = match text {
+                                DialogTextData::Inline(s) => truncate_preview(s, 40),
+                                DialogTextData::Id(id) => {
+                                    format!("ID: {}", id)
+                                }
+                            };
+                            let label = format!("{}. ShowDialog — {}", i + 1, preview);
+                            if is_being_edited {
+                                ui.label(
+                                    egui::RichText::new(label)
+                                        .strong()
+                                        .color(egui::Color32::from_rgb(100, 180, 255)),
+                                );
+                            } else {
+                                ui.label(label);
+                            }
                         }
                     }
 
@@ -387,6 +489,13 @@ fn event_trigger_panel_ui(
                     if i + 1 < action_count && ui.small_button("▼").clicked() {
                         swap = Some((i, i + 1));
                     }
+                    if ui
+                        .small_button("✏")
+                        .on_hover_text("Edit this action")
+                        .clicked()
+                    {
+                        edit_idx = Some(i);
+                    }
                     if ui.small_button("✕").clicked() {
                         remove_idx = Some(i);
                     }
@@ -394,63 +503,302 @@ fn event_trigger_panel_ui(
             }
 
             if let Some(idx) = remove_idx {
+                // If we were editing the removed action, clear editing state
+                if dialog.editing_index == Some(idx) {
+                    dialog.editing_index = None;
+                } else if let Some(ei) = dialog.editing_index {
+                    // Adjust editing index if an earlier action was removed
+                    if idx < ei {
+                        dialog.editing_index = Some(ei - 1);
+                    }
+                }
                 dialog.actions.remove(idx);
             }
             if let Some((a, b)) = swap {
                 dialog.actions.swap(a, b);
+                // Track the editing index through swaps
+                if dialog.editing_index == Some(a) {
+                    dialog.editing_index = Some(b);
+                } else if dialog.editing_index == Some(b) {
+                    dialog.editing_index = Some(a);
+                }
+            }
+            // Load action into form for editing
+            if let Some(idx) = edit_idx
+                && let Some(action) = dialog.actions.get(idx).cloned()
+            {
+                match action {
+                    EventAction::JumpTo {
+                        target_map_id,
+                        target_x,
+                        target_y,
+                    } => {
+                        dialog.new_action_type = ActionType::JumpTo;
+                        dialog.new_target_map_id = target_map_id;
+                        dialog.new_target_x = target_x.to_string();
+                        dialog.new_target_y = target_y.to_string();
+                    }
+                    EventAction::ShowDialog { text, config } => {
+                        dialog.new_action_type = ActionType::ShowDialog;
+                        match text {
+                            DialogTextData::Inline(s) => {
+                                dialog.new_dialog_text_mode = DialogTextMode::Inline;
+                                dialog.new_dialog_inline_text = s;
+                                dialog.new_dialog_text_id.clear();
+                            }
+                            DialogTextData::Id(id) => {
+                                dialog.new_dialog_text_mode = DialogTextMode::TextId;
+                                dialog.new_dialog_text_id = id;
+                                dialog.new_dialog_inline_text.clear();
+                            }
+                        }
+                        dialog.new_dialog_text_speed = config.text_speed.to_string();
+                        dialog.new_dialog_position = config.position;
+                        dialog.new_dialog_movement_block = config.movement_block;
+                    }
+                }
+                dialog.editing_index = Some(idx);
             }
 
             ui.separator();
-            ui.label("Add JumpTo Action:");
 
-            // Map selector dropdown
-            let map_ids: Vec<(String, String)> = project
-                .maps
-                .iter()
-                .map(|(id, m)| (id.clone(), m.name.clone()))
-                .collect();
+            // Action type selector
+            let is_editing_action = dialog.editing_index.is_some();
+            let form_label = if is_editing_action {
+                "Edit Action:"
+            } else {
+                "Add Action:"
+            };
+            ui.label(egui::RichText::new(form_label).strong());
 
             ui.horizontal(|ui| {
-                ui.label("Target Map:");
-                let selected_text = if dialog.new_target_map_id.is_empty() {
-                    "Select map...".to_string()
+                ui.label("Action Type:");
+                ui.radio_value(&mut dialog.new_action_type, ActionType::JumpTo, "JumpTo");
+                ui.radio_value(
+                    &mut dialog.new_action_type,
+                    ActionType::ShowDialog,
+                    "ShowDialog",
+                );
+            });
+
+            ui.separator();
+
+            if dialog.new_action_type == ActionType::JumpTo {
+                let jumpto_form_label = if dialog.editing_index.is_some() {
+                    "Edit JumpTo Action:"
                 } else {
-                    map_ids
-                        .iter()
-                        .find(|(id, _)| *id == dialog.new_target_map_id)
-                        .map(|(_, name)| name.clone())
-                        .unwrap_or_else(|| dialog.new_target_map_id.clone())
+                    "Add JumpTo Action:"
                 };
-                egui::ComboBox::from_id_salt("event_trigger_map_select")
-                    .selected_text(selected_text)
-                    .show_ui(ui, |ui| {
-                        for (id, name) in &map_ids {
-                            ui.selectable_value(&mut dialog.new_target_map_id, id.clone(), name);
+                ui.label(jumpto_form_label);
+
+                // Map selector dropdown
+                let map_ids: Vec<(String, String)> = project
+                    .maps
+                    .iter()
+                    .map(|(id, m)| (id.clone(), m.name.clone()))
+                    .collect();
+
+                ui.horizontal(|ui| {
+                    ui.label("Target Map:");
+                    let selected_text = if dialog.new_target_map_id.is_empty() {
+                        "Select map...".to_string()
+                    } else {
+                        map_ids
+                            .iter()
+                            .find(|(id, _)| *id == dialog.new_target_map_id)
+                            .map(|(_, name)| name.clone())
+                            .unwrap_or_else(|| dialog.new_target_map_id.clone())
+                    };
+                    egui::ComboBox::from_id_salt("event_trigger_map_select")
+                        .selected_text(selected_text)
+                        .show_ui(ui, |ui| {
+                            for (id, name) in &map_ids {
+                                ui.selectable_value(
+                                    &mut dialog.new_target_map_id,
+                                    id.clone(),
+                                    name,
+                                );
+                            }
+                        });
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("X:");
+                    ui.text_edit_singleline(&mut dialog.new_target_x);
+                    ui.label("Y:");
+                    ui.text_edit_singleline(&mut dialog.new_target_y);
+                });
+
+                let jumpto_button_label = if dialog.editing_index.is_some() {
+                    "Update JumpTo"
+                } else {
+                    "Add JumpTo"
+                };
+                if ui.button(jumpto_button_label).clicked() {
+                    let has_target = !dialog.new_target_map_id.is_empty();
+                    if has_target {
+                        let target_map = dialog.new_target_map_id.clone();
+                        let x = dialog.new_target_x.trim().parse::<u32>().unwrap_or(0);
+                        let y = dialog.new_target_y.trim().parse::<u32>().unwrap_or(0);
+                        let new_action = EventAction::JumpTo {
+                            target_map_id: target_map,
+                            target_x: x,
+                            target_y: y,
+                        };
+                        if let Some(idx) = dialog.editing_index {
+                            // Replace existing action
+                            if idx < dialog.actions.len() {
+                                dialog.actions[idx] = new_action;
+                            }
+                            dialog.editing_index = None;
+                        } else {
+                            dialog.actions.push(new_action);
                         }
-                    });
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("X:");
-                ui.text_edit_singleline(&mut dialog.new_target_x);
-                ui.label("Y:");
-                ui.text_edit_singleline(&mut dialog.new_target_y);
-            });
-
-            if ui.button("Add JumpTo").clicked() {
-                let has_target = !dialog.new_target_map_id.is_empty();
-                if has_target {
-                    let target_map = dialog.new_target_map_id.clone();
-                    let x = dialog.new_target_x.trim().parse::<u32>().unwrap_or(0);
-                    let y = dialog.new_target_y.trim().parse::<u32>().unwrap_or(0);
-                    dialog.actions.push(EventAction::JumpTo {
-                        target_map_id: target_map,
-                        target_x: x,
-                        target_y: y,
-                    });
+                        dialog.new_target_map_id = String::new();
+                        dialog.new_target_x = "0".to_string();
+                        dialog.new_target_y = "0".to_string();
+                    }
+                }
+                if dialog.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.editing_index = None;
                     dialog.new_target_map_id = String::new();
                     dialog.new_target_x = "0".to_string();
                     dialog.new_target_y = "0".to_string();
+                }
+            } else {
+                let show_dialog_form_label = if dialog.editing_index.is_some() {
+                    "Edit ShowDialog Action:"
+                } else {
+                    "Add ShowDialog Action:"
+                };
+                ui.label(show_dialog_form_label);
+
+                // Text source toggle
+                ui.horizontal(|ui| {
+                    ui.label("Text Source:");
+                    ui.radio_value(
+                        &mut dialog.new_dialog_text_mode,
+                        DialogTextMode::Inline,
+                        "Inline",
+                    );
+                    ui.radio_value(
+                        &mut dialog.new_dialog_text_mode,
+                        DialogTextMode::TextId,
+                        "Text ID",
+                    );
+                });
+
+                match dialog.new_dialog_text_mode {
+                    DialogTextMode::Inline => {
+                        ui.label("Dialog Text:");
+                        ui.text_edit_multiline(&mut dialog.new_dialog_inline_text);
+                    }
+                    DialogTextMode::TextId => {
+                        ui.horizontal(|ui| {
+                            ui.label("Text ID:");
+                            ui.text_edit_singleline(&mut dialog.new_dialog_text_id);
+                        });
+                    }
+                }
+
+                ui.horizontal(|ui| {
+                    ui.label("Text Speed:");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.new_dialog_text_speed)
+                            .desired_width(60.0),
+                    );
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Position:");
+                    egui::ComboBox::from_id_salt("dialog_position_select")
+                        .selected_text(match dialog.new_dialog_position {
+                            DialogPositionData::Top => "Top",
+                            DialogPositionData::Center => "Center",
+                            DialogPositionData::Bottom => "Bottom",
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut dialog.new_dialog_position,
+                                DialogPositionData::Top,
+                                "Top",
+                            );
+                            ui.selectable_value(
+                                &mut dialog.new_dialog_position,
+                                DialogPositionData::Center,
+                                "Center",
+                            );
+                            ui.selectable_value(
+                                &mut dialog.new_dialog_position,
+                                DialogPositionData::Bottom,
+                                "Bottom",
+                            );
+                        });
+                });
+
+                ui.checkbox(&mut dialog.new_dialog_movement_block, "Movement Block");
+
+                let show_dialog_button_label = if dialog.editing_index.is_some() {
+                    "Update ShowDialog"
+                } else {
+                    "Add ShowDialog"
+                };
+                if ui.button(show_dialog_button_label).clicked() {
+                    let text = match dialog.new_dialog_text_mode {
+                        DialogTextMode::Inline => {
+                            if dialog.new_dialog_inline_text.is_empty() {
+                                None
+                            } else {
+                                Some(DialogTextData::Inline(
+                                    dialog.new_dialog_inline_text.clone(),
+                                ))
+                            }
+                        }
+                        DialogTextMode::TextId => {
+                            if dialog.new_dialog_text_id.is_empty() {
+                                None
+                            } else {
+                                Some(DialogTextData::Id(dialog.new_dialog_text_id.clone()))
+                            }
+                        }
+                    };
+
+                    if let Some(text) = text {
+                        let text_speed = dialog
+                            .new_dialog_text_speed
+                            .trim()
+                            .parse::<f32>()
+                            .unwrap_or(30.0);
+                        let config = DialogConfigData {
+                            text_speed,
+                            position: dialog.new_dialog_position.clone(),
+                            movement_block: dialog.new_dialog_movement_block,
+                        };
+                        let new_action = EventAction::ShowDialog { text, config };
+                        if let Some(idx) = dialog.editing_index {
+                            // Replace existing action
+                            if idx < dialog.actions.len() {
+                                dialog.actions[idx] = new_action;
+                            }
+                            dialog.editing_index = None;
+                        } else {
+                            dialog.actions.push(new_action);
+                        }
+                        // Reset ShowDialog fields
+                        dialog.new_dialog_inline_text = String::new();
+                        dialog.new_dialog_text_id = String::new();
+                        dialog.new_dialog_text_speed = "30".to_string();
+                        dialog.new_dialog_position = DialogPositionData::Bottom;
+                        dialog.new_dialog_movement_block = true;
+                    }
+                }
+                if dialog.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.editing_index = None;
+                    dialog.new_dialog_inline_text = String::new();
+                    dialog.new_dialog_text_id = String::new();
+                    dialog.new_dialog_text_speed = "30".to_string();
+                    dialog.new_dialog_position = DialogPositionData::Bottom;
+                    dialog.new_dialog_movement_block = true;
                 }
             }
 

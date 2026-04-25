@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::error::CommonError;
-use crate::map::{EventAction, MapData, MapId, SpawnPoint, TilesetId};
+use crate::map::{DialogTextData, EventAction, MapData, MapId, SpawnPoint, TilesetId};
 use crate::spritesheet::{CharacterSpritesheet, SpritesheetId};
 use crate::tileset::TilesetMeta;
 
@@ -27,6 +27,9 @@ pub struct ProjectFile {
     pub spritesheets: HashMap<SpritesheetId, CharacterSpritesheet>,
     #[serde(default)]
     pub player_spritesheet: Option<SpritesheetId>,
+    /// Dialog text entries: Text_Id → text string.
+    #[serde(default)]
+    pub dialog_texts: HashMap<String, String>,
 }
 
 impl ProjectFile {
@@ -37,6 +40,7 @@ impl ProjectFile {
         spawn_point: Option<SpawnPoint>,
         spritesheets: HashMap<SpritesheetId, CharacterSpritesheet>,
         player_spritesheet: Option<SpritesheetId>,
+        dialog_texts: HashMap<String, String>,
     ) -> Self {
         Self {
             maps,
@@ -44,6 +48,7 @@ impl ProjectFile {
             spawn_point,
             spritesheets,
             player_spritesheet,
+            dialog_texts,
         }
     }
 
@@ -113,6 +118,15 @@ impl ProjectFile {
                                     eprintln!(
                                         "warning: map '{}' layer {} tile ({},{}) has JumpTo referencing non-existent map '{}'",
                                         map_id, layer_idx, x, y, target_map_id
+                                    );
+                                }
+                                EventAction::ShowDialog {
+                                    text: DialogTextData::Id(text_id),
+                                    ..
+                                } if !project.dialog_texts.contains_key(text_id) => {
+                                    eprintln!(
+                                        "warning: map '{}' layer {} tile ({},{}) has ShowDialog referencing non-existent text ID '{}'",
+                                        map_id, layer_idx, x, y, text_id
                                     );
                                 }
                                 _ => {}

@@ -87,6 +87,8 @@ fn spawn_dialog_ui(commands: &mut Commands, text: &str, config: &DialogConfig) {
     };
 
     // Spawn root dialog container with DialogBox marker
+    // flex_direction: Column makes justify_content control the vertical axis,
+    // so Top/Center/Bottom position the dialog box vertically as intended.
     commands
         .spawn((
             DialogBox,
@@ -94,6 +96,7 @@ fn spawn_dialog_ui(commands: &mut Commands, text: &str, config: &DialogConfig) {
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
                 justify_content,
                 align_items,
                 padding,

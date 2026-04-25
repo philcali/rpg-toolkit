@@ -12,15 +12,66 @@ pub type TilesetId = String;
 /// Valid tile sizes in pixels.
 const VALID_TILE_SIZES: [u32; 4] = [8, 16, 32, 64];
 
+/// Serialization-compatible dialog text data for EventAction.
+/// Mirrors rpg_toolkit_renderer::dialog::DialogText.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value")]
+pub enum DialogTextData {
+    Inline(String),
+    Id(String),
+}
+
+/// Serialization-compatible dialog position for EventAction.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DialogPositionData {
+    Top,
+    Center,
+    #[default]
+    Bottom,
+}
+
+fn default_text_speed() -> f32 {
+    30.0
+}
+
+fn default_movement_block() -> bool {
+    true
+}
+
+/// Serialization-compatible dialog configuration for EventAction.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DialogConfigData {
+    #[serde(default = "default_text_speed")]
+    pub text_speed: f32,
+    #[serde(default)]
+    pub position: DialogPositionData,
+    #[serde(default = "default_movement_block")]
+    pub movement_block: bool,
+}
+
+impl Default for DialogConfigData {
+    fn default() -> Self {
+        Self {
+            text_speed: 30.0,
+            position: DialogPositionData::Bottom,
+            movement_block: true,
+        }
+    }
+}
+
 /// A single action within an event trigger sequence.
 /// Uses `#[serde(tag = "type")]` for clean, forward-compatible JSON.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum EventAction {
     JumpTo {
         target_map_id: MapId,
         target_x: u32,
         target_y: u32,
+    },
+    ShowDialog {
+        text: DialogTextData,
+        config: DialogConfigData,
     },
 }
 

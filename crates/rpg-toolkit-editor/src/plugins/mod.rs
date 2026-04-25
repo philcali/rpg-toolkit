@@ -1,6 +1,7 @@
 pub mod app_shell;
 pub mod attribute;
 pub mod canvas;
+pub mod dialog_text_panel;
 pub mod layer_panel;
 pub mod painting;
 pub mod serialization;
@@ -12,6 +13,7 @@ pub mod undo_redo;
 pub use app_shell::AppShellPlugin;
 pub use attribute::AttributePlugin;
 pub use canvas::CanvasPlugin;
+pub use dialog_text_panel::{DialogTextPanelPlugin, TextIdIndex};
 pub use layer_panel::LayerPanelPlugin;
 pub use painting::PaintingPlugin;
 pub use serialization::SerializationPlugin;

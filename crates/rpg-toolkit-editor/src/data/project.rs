@@ -24,6 +24,8 @@ pub struct Project {
     pub spawn_point: Option<SpawnPoint>,
     pub spritesheets: HashMap<SpritesheetId, CharacterSpritesheet>,
     pub player_spritesheet: Option<SpritesheetId>,
+    /// Dialog text entries: Text_Id → text string.
+    pub dialog_texts: HashMap<String, String>,
 }
 
 impl Project {

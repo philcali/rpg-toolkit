@@ -177,6 +177,19 @@ pub enum EditCommandKind {
         npc_index: usize,
         removed_npc: NpcInstance,
     },
+    InsertDialogText {
+        text_id: String,
+        text: String,
+    },
+    UpdateDialogText {
+        text_id: String,
+        old_text: String,
+        new_text: String,
+    },
+    RemoveDialogText {
+        text_id: String,
+        old_text: String,
+    },
 }
 
 impl EditCommand {
@@ -273,6 +286,11 @@ impl EditCommand {
                 if *npc_index < map.npcs.len() {
                     map.npcs.remove(*npc_index);
                 }
+            }
+            EditCommandKind::InsertDialogText { .. }
+            | EditCommandKind::UpdateDialogText { .. }
+            | EditCommandKind::RemoveDialogText { .. } => {
+                // No-op on MapData; handled at Project level by undo_redo plugin
             }
         }
     }
@@ -375,6 +393,11 @@ impl EditCommand {
                 removed_npc,
             } => {
                 map.npcs.insert(*npc_index, removed_npc.clone());
+            }
+            EditCommandKind::InsertDialogText { .. }
+            | EditCommandKind::UpdateDialogText { .. }
+            | EditCommandKind::RemoveDialogText { .. } => {
+                // No-op on MapData; handled at Project level by undo_redo plugin
             }
         }
     }

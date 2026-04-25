@@ -13,7 +13,7 @@ pub use components::{
 pub use events::{MapChanged, PlayerMoved, ShowDialog};
 pub use input::{Direction, MovementIntent, read_input};
 pub use resources::{
-    AnimationConfig, MovementConfig, PixelScaleConfig, PixelScaleMode, PlayerVisual,
+    ActionQueue, AnimationConfig, MovementConfig, PixelScaleConfig, PixelScaleMode, PlayerVisual,
     RendererProjectData, RendererState,
 };
 pub use systems::camera::{apply_pixel_scale, compute_zoom_to_fit, spawn_camera, update_camera};
@@ -23,11 +23,11 @@ pub use systems::player::{
     animate_player, animate_player_sprite, grid_to_world, player_movement, spawn_player,
 };
 pub use systems::spritesheet::{build_spritesheet_atlas, load_spritesheet_assets};
-pub use systems::triggers::{check_triggers, handle_map_change};
+pub use systems::triggers::{advance_action_queue, check_triggers, handle_map_change};
 
 pub use dialog::{
     DialogBox, DialogConfig, DialogPosition, DialogState, DialogText, DialogTextNode,
-    DialogTextRegistry, compute_visible_chars,
+    DialogTextRegistry, compute_visible_chars, dialog_config_from_data, dialog_text_from_data,
 };
 pub use systems::dialog::{handle_dialog_event, handle_dialog_input, update_dialog_typewriter};
 
@@ -69,13 +69,14 @@ impl Plugin for ProjectRendererPlugin {
                     animate_player.after(player_movement),
                     animate_player_sprite.after(animate_player),
                     check_triggers.after(animate_player),
-                    handle_map_change.after(check_triggers),
+                    advance_action_queue.after(check_triggers),
+                    handle_map_change.after(advance_action_queue),
                     sync_map_sprites.after(handle_map_change),
                     spawn_npc_sprites.after(sync_map_sprites),
                     apply_pixel_scale.after(spawn_npc_sprites),
                     update_camera.after(apply_pixel_scale),
                     // Dialog systems
-                    handle_dialog_event,
+                    handle_dialog_event.after(advance_action_queue),
                     update_dialog_typewriter.after(handle_dialog_event),
                     handle_dialog_input.after(update_dialog_typewriter),
                 ),
