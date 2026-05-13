@@ -4,9 +4,12 @@ use crate::components::{MoveAnimation, PlayerCharacter, PlayerSpriteState};
 use crate::dialog::DialogState;
 use crate::events::PlayerMoved;
 use crate::input::{Direction, MovementIntent};
-use crate::resources::{MovementConfig, PlayerVisual, RendererProjectData, RendererState};
+use crate::resources::{
+    MovementConfig, NpcCollisionEvent, NpcPositions, PlayerVisual, RendererProjectData,
+    RendererState,
+};
 use crate::systems::collision::is_tile_blocked;
-use rpg_toolkit_common::{FacingDirection, sprite_atlas_index};
+use rpg_toolkit_common::{FacingDirection, TriggerMode, sprite_atlas_index};
 
 /// Converts grid coordinates to world-space position using the map's tile dimensions.
 pub fn grid_to_world(x: u32, y: u32, tile_width: u32, tile_height: u32) -> Vec2 {
@@ -15,7 +18,6 @@ pub fn grid_to_world(x: u32, y: u32, tile_width: u32, tile_height: u32) -> Vec2 
     Vec2::new(wx, wy)
 }
 
-/// Startup system: spawns the player character at the project's spawn point.
 /// Startup system: spawns the player character at the project's spawn point.
 /// Uses a spritesheet texture atlas if `player_spritesheet` is set and valid,
 /// otherwise falls back to a solid-color rectangle.
@@ -126,17 +128,21 @@ pub fn spawn_player(
 
 /// Update system: reads movement intent and initiates tile-to-tile movement
 /// if the target tile is in bounds and not blocked.
-/// Update system: reads movement intent and initiates tile-to-tile movement
-/// if the target tile is in bounds and not blocked.
 /// Also updates `PlayerSpriteState` facing direction and is_moving flag.
+#[allow(clippy::too_many_arguments)]
 pub fn player_movement(
     intent: Res<MovementIntent>,
     dialog_state: Option<Res<DialogState>>,
     project_data: Res<RendererProjectData>,
     renderer_state: Res<RendererState>,
     movement_config: Res<MovementConfig>,
+    npc_positions: Res<NpcPositions>,
+    mut collision_event: ResMut<NpcCollisionEvent>,
     mut query: Query<(&mut PlayerCharacter, Option<&mut PlayerSpriteState>)>,
 ) {
+    // Reset collision event each frame
+    collision_event.npc_index = None;
+
     // Block movement if dialog is active with movement_block
     if let Some(ref state) = dialog_state
         && state.movement_blocked
@@ -156,7 +162,7 @@ pub fn player_movement(
         return;
     };
 
-    for (mut player, sprite_state) in query.iter_mut() {
+    for (mut player, mut sprite_state) in query.iter_mut() {
         // Animation exclusivity: ignore input while animating
         if player.move_animation.is_some() {
             continue;
@@ -168,6 +174,19 @@ pub fn player_movement(
             Direction::Left => (-1, 0),
             Direction::Right => (1, 0),
         };
+
+        // Always update facing direction when the player tries to move,
+        // even if movement is blocked. This allows the player to turn
+        // toward NPCs and obstacles without moving.
+        let new_facing = match direction {
+            Direction::Up => FacingDirection::Up,
+            Direction::Down => FacingDirection::Down,
+            Direction::Left => FacingDirection::Left,
+            Direction::Right => FacingDirection::Right,
+        };
+        if let Some(ref mut ss) = sprite_state {
+            ss.facing = new_facing;
+        }
 
         let target_x = player.grid_x as i64 + dx;
         let target_y = player.grid_y as i64 + dy;
@@ -184,19 +203,38 @@ pub fn player_movement(
         let target_x = target_x as u32;
         let target_y = target_y as u32;
 
-        // Collision check
-        if is_tile_blocked(map, target_x, target_y) {
+        // Check opacity blocking first (pass None for npc_positions to only check opacity)
+        let opacity_blocked = is_tile_blocked(map, target_x, target_y, None);
+
+        if opacity_blocked {
+            // Tile is blocked by opacity attributes — just block movement (existing behavior)
             continue;
         }
 
-        // Update sprite state facing and is_moving before starting animation
-        if let Some(mut ss) = sprite_state {
-            ss.facing = match direction {
-                Direction::Up => FacingDirection::Up,
-                Direction::Down => FacingDirection::Down,
-                Direction::Left => FacingDirection::Left,
-                Direction::Right => FacingDirection::Right,
-            };
+        // Check if an NPC occupies the destination tile
+        if npc_positions.is_occupied(target_x, target_y) {
+            // Find which NPC occupies this tile and check for collision triggers
+            if let Some((npc_index, _)) = npc_positions
+                .positions
+                .iter()
+                .enumerate()
+                .find(|(_, (nx, ny))| *nx == target_x && *ny == target_y)
+            {
+                // Check if the NPC has Collision trigger mode and non-empty event_triggers
+                if let Some(npc_instance) = map.npcs.get(npc_index)
+                    && npc_instance.trigger_mode == TriggerMode::Collision
+                    && !npc_instance.event_triggers.is_empty()
+                {
+                    // Signal the trigger system by writing to NpcCollisionEvent (immediate visibility)
+                    collision_event.npc_index = Some(npc_index);
+                }
+            }
+            // Block movement regardless (NPC tile is always blocked)
+            continue;
+        }
+
+        // Start movement animation
+        if let Some(ref mut ss) = sprite_state {
             // Only reset the animation timer if starting from a genuine
             // idle state (idle for more than the 1-frame grace period).
             if ss.idle_frames > 1 {

@@ -81,7 +81,8 @@ fn tile_palette_ui(
 
         let ctx = contexts.ctx_mut()?;
         egui::SidePanel::right("tile_palette")
-            .default_width(200.0)
+            .default_width(280.0)
+            .resizable(true)
             .show(ctx, |ui| {
                 ui.heading("Tile Palette");
                 ui.separator();
@@ -138,7 +139,8 @@ fn tile_palette_ui(
     let ctx = contexts.ctx_mut()?;
 
     egui::SidePanel::right("tile_palette")
-        .default_width(200.0)
+        .default_width(280.0)
+        .resizable(true)
         .show(ctx, |ui| {
             ui.heading("Tile Palette");
             ui.separator();
@@ -230,9 +232,13 @@ fn tile_palette_ui(
             let img_w = (columns * tile_w) as f32;
             let img_h = (rows * tile_h) as f32;
 
-            // Compute display tile size to fit the panel
+            // Compute display tile size to fit the panel width
             let available_width = ui.available_width();
-            let display_tile_size = (available_width / columns as f32).floor().max(8.0);
+            // Account for grid spacing (1px between tiles)
+            let spacing_total = (columns.saturating_sub(1)) as f32;
+            let display_tile_size = ((available_width - spacing_total) / columns as f32)
+                .floor()
+                .max(8.0);
 
             // Read drag state from egui memory
             let drag_id = egui::Id::new("palette_drag_state");
@@ -240,7 +246,7 @@ fn tile_palette_ui(
                 .memory(|mem| mem.data.get_temp::<PaletteDragState>(drag_id))
                 .unwrap_or_default();
 
-            egui::ScrollArea::vertical()
+            egui::ScrollArea::both()
                 .id_salt("tile_grid_scroll")
                 .max_height(ui.available_height() - 120.0) // Reserve space for spritesheet section
                 .show(ui, |ui| {

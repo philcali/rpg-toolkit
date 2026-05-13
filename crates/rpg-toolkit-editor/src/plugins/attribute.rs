@@ -7,7 +7,7 @@ use crate::data::{AnyDialogOpen, AttributeTool, EditorMode, EditorState, Project
 use crate::systems::input::CursorWorldState;
 use rpg_toolkit_common::{
     DialogConfigData, DialogPositionData, DialogTextData, FacingDirection, NpcInstance,
-    SpritesheetId,
+    PatrolConfig, PatrolMode, SpritesheetId, TriggerMode, validate_waypoint_bounds,
 };
 
 /// The type of action being added in the Event Trigger Editor.
@@ -95,6 +95,27 @@ pub struct NpcPlacementDialog {
     pub selected_facing: FacingDirection,
     pub editing_index: Option<usize>,
     pub original_npc: Option<NpcInstance>,
+    // Patrol config fields
+    pub patrol_waypoints: Vec<(u32, u32)>,
+    pub patrol_mode: PatrolMode,
+    pub patrol_speed: String,
+    pub patrol_pause: String,
+    pub adding_waypoints: bool,
+    // Event trigger fields
+    pub trigger_mode: TriggerMode,
+    pub event_triggers: Vec<EventAction>,
+    // Action editing fields (same as EventTriggerDialog)
+    pub npc_new_action_type: ActionType,
+    pub npc_new_target_map_id: String,
+    pub npc_new_target_x: String,
+    pub npc_new_target_y: String,
+    pub npc_new_dialog_text_mode: DialogTextMode,
+    pub npc_new_dialog_inline_text: String,
+    pub npc_new_dialog_text_id: String,
+    pub npc_new_dialog_text_speed: String,
+    pub npc_new_dialog_position: DialogPositionData,
+    pub npc_new_dialog_movement_block: bool,
+    pub npc_editing_action_index: Option<usize>,
 }
 
 impl Default for NpcPlacementDialog {
@@ -107,6 +128,24 @@ impl Default for NpcPlacementDialog {
             selected_facing: FacingDirection::Down,
             editing_index: None,
             original_npc: None,
+            patrol_waypoints: Vec::new(),
+            patrol_mode: PatrolMode::Loop,
+            patrol_speed: "0.3".to_string(),
+            patrol_pause: "0.5".to_string(),
+            adding_waypoints: false,
+            trigger_mode: TriggerMode::Interaction,
+            event_triggers: Vec::new(),
+            npc_new_action_type: ActionType::JumpTo,
+            npc_new_target_map_id: String::new(),
+            npc_new_target_x: "0".to_string(),
+            npc_new_target_y: "0".to_string(),
+            npc_new_dialog_text_mode: DialogTextMode::Inline,
+            npc_new_dialog_inline_text: String::new(),
+            npc_new_dialog_text_id: String::new(),
+            npc_new_dialog_text_speed: "30".to_string(),
+            npc_new_dialog_position: DialogPositionData::Bottom,
+            npc_new_dialog_movement_block: true,
+            npc_editing_action_index: None,
         }
     }
 }
@@ -151,6 +190,7 @@ impl Plugin for AttributePlugin {
 fn attribute_overlay_system(
     editor_state: Res<EditorState>,
     project: Res<Project>,
+    npc_dialog: Res<NpcPlacementDialog>,
     mut gizmos: Gizmos,
 ) {
     if editor_state.editor_mode != EditorMode::Attribute {
@@ -229,6 +269,62 @@ fn attribute_overlay_system(
             );
         }
     }
+
+    // Draw patrol path overlay when NPC placement dialog is open
+    if editor_state.attribute_tool == AttributeTool::NpcPlacement && npc_dialog.open {
+        let waypoints = &npc_dialog.patrol_waypoints;
+        let color = Color::srgba(1.0, 0.8, 0.0, 0.8); // Yellow/orange for patrol paths
+        let marker_color = Color::srgba(1.0, 0.6, 0.0, 0.9);
+
+        // Draw connected line segments between waypoints
+        for i in 0..waypoints.len() {
+            let (wx, wy) = waypoints[i];
+            let px = wx as f32 * tile + tile / 2.0;
+            let py = -(wy as f32 * tile + tile / 2.0);
+
+            // Draw line to next waypoint
+            if i + 1 < waypoints.len() {
+                let (nx, ny) = waypoints[i + 1];
+                let npx = nx as f32 * tile + tile / 2.0;
+                let npy = -(ny as f32 * tile + tile / 2.0);
+                gizmos.line_2d(Vec2::new(px, py), Vec2::new(npx, npy), color);
+            }
+
+            // Draw numbered marker at each waypoint (small rect)
+            gizmos.rect_2d(
+                Isometry2d::from_translation(Vec2::new(px, py)),
+                Vec2::splat(tile * 0.4),
+                marker_color,
+            );
+        }
+    }
+
+    // Also draw patrol paths for existing NPCs that have patrol configs
+    if editor_state.attribute_tool == AttributeTool::NpcPlacement {
+        let path_color = Color::srgba(0.8, 0.6, 0.0, 0.5); // Dimmer for non-selected NPCs
+        for npc in &map.npcs {
+            if let Some(ref config) = npc.patrol_config {
+                for i in 0..config.waypoints.len() {
+                    let (wx, wy) = config.waypoints[i];
+                    let px = wx as f32 * tile + tile / 2.0;
+                    let py = -(wy as f32 * tile + tile / 2.0);
+
+                    if i + 1 < config.waypoints.len() {
+                        let (nx, ny) = config.waypoints[i + 1];
+                        let npx = nx as f32 * tile + tile / 2.0;
+                        let npy = -(ny as f32 * tile + tile / 2.0);
+                        gizmos.line_2d(Vec2::new(px, py), Vec2::new(npx, npy), path_color);
+                    }
+
+                    gizmos.rect_2d(
+                        Isometry2d::from_translation(Vec2::new(px, py)),
+                        Vec2::splat(tile * 0.3),
+                        path_color,
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// Handles left-click in attribute mode for opacity toggle, event trigger selection,
@@ -245,9 +341,16 @@ fn attribute_click_system(
     mut npc_placement_dialog: ResMut<NpcPlacementDialog>,
     any_dialog_open: Res<AnyDialogOpen>,
 ) {
-    // Block all attribute clicks when any modal dialog is open
+    // Block all attribute clicks when any modal dialog is open,
+    // EXCEPT when the NPC dialog is open and we're adding waypoints
     if any_dialog_open.0 {
-        return;
+        // Allow waypoint clicks through when adding waypoints
+        if !(npc_placement_dialog.open
+            && npc_placement_dialog.adding_waypoints
+            && editor_state.attribute_tool == AttributeTool::NpcPlacement)
+        {
+            return;
+        }
     }
 
     if editor_state.editor_mode != EditorMode::Attribute {
@@ -369,6 +472,17 @@ fn attribute_click_system(
         }
 
         AttributeTool::NpcPlacement => {
+            // If dialog is open and adding waypoints, append clicked tile
+            if npc_placement_dialog.open && npc_placement_dialog.adding_waypoints {
+                let Some(map) = project.active_map() else {
+                    return;
+                };
+                if validate_waypoint_bounds((col, row), map.width, map.height) {
+                    npc_placement_dialog.patrol_waypoints.push((col, row));
+                }
+                return;
+            }
+
             let Some(map) = project.active_map() else {
                 return;
             };
@@ -389,6 +503,33 @@ fn attribute_click_system(
                 npc_placement_dialog.selected_facing = npc.facing;
                 npc_placement_dialog.editing_index = Some(idx);
                 npc_placement_dialog.original_npc = Some(npc.clone());
+                // Pre-populate patrol config
+                if let Some(ref config) = npc.patrol_config {
+                    npc_placement_dialog.patrol_waypoints = config.waypoints.clone();
+                    npc_placement_dialog.patrol_mode = config.mode;
+                    npc_placement_dialog.patrol_speed = config.speed.to_string();
+                    npc_placement_dialog.patrol_pause = config.pause.to_string();
+                } else {
+                    npc_placement_dialog.patrol_waypoints = Vec::new();
+                    npc_placement_dialog.patrol_mode = PatrolMode::Loop;
+                    npc_placement_dialog.patrol_speed = "0.3".to_string();
+                    npc_placement_dialog.patrol_pause = "0.5".to_string();
+                }
+                npc_placement_dialog.adding_waypoints = false;
+                // Pre-populate event trigger config
+                npc_placement_dialog.trigger_mode = npc.trigger_mode;
+                npc_placement_dialog.event_triggers = npc.event_triggers.clone();
+                npc_placement_dialog.npc_new_action_type = ActionType::JumpTo;
+                npc_placement_dialog.npc_new_target_map_id = String::new();
+                npc_placement_dialog.npc_new_target_x = "0".to_string();
+                npc_placement_dialog.npc_new_target_y = "0".to_string();
+                npc_placement_dialog.npc_new_dialog_text_mode = DialogTextMode::Inline;
+                npc_placement_dialog.npc_new_dialog_inline_text = String::new();
+                npc_placement_dialog.npc_new_dialog_text_id = String::new();
+                npc_placement_dialog.npc_new_dialog_text_speed = "30".to_string();
+                npc_placement_dialog.npc_new_dialog_position = DialogPositionData::Bottom;
+                npc_placement_dialog.npc_new_dialog_movement_block = true;
+                npc_placement_dialog.npc_editing_action_index = None;
             } else {
                 // Open empty dialog for new placement
                 let first_spritesheet = project.spritesheets.keys().next().cloned();
@@ -399,6 +540,24 @@ fn attribute_click_system(
                 npc_placement_dialog.selected_facing = FacingDirection::Down;
                 npc_placement_dialog.editing_index = None;
                 npc_placement_dialog.original_npc = None;
+                npc_placement_dialog.patrol_waypoints = Vec::new();
+                npc_placement_dialog.patrol_mode = PatrolMode::Loop;
+                npc_placement_dialog.patrol_speed = "0.3".to_string();
+                npc_placement_dialog.patrol_pause = "0.5".to_string();
+                npc_placement_dialog.adding_waypoints = false;
+                npc_placement_dialog.trigger_mode = TriggerMode::Interaction;
+                npc_placement_dialog.event_triggers = Vec::new();
+                npc_placement_dialog.npc_new_action_type = ActionType::JumpTo;
+                npc_placement_dialog.npc_new_target_map_id = String::new();
+                npc_placement_dialog.npc_new_target_x = "0".to_string();
+                npc_placement_dialog.npc_new_target_y = "0".to_string();
+                npc_placement_dialog.npc_new_dialog_text_mode = DialogTextMode::Inline;
+                npc_placement_dialog.npc_new_dialog_inline_text = String::new();
+                npc_placement_dialog.npc_new_dialog_text_id = String::new();
+                npc_placement_dialog.npc_new_dialog_text_speed = "30".to_string();
+                npc_placement_dialog.npc_new_dialog_position = DialogPositionData::Bottom;
+                npc_placement_dialog.npc_new_dialog_movement_block = true;
+                npc_placement_dialog.npc_editing_action_index = None;
             }
         }
     }
@@ -963,13 +1122,19 @@ fn npc_placement_dialog_ui(
         .map(|(id, ss)| (id.clone(), ss.file_path.clone()))
         .collect();
 
+    let map_entries: Vec<(String, String)> = project
+        .maps
+        .iter()
+        .map(|(id, m)| (id.clone(), m.name.clone()))
+        .collect();
+
     let is_editing = dialog.editing_index.is_some();
     let title = if is_editing { "Edit NPC" } else { "Place NPC" };
 
     egui::Window::new(title)
         .collapsible(false)
-        .resizable(false)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .resizable(true)
+        .default_pos([10.0, 100.0])
         .show(ctx, |ui| {
             ui.label(format!("Tile ({}, {})", dialog.tile_x, dialog.tile_y));
             ui.separator();
@@ -1007,6 +1172,420 @@ fn npc_placement_dialog_ui(
                 ui.radio_value(&mut dialog.selected_facing, FacingDirection::Up, "Up");
             });
 
+            // Patrol Path configuration
+            ui.separator();
+            ui.label(egui::RichText::new("Patrol Path").strong());
+
+            // Waypoint list with remove buttons
+            let mut remove_wp_idx: Option<usize> = None;
+            for (i, wp) in dialog.patrol_waypoints.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.label(format!("  {}. ({}, {})", i + 1, wp.0, wp.1));
+                    if ui.small_button("✕").clicked() {
+                        remove_wp_idx = Some(i);
+                    }
+                });
+            }
+            if let Some(idx) = remove_wp_idx {
+                dialog.patrol_waypoints.remove(idx);
+            }
+
+            // PatrolMode radio buttons
+            ui.horizontal(|ui| {
+                ui.label("Mode:");
+                ui.radio_value(&mut dialog.patrol_mode, PatrolMode::Loop, "Loop");
+                ui.radio_value(&mut dialog.patrol_mode, PatrolMode::Random, "Random");
+            });
+
+            // Speed and pause text fields
+            ui.horizontal(|ui| {
+                ui.label("Speed (s/tile):");
+                ui.add(egui::TextEdit::singleline(&mut dialog.patrol_speed).desired_width(50.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Pause (s):");
+                ui.add(egui::TextEdit::singleline(&mut dialog.patrol_pause).desired_width(50.0));
+            });
+
+            // "Add Waypoints" toggle button
+            let wp_label = if dialog.adding_waypoints {
+                "Stop Adding Waypoints"
+            } else {
+                "Add Waypoints"
+            };
+            if ui.button(wp_label).clicked() {
+                dialog.adding_waypoints = !dialog.adding_waypoints;
+            }
+            if dialog.adding_waypoints {
+                ui.label("Click map tiles to add waypoints.");
+            }
+
+            // Event Trigger configuration
+            ui.separator();
+            ui.label(egui::RichText::new("Event Triggers").strong());
+
+            // TriggerMode radio buttons
+            ui.horizontal(|ui| {
+                ui.label("Trigger Mode:");
+                ui.radio_value(
+                    &mut dialog.trigger_mode,
+                    TriggerMode::Interaction,
+                    "Interaction",
+                );
+                ui.radio_value(
+                    &mut dialog.trigger_mode,
+                    TriggerMode::Collision,
+                    "Collision",
+                );
+            });
+
+            // Action list with remove/reorder/edit controls
+            let mut remove_action_idx: Option<usize> = None;
+            let mut swap_actions: Option<(usize, usize)> = None;
+            let mut edit_action_idx: Option<usize> = None;
+            let action_count = dialog.event_triggers.len();
+
+            for (i, action) in dialog.event_triggers.iter().enumerate() {
+                let is_being_edited = dialog.npc_editing_action_index == Some(i);
+                ui.horizontal(|ui| {
+                    match action {
+                        EventAction::JumpTo {
+                            target_map_id,
+                            target_x,
+                            target_y,
+                        } => {
+                            let label = format!(
+                                "{}. JumpTo → map: {}, ({}, {})",
+                                i + 1,
+                                target_map_id,
+                                target_x,
+                                target_y
+                            );
+                            if is_being_edited {
+                                ui.label(
+                                    egui::RichText::new(label)
+                                        .strong()
+                                        .color(egui::Color32::from_rgb(100, 180, 255)),
+                                );
+                            } else {
+                                ui.label(label);
+                            }
+                        }
+                        EventAction::ShowDialog { text, .. } => {
+                            let preview = match text {
+                                DialogTextData::Inline(s) => truncate_preview(s, 30),
+                                DialogTextData::Id(id) => format!("ID: {}", id),
+                            };
+                            let label = format!("{}. ShowDialog — {}", i + 1, preview);
+                            if is_being_edited {
+                                ui.label(
+                                    egui::RichText::new(label)
+                                        .strong()
+                                        .color(egui::Color32::from_rgb(100, 180, 255)),
+                                );
+                            } else {
+                                ui.label(label);
+                            }
+                        }
+                    }
+
+                    if i > 0 && ui.small_button("▲").clicked() {
+                        swap_actions = Some((i, i - 1));
+                    }
+                    if i + 1 < action_count && ui.small_button("▼").clicked() {
+                        swap_actions = Some((i, i + 1));
+                    }
+                    if ui
+                        .small_button("✏")
+                        .on_hover_text("Edit this action")
+                        .clicked()
+                    {
+                        edit_action_idx = Some(i);
+                    }
+                    if ui.small_button("✕").clicked() {
+                        remove_action_idx = Some(i);
+                    }
+                });
+            }
+
+            if let Some(idx) = remove_action_idx {
+                if dialog.npc_editing_action_index == Some(idx) {
+                    dialog.npc_editing_action_index = None;
+                } else if let Some(ei) = dialog.npc_editing_action_index
+                    && idx < ei
+                {
+                    dialog.npc_editing_action_index = Some(ei - 1);
+                }
+                dialog.event_triggers.remove(idx);
+            }
+            if let Some((a, b)) = swap_actions {
+                dialog.event_triggers.swap(a, b);
+                if dialog.npc_editing_action_index == Some(a) {
+                    dialog.npc_editing_action_index = Some(b);
+                } else if dialog.npc_editing_action_index == Some(b) {
+                    dialog.npc_editing_action_index = Some(a);
+                }
+            }
+            if let Some(idx) = edit_action_idx
+                && let Some(action) = dialog.event_triggers.get(idx).cloned()
+            {
+                match action {
+                    EventAction::JumpTo {
+                        target_map_id,
+                        target_x,
+                        target_y,
+                    } => {
+                        dialog.npc_new_action_type = ActionType::JumpTo;
+                        dialog.npc_new_target_map_id = target_map_id;
+                        dialog.npc_new_target_x = target_x.to_string();
+                        dialog.npc_new_target_y = target_y.to_string();
+                    }
+                    EventAction::ShowDialog { text, config } => {
+                        dialog.npc_new_action_type = ActionType::ShowDialog;
+                        match text {
+                            DialogTextData::Inline(s) => {
+                                dialog.npc_new_dialog_text_mode = DialogTextMode::Inline;
+                                dialog.npc_new_dialog_inline_text = s;
+                                dialog.npc_new_dialog_text_id.clear();
+                            }
+                            DialogTextData::Id(id) => {
+                                dialog.npc_new_dialog_text_mode = DialogTextMode::TextId;
+                                dialog.npc_new_dialog_text_id = id;
+                                dialog.npc_new_dialog_inline_text.clear();
+                            }
+                        }
+                        dialog.npc_new_dialog_text_speed = config.text_speed.to_string();
+                        dialog.npc_new_dialog_position = config.position;
+                        dialog.npc_new_dialog_movement_block = config.movement_block;
+                    }
+                }
+                dialog.npc_editing_action_index = Some(idx);
+            }
+
+            // Add/Edit action form
+            let is_editing_action = dialog.npc_editing_action_index.is_some();
+            let form_label = if is_editing_action {
+                "Edit Action:"
+            } else {
+                "Add Action:"
+            };
+            ui.label(egui::RichText::new(form_label).strong());
+
+            ui.horizontal(|ui| {
+                ui.label("Type:");
+                ui.radio_value(
+                    &mut dialog.npc_new_action_type,
+                    ActionType::JumpTo,
+                    "JumpTo",
+                );
+                ui.radio_value(
+                    &mut dialog.npc_new_action_type,
+                    ActionType::ShowDialog,
+                    "ShowDialog",
+                );
+            });
+
+            if dialog.npc_new_action_type == ActionType::JumpTo {
+                ui.horizontal(|ui| {
+                    ui.label("Target Map:");
+                    let selected_text = if dialog.npc_new_target_map_id.is_empty() {
+                        "Select map...".to_string()
+                    } else {
+                        map_entries
+                            .iter()
+                            .find(|(id, _)| *id == dialog.npc_new_target_map_id)
+                            .map(|(_, name)| name.clone())
+                            .unwrap_or_else(|| dialog.npc_new_target_map_id.clone())
+                    };
+                    egui::ComboBox::from_id_salt("npc_event_trigger_map_select")
+                        .selected_text(selected_text)
+                        .show_ui(ui, |ui| {
+                            for (id, name) in &map_entries {
+                                ui.selectable_value(
+                                    &mut dialog.npc_new_target_map_id,
+                                    id.clone(),
+                                    name,
+                                );
+                            }
+                        });
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("X:");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.npc_new_target_x)
+                            .desired_width(40.0),
+                    );
+                    ui.label("Y:");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.npc_new_target_y)
+                            .desired_width(40.0),
+                    );
+                });
+
+                let jumpto_btn_label = if dialog.npc_editing_action_index.is_some() {
+                    "Update JumpTo"
+                } else {
+                    "Add JumpTo"
+                };
+                if ui.button(jumpto_btn_label).clicked() {
+                    let has_target = !dialog.npc_new_target_map_id.is_empty();
+                    if has_target {
+                        let target_map = dialog.npc_new_target_map_id.clone();
+                        let x = dialog.npc_new_target_x.trim().parse::<u32>().unwrap_or(0);
+                        let y = dialog.npc_new_target_y.trim().parse::<u32>().unwrap_or(0);
+                        let new_action = EventAction::JumpTo {
+                            target_map_id: target_map,
+                            target_x: x,
+                            target_y: y,
+                        };
+                        if let Some(idx) = dialog.npc_editing_action_index {
+                            if idx < dialog.event_triggers.len() {
+                                dialog.event_triggers[idx] = new_action;
+                            }
+                            dialog.npc_editing_action_index = None;
+                        } else {
+                            dialog.event_triggers.push(new_action);
+                        }
+                        dialog.npc_new_target_map_id = String::new();
+                        dialog.npc_new_target_x = "0".to_string();
+                        dialog.npc_new_target_y = "0".to_string();
+                    }
+                }
+                if dialog.npc_editing_action_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.npc_editing_action_index = None;
+                    dialog.npc_new_target_map_id = String::new();
+                    dialog.npc_new_target_x = "0".to_string();
+                    dialog.npc_new_target_y = "0".to_string();
+                }
+            } else {
+                // ShowDialog form
+                ui.horizontal(|ui| {
+                    ui.label("Text Source:");
+                    ui.radio_value(
+                        &mut dialog.npc_new_dialog_text_mode,
+                        DialogTextMode::Inline,
+                        "Inline",
+                    );
+                    ui.radio_value(
+                        &mut dialog.npc_new_dialog_text_mode,
+                        DialogTextMode::TextId,
+                        "Text ID",
+                    );
+                });
+
+                match dialog.npc_new_dialog_text_mode {
+                    DialogTextMode::Inline => {
+                        ui.label("Dialog Text:");
+                        ui.text_edit_multiline(&mut dialog.npc_new_dialog_inline_text);
+                    }
+                    DialogTextMode::TextId => {
+                        ui.horizontal(|ui| {
+                            ui.label("Text ID:");
+                            ui.text_edit_singleline(&mut dialog.npc_new_dialog_text_id);
+                        });
+                    }
+                }
+
+                ui.horizontal(|ui| {
+                    ui.label("Text Speed:");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.npc_new_dialog_text_speed)
+                            .desired_width(60.0),
+                    );
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Position:");
+                    egui::ComboBox::from_id_salt("npc_dialog_position_select")
+                        .selected_text(match dialog.npc_new_dialog_position {
+                            DialogPositionData::Top => "Top",
+                            DialogPositionData::Center => "Center",
+                            DialogPositionData::Bottom => "Bottom",
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut dialog.npc_new_dialog_position,
+                                DialogPositionData::Top,
+                                "Top",
+                            );
+                            ui.selectable_value(
+                                &mut dialog.npc_new_dialog_position,
+                                DialogPositionData::Center,
+                                "Center",
+                            );
+                            ui.selectable_value(
+                                &mut dialog.npc_new_dialog_position,
+                                DialogPositionData::Bottom,
+                                "Bottom",
+                            );
+                        });
+                });
+
+                ui.checkbox(&mut dialog.npc_new_dialog_movement_block, "Movement Block");
+
+                let show_dialog_btn_label = if dialog.npc_editing_action_index.is_some() {
+                    "Update ShowDialog"
+                } else {
+                    "Add ShowDialog"
+                };
+                if ui.button(show_dialog_btn_label).clicked() {
+                    let text = match dialog.npc_new_dialog_text_mode {
+                        DialogTextMode::Inline => {
+                            if dialog.npc_new_dialog_inline_text.is_empty() {
+                                None
+                            } else {
+                                Some(DialogTextData::Inline(
+                                    dialog.npc_new_dialog_inline_text.clone(),
+                                ))
+                            }
+                        }
+                        DialogTextMode::TextId => {
+                            if dialog.npc_new_dialog_text_id.is_empty() {
+                                None
+                            } else {
+                                Some(DialogTextData::Id(dialog.npc_new_dialog_text_id.clone()))
+                            }
+                        }
+                    };
+
+                    if let Some(text) = text {
+                        let text_speed = dialog
+                            .npc_new_dialog_text_speed
+                            .trim()
+                            .parse::<f32>()
+                            .unwrap_or(30.0);
+                        let config = DialogConfigData {
+                            text_speed,
+                            position: dialog.npc_new_dialog_position.clone(),
+                            movement_block: dialog.npc_new_dialog_movement_block,
+                        };
+                        let new_action = EventAction::ShowDialog { text, config };
+                        if let Some(idx) = dialog.npc_editing_action_index {
+                            if idx < dialog.event_triggers.len() {
+                                dialog.event_triggers[idx] = new_action;
+                            }
+                            dialog.npc_editing_action_index = None;
+                        } else {
+                            dialog.event_triggers.push(new_action);
+                        }
+                        dialog.npc_new_dialog_inline_text = String::new();
+                        dialog.npc_new_dialog_text_id = String::new();
+                        dialog.npc_new_dialog_text_speed = "30".to_string();
+                        dialog.npc_new_dialog_position = DialogPositionData::Bottom;
+                        dialog.npc_new_dialog_movement_block = true;
+                    }
+                }
+                if dialog.npc_editing_action_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.npc_editing_action_index = None;
+                    dialog.npc_new_dialog_inline_text = String::new();
+                    dialog.npc_new_dialog_text_id = String::new();
+                    dialog.npc_new_dialog_text_speed = "30".to_string();
+                    dialog.npc_new_dialog_position = DialogPositionData::Bottom;
+                    dialog.npc_new_dialog_movement_block = true;
+                }
+            }
+
             ui.separator();
             ui.horizontal(|ui| {
                 let place_label = if is_editing { "Save" } else { "Place" };
@@ -1030,13 +1609,27 @@ fn npc_placement_dialog_ui(
 
     if should_place {
         if let Some(ref spritesheet_id) = dialog.selected_spritesheet_id {
+            let patrol_config = if dialog.patrol_mode == PatrolMode::Random
+                || !dialog.patrol_waypoints.is_empty()
+            {
+                Some(PatrolConfig {
+                    waypoints: dialog.patrol_waypoints.clone(),
+                    mode: dialog.patrol_mode,
+                    speed: dialog.patrol_speed.trim().parse::<f32>().unwrap_or(0.3),
+                    pause: dialog.patrol_pause.trim().parse::<f32>().unwrap_or(0.5),
+                })
+            } else {
+                None
+            };
+
             let npc = NpcInstance {
                 spritesheet_id: spritesheet_id.clone(),
                 x: dialog.tile_x,
                 y: dialog.tile_y,
                 facing: dialog.selected_facing,
-                event_triggers: Vec::new(),
-                patrol_path: Vec::new(),
+                event_triggers: dialog.event_triggers.clone(),
+                patrol_config,
+                trigger_mode: dialog.trigger_mode,
             };
 
             if let Some(map) = project.active_map_mut() {

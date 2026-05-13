@@ -62,3 +62,50 @@ pub struct PlayerSpriteState {
 /// Marker for the game camera (distinct from the editor camera).
 #[derive(Component)]
 pub struct GameCamera;
+
+/// Describes an in-progress tile-to-tile movement animation for an NPC.
+pub struct NpcMoveAnimation {
+    /// World-space start position.
+    pub from: Vec2,
+    /// World-space target position.
+    pub to: Vec2,
+    /// Grid coordinates before the move.
+    pub from_grid: (u32, u32),
+    /// Grid coordinates after the move.
+    pub to_grid: (u32, u32),
+    /// Seconds elapsed since animation started.
+    pub elapsed: f32,
+    /// Total animation duration in seconds.
+    pub duration: f32,
+}
+
+/// Patrol state machine for an NPC walking a waypoint path.
+pub struct NpcPatrolState {
+    /// Index of the current target waypoint in the patrol config's waypoints list.
+    pub current_waypoint_index: usize,
+    /// Traversal direction (true = forward, false = backward).
+    pub forward: bool,
+    /// Countdown timer for pausing at a waypoint.
+    pub pause_timer: f32,
+    /// Whether the NPC is currently paused at a waypoint.
+    pub paused: bool,
+}
+
+/// Per-NPC component tracking facing direction, animation frame, animation timer,
+/// and movement state — analogous to `PlayerSpriteState`.
+#[derive(Component)]
+pub struct NpcSpriteState {
+    pub facing: FacingDirection,
+    pub animation_frame: usize,
+    pub animation_timer: f32,
+    pub is_moving: bool,
+    /// Current grid position (updated as NPC moves).
+    pub grid_x: u32,
+    pub grid_y: u32,
+    /// In-progress movement animation, if any.
+    pub move_animation: Option<NpcMoveAnimation>,
+    /// Patrol state machine, if the NPC has a patrol config.
+    pub patrol: Option<NpcPatrolState>,
+    /// Y offset for sprite alignment (same concept as PlayerSpriteState).
+    pub y_offset: f32,
+}

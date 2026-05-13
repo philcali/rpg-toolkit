@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
-use crate::components::{NpcSprite, RendererTileSprite};
+use crate::components::{NpcPatrolState, NpcSprite, NpcSpriteState, RendererTileSprite};
 use crate::events::MapChanged;
-use crate::resources::RendererProjectData;
+use crate::resources::{NpcPositions, RendererProjectData};
 use crate::systems::player::grid_to_world;
 use rpg_toolkit_common::sprite_atlas_index;
 
@@ -91,6 +91,7 @@ pub fn sync_map_sprites(
 }
 /// Reacts to `MapChanged` events: despawns existing NPC sprites and spawns
 /// new NPC sprites for each `NpcInstance` on the new active map.
+/// Each NPC entity gets an `NpcSpriteState` component for independent animation.
 pub fn spawn_npc_sprites(
     mut map_changed: MessageReader<MapChanged>,
     project_data: Res<RendererProjectData>,
@@ -134,16 +135,41 @@ pub fn spawn_npc_sprites(
         let idle_index = sprite_atlas_index(npc.facing, 1);
         let world_pos = grid_to_world(npc.x, npc.y, tw, th);
 
-        // Compute sprite scale so the sprite width matches the map tile width
-        let sprite_scale = project_data
+        // Compute sprite scale and y_offset so the sprite width matches the
+        // map tile width and the character's feet align with the tile bottom.
+        let (sprite_scale, y_offset) = project_data
             .project_file
             .spritesheets
             .get(&npc.spritesheet_id)
-            .map(|spritesheet| map.tile_width as f32 / spritesheet.sprite_width as f32)
-            .unwrap_or(1.0);
+            .map(|ss| {
+                let scale = tw as f32 / ss.sprite_width as f32;
+                let scaled_height = ss.sprite_height as f32 * scale;
+                let offset = (scaled_height - th as f32) / 2.0;
+                (scale, offset)
+            })
+            .unwrap_or((1.0, 0.0));
+
+        // Build optional patrol state from the NPC's patrol config
+        let patrol = npc.patrol_config.as_ref().map(|config| NpcPatrolState {
+            current_waypoint_index: 0,
+            forward: true,
+            pause_timer: config.pause.max(0.0),
+            paused: true,
+        });
 
         commands.spawn((
             NpcSprite { npc_index: npc_idx },
+            NpcSpriteState {
+                facing: npc.facing,
+                animation_frame: 1,
+                animation_timer: 0.0,
+                is_moving: false,
+                grid_x: npc.x,
+                grid_y: npc.y,
+                move_animation: None,
+                patrol,
+                y_offset,
+            },
             Sprite {
                 image: texture.clone(),
                 texture_atlas: Some(TextureAtlas {
@@ -152,8 +178,27 @@ pub fn spawn_npc_sprites(
                 }),
                 ..default()
             },
-            Transform::from_xyz(world_pos.x, world_pos.y, npc_z)
+            Transform::from_xyz(world_pos.x, world_pos.y + y_offset, npc_z)
                 .with_scale(Vec3::splat(sprite_scale)),
         ));
     }
+}
+
+/// Reacts to `MapChanged` events: rebuilds the `NpcPositions` resource from
+/// the active map's NPC instances so the collision system uses dynamic positions.
+pub fn init_npc_positions(
+    mut map_changed: MessageReader<MapChanged>,
+    project_data: Res<RendererProjectData>,
+    mut npc_positions: ResMut<NpcPositions>,
+) {
+    let Some(event) = map_changed.read().last() else {
+        return;
+    };
+
+    let Some(map) = project_data.project_file.maps.get(&event.new_map_id) else {
+        npc_positions.positions.clear();
+        return;
+    };
+
+    npc_positions.positions = map.npcs.iter().map(|npc| (npc.x, npc.y)).collect();
 }

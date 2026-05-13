@@ -112,3 +112,43 @@ impl Default for PixelScaleConfig {
         }
     }
 }
+
+/// Runtime grid positions for all NPCs on the active map.
+/// Updated each frame as NPCs move, used for dynamic collision checks.
+#[derive(Resource, Default)]
+pub struct NpcPositions {
+    /// Maps npc_index → current grid position.
+    pub positions: Vec<(u32, u32)>,
+}
+
+impl NpcPositions {
+    /// Returns `true` if any NPC occupies the tile at `(x, y)`.
+    pub fn is_occupied(&self, x: u32, y: u32) -> bool {
+        self.positions.iter().any(|&(px, py)| px == x && py == y)
+    }
+
+    /// Returns `true` if any NPC *other than* `exclude_index` occupies `(x, y)`.
+    pub fn is_occupied_by_other(&self, x: u32, y: u32, exclude_index: usize) -> bool {
+        self.positions
+            .iter()
+            .enumerate()
+            .any(|(i, &(px, py))| i != exclude_index && px == x && py == y)
+    }
+}
+
+/// Signals that the player pressed the action key (Space/Enter) this frame.
+#[derive(Resource, Default)]
+pub struct InteractionIntent {
+    pub pressed: bool,
+}
+
+/// Signals that the player attempted to move onto a tile occupied by an NPC.
+/// Populated by `player_movement` and consumed by `npc_trigger_system`.
+/// Uses an Option field so it can be written via ResMut (immediate visibility)
+/// rather than Commands (deferred until end of stage).
+#[derive(Resource, Default)]
+pub struct NpcCollisionEvent {
+    /// The index of the NPC the player collided with (index into `map.npcs`),
+    /// or None if no collision occurred this frame.
+    pub npc_index: Option<usize>,
+}

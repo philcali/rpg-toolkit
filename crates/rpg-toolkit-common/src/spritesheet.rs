@@ -28,6 +28,48 @@ pub struct CharacterSpritesheet {
     pub direction_count: u32,
 }
 
+/// Behavior when an NPC reaches the end of its patrol path.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PatrolMode {
+    /// Follow waypoints in order, looping back to the first when reaching the last.
+    #[default]
+    Loop,
+    /// Wander randomly to adjacent unblocked tiles (no waypoints needed).
+    Random,
+}
+
+fn default_patrol_speed() -> f32 {
+    0.3
+}
+
+fn default_patrol_pause() -> f32 {
+    0.5
+}
+
+/// Complete patrol behavior configuration for an NPC instance.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PatrolConfig {
+    /// Ordered waypoint grid positions.
+    pub waypoints: Vec<(u32, u32)>,
+    /// Behavior at path endpoints.
+    #[serde(default)]
+    pub mode: PatrolMode,
+    /// Seconds per tile movement (default 0.3).
+    #[serde(default = "default_patrol_speed")]
+    pub speed: f32,
+    /// Seconds to pause at each waypoint (default 0.5).
+    #[serde(default = "default_patrol_pause")]
+    pub pause: f32,
+}
+
+/// The condition under which an NPC's event triggers fire.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggerMode {
+    Collision,
+    #[default]
+    Interaction,
+}
+
 /// A per-map entity placed on a specific tile, referencing a CharacterSpritesheet
 /// and a facing direction.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -36,12 +78,13 @@ pub struct NpcInstance {
     pub x: u32,
     pub y: u32,
     pub facing: FacingDirection,
-    /// Future-compatible: event triggers (deferred, Requirement 9).
     #[serde(default)]
     pub event_triggers: Vec<crate::map::EventAction>,
-    /// Future-compatible: patrol path waypoints (deferred, Requirement 9).
+    /// Optional patrol behavior configuration.
     #[serde(default)]
-    pub patrol_path: Vec<(u32, u32)>,
+    pub patrol_config: Option<PatrolConfig>,
+    #[serde(default)]
+    pub trigger_mode: TriggerMode,
 }
 
 /// Validates that spritesheet image dimensions are exactly 72×128 pixels.
@@ -72,4 +115,36 @@ const WALK_PATTERN: [usize; 4] = [0, 1, 2, 1];
 pub fn walk_animation_frame(elapsed: f32, frame_duration: f32) -> usize {
     let step = (elapsed / frame_duration).floor() as usize % 4;
     WALK_PATTERN[step]
+}
+
+/// Computes the next waypoint index for a Loop patrol path.
+///
+/// Wraps from the last waypoint back to index 0.
+///
+/// Returns `(next_index, forward)` where `forward` is always `true` for Loop mode.
+/// This function is only used for Loop mode; Random mode doesn't use waypoints.
+pub fn next_waypoint_index(
+    current: usize,
+    waypoint_count: usize,
+    _mode: PatrolMode,
+    _forward: bool,
+) -> (usize, bool) {
+    // Loop: wrap around
+    ((current + 1) % waypoint_count, true)
+}
+
+/// Returns `true` if the waypoint is within the map bounds.
+pub fn validate_waypoint_bounds(waypoint: (u32, u32), map_width: u32, map_height: u32) -> bool {
+    waypoint.0 < map_width && waypoint.1 < map_height
+}
+
+/// Returns the grid position of the tile the player is facing, or `None` if
+/// that tile would be outside the map (e.g., facing Up at y=0).
+pub fn faced_tile(player_x: u32, player_y: u32, facing: FacingDirection) -> Option<(u32, u32)> {
+    match facing {
+        FacingDirection::Up => player_y.checked_sub(1).map(|y| (player_x, y)),
+        FacingDirection::Down => Some((player_x, player_y + 1)),
+        FacingDirection::Left => player_x.checked_sub(1).map(|x| (x, player_y)),
+        FacingDirection::Right => Some((player_x + 1, player_y)),
+    }
 }
