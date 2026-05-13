@@ -8,17 +8,22 @@ pub mod resources;
 pub mod systems;
 
 pub use components::{
-    GameCamera, MoveAnimation, NpcSprite, PlayerCharacter, PlayerSpriteState, RendererTileSprite,
+    GameCamera, MoveAnimation, NpcMoveAnimation, NpcPatrolState, NpcSprite, NpcSpriteState,
+    PlayerCharacter, PlayerSpriteState, RendererTileSprite,
 };
 pub use events::{MapChanged, PlayerMoved, ShowDialog};
 pub use input::{Direction, MovementIntent, read_input};
 pub use resources::{
-    ActionQueue, AnimationConfig, MovementConfig, PixelScaleConfig, PixelScaleMode, PlayerVisual,
-    RendererProjectData, RendererState,
+    ActionQueue, AnimationConfig, InteractionIntent, MovementConfig, NpcCollisionEvent,
+    NpcPositions, PixelScaleConfig, PixelScaleMode, PlayerVisual, RendererProjectData,
+    RendererState,
 };
 pub use systems::camera::{apply_pixel_scale, compute_zoom_to_fit, spawn_camera, update_camera};
 pub use systems::collision::is_tile_blocked;
-pub use systems::map_render::{spawn_npc_sprites, sync_map_sprites};
+pub use systems::map_render::{init_npc_positions, spawn_npc_sprites, sync_map_sprites};
+pub use systems::npc::{
+    npc_patrol_animation, npc_patrol_movement, npc_trigger_system, read_interaction_input,
+};
 pub use systems::player::{
     animate_player, animate_player_sprite, grid_to_world, player_movement, spawn_player,
 };
@@ -45,6 +50,9 @@ impl Plugin for ProjectRendererPlugin {
             .init_resource::<AnimationConfig>()
             .init_resource::<PixelScaleConfig>()
             .init_resource::<DialogTextRegistry>()
+            .init_resource::<NpcPositions>()
+            .init_resource::<InteractionIntent>()
+            .init_resource::<NpcCollisionEvent>()
             // Events
             .add_message::<MapChanged>()
             .add_message::<PlayerMoved>()
@@ -65,15 +73,20 @@ impl Plugin for ProjectRendererPlugin {
                 Update,
                 (
                     read_input,
+                    read_interaction_input.after(read_input),
                     player_movement.after(read_input),
+                    npc_patrol_movement.after(player_movement),
                     animate_player.after(player_movement),
                     animate_player_sprite.after(animate_player),
+                    npc_patrol_animation.after(animate_player_sprite),
                     check_triggers.after(animate_player),
-                    advance_action_queue.after(check_triggers),
+                    npc_trigger_system.after(check_triggers),
+                    advance_action_queue.after(npc_trigger_system),
                     handle_map_change.after(advance_action_queue),
                     sync_map_sprites.after(handle_map_change),
                     spawn_npc_sprites.after(sync_map_sprites),
-                    apply_pixel_scale.after(spawn_npc_sprites),
+                    init_npc_positions.after(spawn_npc_sprites),
+                    apply_pixel_scale.after(init_npc_positions),
                     update_camera.after(apply_pixel_scale),
                     // Dialog systems
                     handle_dialog_event.after(advance_action_queue),

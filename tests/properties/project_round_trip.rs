@@ -1,17 +1,19 @@
 // Feature: character-spritesheets, Property 2: ProjectFile serialization round-trip
+// Feature: npc-behaviors, Property 1: NpcInstance serialization round-trip
 //
 // For any valid ProjectFile containing spritesheets, NPC instances, a player
 // spritesheet reference, maps, and tilesets, serializing to JSON and then
 // deserializing should produce an equivalent ProjectFile.
 //
-// Validates: Requirements 1.4, 1.5, 1.6, 5.4
+// Validates: Requirements 1.3, 1.4, 1.5, 1.6, 5.4, 6.2
 
 use std::collections::HashMap;
 
 use proptest::prelude::*;
 use rpg_toolkit_common::{
-    CharacterSpritesheet, FacingDirection, Layer, MapData, NpcInstance, ProjectFile,
-    TileAttributeLayer,
+    CharacterSpritesheet, DialogConfigData, DialogPositionData, DialogTextData, EventAction,
+    FacingDirection, Layer, MapData, NpcInstance, PatrolConfig, PatrolMode, ProjectFile,
+    TileAttributeLayer, TriggerMode,
 };
 
 // --- Arbitrary strategies ---
@@ -39,21 +41,98 @@ fn arb_character_spritesheet() -> impl Strategy<Value = CharacterSpritesheet> {
     })
 }
 
+fn arb_patrol_mode() -> impl Strategy<Value = PatrolMode> {
+    prop_oneof![Just(PatrolMode::Loop), Just(PatrolMode::Random),]
+}
+
+fn arb_trigger_mode() -> impl Strategy<Value = TriggerMode> {
+    prop_oneof![Just(TriggerMode::Collision), Just(TriggerMode::Interaction),]
+}
+
+fn arb_dialog_position() -> impl Strategy<Value = DialogPositionData> {
+    prop_oneof![
+        Just(DialogPositionData::Top),
+        Just(DialogPositionData::Center),
+        Just(DialogPositionData::Bottom),
+    ]
+}
+
+fn arb_dialog_config() -> impl Strategy<Value = DialogConfigData> {
+    (10.0f32..100.0, arb_dialog_position(), any::<bool>()).prop_map(
+        |(text_speed, position, movement_block)| DialogConfigData {
+            text_speed,
+            position,
+            movement_block,
+        },
+    )
+}
+
+fn arb_dialog_text_data() -> impl Strategy<Value = DialogTextData> {
+    prop_oneof![
+        "[a-z ]{1,20}".prop_map(DialogTextData::Inline),
+        "[a-z\\-]{3,10}".prop_map(DialogTextData::Id),
+    ]
+}
+
+fn arb_event_action() -> impl Strategy<Value = EventAction> {
+    prop_oneof![
+        ("[a-z\\-]{3,10}", 0u32..16, 0u32..16).prop_map(|(target_map_id, target_x, target_y)| {
+            EventAction::JumpTo {
+                target_map_id,
+                target_x,
+                target_y,
+            }
+        }),
+        (arb_dialog_text_data(), arb_dialog_config())
+            .prop_map(|(text, config)| { EventAction::ShowDialog { text, config } }),
+    ]
+}
+
+fn arb_patrol_config(map_w: u32, map_h: u32) -> impl Strategy<Value = PatrolConfig> {
+    (
+        prop::collection::vec((0..map_w, 0..map_h), 0..=5),
+        arb_patrol_mode(),
+        0.01f32..2.0,
+        0.0f32..3.0,
+    )
+        .prop_map(|(waypoints, mode, speed, pause)| PatrolConfig {
+            waypoints,
+            mode,
+            speed,
+            pause,
+        })
+}
+
+fn arb_optional_patrol_config(
+    map_w: u32,
+    map_h: u32,
+) -> impl Strategy<Value = Option<PatrolConfig>> {
+    prop_oneof![Just(None), arb_patrol_config(map_w, map_h).prop_map(Some),]
+}
+
 fn arb_npc_instance(ss_count: usize, map_w: u32, map_h: u32) -> impl Strategy<Value = NpcInstance> {
     (
         arb_spritesheet_id(ss_count),
         0..map_w,
         0..map_h,
         arb_facing_direction(),
+        arb_optional_patrol_config(map_w, map_h),
+        arb_trigger_mode(),
+        prop::collection::vec(arb_event_action(), 0..=3),
     )
-        .prop_map(|(spritesheet_id, x, y, facing)| NpcInstance {
-            spritesheet_id,
-            x,
-            y,
-            facing,
-            event_triggers: Vec::new(),
-            patrol_path: Vec::new(),
-        })
+        .prop_map(
+            |(spritesheet_id, x, y, facing, patrol_config, trigger_mode, event_triggers)| {
+                NpcInstance {
+                    spritesheet_id,
+                    x,
+                    y,
+                    facing,
+                    event_triggers,
+                    patrol_config,
+                    trigger_mode,
+                }
+            },
+        )
 }
 
 /// Generates a valid MapData with the given dimensions and NPC count.
