@@ -2,21 +2,22 @@ use bevy::prelude::*;
 
 pub mod components;
 pub mod dialog;
+pub mod effects;
 pub mod events;
 pub mod input;
 pub mod resources;
 pub mod systems;
 
 pub use components::{
-    GameCamera, MoveAnimation, NpcMoveAnimation, NpcPatrolState, NpcSprite, NpcSpriteState,
-    PlayerCharacter, PlayerSpriteState, RendererTileSprite,
+    FadeOverlay, GameCamera, MoveAnimation, NpcMoveAnimation, NpcPatrolState, NpcSprite,
+    NpcSpriteState, PlayerCharacter, PlayerSpriteState, RendererTileSprite,
 };
 pub use events::{MapChanged, PlayerMoved, ShowDialog};
 pub use input::{Direction, MovementIntent, read_input};
 pub use resources::{
-    ActionQueue, AnimationConfig, InteractionIntent, MovementConfig, NpcCollisionEvent,
-    NpcPositions, PixelScaleConfig, PixelScaleMode, PlayerVisual, RendererProjectData,
-    RendererState,
+    ActionQueue, AnimationConfig, FadeState, GameState, InteractionIntent, MovementConfig,
+    NpcCollisionEvent, NpcPositions, PixelScaleConfig, PixelScaleMode, PlayerAppearanceState,
+    PlayerVisual, RendererProjectData, RendererState, ScreenShakeState, WaitingFor,
 };
 pub use systems::camera::{apply_pixel_scale, compute_zoom_to_fit, spawn_camera, update_camera};
 pub use systems::collision::is_tile_blocked;
@@ -28,7 +29,14 @@ pub use systems::player::{
     animate_player, animate_player_sprite, grid_to_world, player_movement, spawn_player,
 };
 pub use systems::spritesheet::{build_spritesheet_atlas, load_spritesheet_assets};
-pub use systems::triggers::{advance_action_queue, check_triggers, handle_map_change};
+pub use systems::triggers::{
+    advance_action_queue, check_triggers, fade_system, handle_map_change, screen_shake_system,
+};
+
+pub use effects::{
+    compute_fade_opacity, compute_shake_offset, is_blocking_action, is_fade_complete,
+    is_shake_complete,
+};
 
 pub use dialog::{
     DialogBox, DialogConfig, DialogPosition, DialogState, DialogText, DialogTextNode,
@@ -53,6 +61,7 @@ impl Plugin for ProjectRendererPlugin {
             .init_resource::<NpcPositions>()
             .init_resource::<InteractionIntent>()
             .init_resource::<NpcCollisionEvent>()
+            .init_resource::<GameState>()
             // Events
             .add_message::<MapChanged>()
             .add_message::<PlayerMoved>()
@@ -88,7 +97,14 @@ impl Plugin for ProjectRendererPlugin {
                     init_npc_positions.after(spawn_npc_sprites),
                     apply_pixel_scale.after(init_npc_positions),
                     update_camera.after(apply_pixel_scale),
-                    // Dialog systems
+                ),
+            )
+            // Effect and dialog systems (separate tuple to stay within Bevy's limit)
+            .add_systems(
+                Update,
+                (
+                    screen_shake_system.after(update_camera),
+                    fade_system.after(advance_action_queue),
                     handle_dialog_event.after(advance_action_queue),
                     update_dialog_typewriter.after(handle_dialog_event),
                     handle_dialog_input.after(update_dialog_typewriter),

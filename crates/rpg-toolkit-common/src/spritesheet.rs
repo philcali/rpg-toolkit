@@ -7,13 +7,14 @@ pub type SpritesheetId = String;
 
 /// One of four cardinal directions determining which sprite row to display.
 /// Numeric values map directly to spritesheet row indices.
+/// Layout: row 0 = Up, row 1 = Right, row 2 = Down, row 3 = Left.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FacingDirection {
+    Up = 0,
+    Right = 1,
     #[default]
-    Down = 0,
-    Left = 1,
-    Right = 2,
-    Up = 3,
+    Down = 2,
+    Left = 3,
 }
 
 /// A project-level image asset containing a grid of animation frames for a character.

@@ -6,8 +6,9 @@ use crate::data::map::{EventAction, MapId, SpawnPoint};
 use crate::data::{AnyDialogOpen, AttributeTool, EditorMode, EditorState, Project};
 use crate::systems::input::CursorWorldState;
 use rpg_toolkit_common::{
-    DialogConfigData, DialogPositionData, DialogTextData, FacingDirection, NpcInstance,
-    PatrolConfig, PatrolMode, SpritesheetId, TriggerMode, validate_waypoint_bounds,
+    DialogConfigData, DialogPositionData, DialogTextData, FacingDirection, FadeType, NpcInstance,
+    PatrolConfig, PatrolMode, PlayerAppearance, ScreenShakeMode, SpritesheetId, TriggerMode,
+    validate_waypoint_bounds,
 };
 
 /// The type of action being added in the Event Trigger Editor.
@@ -16,6 +17,11 @@ pub enum ActionType {
     #[default]
     JumpTo,
     ShowDialog,
+    ScreenShake,
+    StopScreenShake,
+    FadeTransition,
+    SetState,
+    SetPlayerAppearance,
 }
 
 /// The text source mode for a ShowDialog action.
@@ -57,6 +63,20 @@ pub struct EventTriggerDialog {
     pub new_dialog_text_speed: String,
     pub new_dialog_position: DialogPositionData,
     pub new_dialog_movement_block: bool,
+    /// ScreenShake fields
+    pub new_shake_mode: ScreenShakeMode,
+    pub new_shake_intensity: String,
+    pub new_shake_duration: String,
+    /// FadeTransition fields
+    pub new_fade_type: FadeType,
+    pub new_fade_duration: String,
+    pub new_fade_color: [f32; 4],
+    /// SetState fields
+    pub new_state_key: String,
+    pub new_state_value: String,
+    /// SetPlayerAppearance fields
+    pub new_appearance: PlayerAppearance,
+    pub new_appearance_path: String,
     /// Index of the action being edited (None = adding new)
     pub editing_index: Option<usize>,
 }
@@ -80,6 +100,16 @@ impl Default for EventTriggerDialog {
             new_dialog_text_speed: "30".to_string(),
             new_dialog_position: DialogPositionData::Bottom,
             new_dialog_movement_block: true,
+            new_shake_mode: ScreenShakeMode::Timed,
+            new_shake_intensity: "5.0".to_string(),
+            new_shake_duration: "0.5".to_string(),
+            new_fade_type: FadeType::FadeOut,
+            new_fade_duration: "1.0".to_string(),
+            new_fade_color: [0.0, 0.0, 0.0, 1.0],
+            new_state_key: String::new(),
+            new_state_value: String::new(),
+            new_appearance: PlayerAppearance::Hidden,
+            new_appearance_path: String::new(),
             editing_index: None,
         }
     }
@@ -116,6 +146,20 @@ pub struct NpcPlacementDialog {
     pub npc_new_dialog_position: DialogPositionData,
     pub npc_new_dialog_movement_block: bool,
     pub npc_editing_action_index: Option<usize>,
+    // ScreenShake fields
+    pub npc_new_shake_mode: ScreenShakeMode,
+    pub npc_new_shake_intensity: String,
+    pub npc_new_shake_duration: String,
+    // FadeTransition fields
+    pub npc_new_fade_type: FadeType,
+    pub npc_new_fade_duration: String,
+    pub npc_new_fade_color: [f32; 4],
+    // SetState fields
+    pub npc_new_state_key: String,
+    pub npc_new_state_value: String,
+    // SetPlayerAppearance fields
+    pub npc_new_appearance: PlayerAppearance,
+    pub npc_new_appearance_path: String,
 }
 
 impl Default for NpcPlacementDialog {
@@ -146,6 +190,16 @@ impl Default for NpcPlacementDialog {
             npc_new_dialog_position: DialogPositionData::Bottom,
             npc_new_dialog_movement_block: true,
             npc_editing_action_index: None,
+            npc_new_shake_mode: ScreenShakeMode::Timed,
+            npc_new_shake_intensity: "5.0".to_string(),
+            npc_new_shake_duration: "0.5".to_string(),
+            npc_new_fade_type: FadeType::FadeOut,
+            npc_new_fade_duration: "1.0".to_string(),
+            npc_new_fade_color: [0.0, 0.0, 0.0, 1.0],
+            npc_new_state_key: String::new(),
+            npc_new_state_value: String::new(),
+            npc_new_appearance: PlayerAppearance::Hidden,
+            npc_new_appearance_path: String::new(),
         }
     }
 }
@@ -530,6 +584,16 @@ fn attribute_click_system(
                 npc_placement_dialog.npc_new_dialog_position = DialogPositionData::Bottom;
                 npc_placement_dialog.npc_new_dialog_movement_block = true;
                 npc_placement_dialog.npc_editing_action_index = None;
+                npc_placement_dialog.npc_new_shake_mode = ScreenShakeMode::Timed;
+                npc_placement_dialog.npc_new_shake_intensity = "5.0".to_string();
+                npc_placement_dialog.npc_new_shake_duration = "0.5".to_string();
+                npc_placement_dialog.npc_new_fade_type = FadeType::FadeOut;
+                npc_placement_dialog.npc_new_fade_duration = "1.0".to_string();
+                npc_placement_dialog.npc_new_fade_color = [0.0, 0.0, 0.0, 1.0];
+                npc_placement_dialog.npc_new_state_key = String::new();
+                npc_placement_dialog.npc_new_state_value = String::new();
+                npc_placement_dialog.npc_new_appearance = PlayerAppearance::Hidden;
+                npc_placement_dialog.npc_new_appearance_path = String::new();
             } else {
                 // Open empty dialog for new placement
                 let first_spritesheet = project.spritesheets.keys().next().cloned();
@@ -558,6 +622,16 @@ fn attribute_click_system(
                 npc_placement_dialog.npc_new_dialog_position = DialogPositionData::Bottom;
                 npc_placement_dialog.npc_new_dialog_movement_block = true;
                 npc_placement_dialog.npc_editing_action_index = None;
+                npc_placement_dialog.npc_new_shake_mode = ScreenShakeMode::Timed;
+                npc_placement_dialog.npc_new_shake_intensity = "5.0".to_string();
+                npc_placement_dialog.npc_new_shake_duration = "0.5".to_string();
+                npc_placement_dialog.npc_new_fade_type = FadeType::FadeOut;
+                npc_placement_dialog.npc_new_fade_duration = "1.0".to_string();
+                npc_placement_dialog.npc_new_fade_color = [0.0, 0.0, 0.0, 1.0];
+                npc_placement_dialog.npc_new_state_key = String::new();
+                npc_placement_dialog.npc_new_state_value = String::new();
+                npc_placement_dialog.npc_new_appearance = PlayerAppearance::Hidden;
+                npc_placement_dialog.npc_new_appearance_path = String::new();
             }
         }
     }
@@ -599,28 +673,19 @@ fn event_trigger_panel_ui(
             for (i, action) in dialog.actions.iter().enumerate() {
                 let is_being_edited = dialog.editing_index == Some(i);
                 ui.horizontal(|ui| {
-                    match action {
+                    let label = match action {
                         EventAction::JumpTo {
                             target_map_id,
                             target_x,
                             target_y,
                         } => {
-                            let label = format!(
+                            format!(
                                 "{}. JumpTo → map: {}, ({}, {})",
                                 i + 1,
                                 target_map_id,
                                 target_x,
                                 target_y
-                            );
-                            if is_being_edited {
-                                ui.label(
-                                    egui::RichText::new(label)
-                                        .strong()
-                                        .color(egui::Color32::from_rgb(100, 180, 255)),
-                                );
-                            } else {
-                                ui.label(label);
-                            }
+                            )
                         }
                         EventAction::ShowDialog { text, .. } => {
                             let preview = match text {
@@ -629,17 +694,51 @@ fn event_trigger_panel_ui(
                                     format!("ID: {}", id)
                                 }
                             };
-                            let label = format!("{}. ShowDialog — {}", i + 1, preview);
-                            if is_being_edited {
-                                ui.label(
-                                    egui::RichText::new(label)
-                                        .strong()
-                                        .color(egui::Color32::from_rgb(100, 180, 255)),
-                                );
-                            } else {
-                                ui.label(label);
-                            }
+                            format!("{}. ShowDialog — {}", i + 1, preview)
                         }
+                        EventAction::ScreenShake {
+                            intensity,
+                            duration,
+                            mode,
+                        } => {
+                            format!(
+                                "{}. ScreenShake — intensity: {}, duration: {}, mode: {:?}",
+                                i + 1,
+                                intensity,
+                                duration,
+                                mode
+                            )
+                        }
+                        EventAction::StopScreenShake => {
+                            format!("{}. StopScreenShake", i + 1)
+                        }
+                        EventAction::FadeTransition {
+                            fade_type,
+                            duration,
+                            ..
+                        } => {
+                            format!(
+                                "{}. FadeTransition — {:?}, duration: {}",
+                                i + 1,
+                                fade_type,
+                                duration
+                            )
+                        }
+                        EventAction::SetState { key, value } => {
+                            format!("{}. SetState — {}: {}", i + 1, key, value)
+                        }
+                        EventAction::SetPlayerAppearance { appearance } => {
+                            format!("{}. SetPlayerAppearance — {:?}", i + 1, appearance)
+                        }
+                    };
+                    if is_being_edited {
+                        ui.label(
+                            egui::RichText::new(label)
+                                .strong()
+                                .color(egui::Color32::from_rgb(100, 180, 255)),
+                        );
+                    } else {
+                        ui.label(label);
                     }
 
                     if i > 0 && ui.small_button("▲").clicked() {
@@ -715,6 +814,43 @@ fn event_trigger_panel_ui(
                         dialog.new_dialog_position = config.position;
                         dialog.new_dialog_movement_block = config.movement_block;
                     }
+                    EventAction::ScreenShake {
+                        intensity,
+                        duration,
+                        mode,
+                    } => {
+                        dialog.new_action_type = ActionType::ScreenShake;
+                        dialog.new_shake_intensity = intensity.to_string();
+                        dialog.new_shake_duration = duration.to_string();
+                        dialog.new_shake_mode = mode;
+                    }
+                    EventAction::StopScreenShake => {
+                        dialog.new_action_type = ActionType::StopScreenShake;
+                    }
+                    EventAction::FadeTransition {
+                        fade_type,
+                        duration,
+                        color,
+                    } => {
+                        dialog.new_action_type = ActionType::FadeTransition;
+                        dialog.new_fade_type = fade_type;
+                        dialog.new_fade_duration = duration.to_string();
+                        dialog.new_fade_color = color;
+                    }
+                    EventAction::SetState { key, value } => {
+                        dialog.new_action_type = ActionType::SetState;
+                        dialog.new_state_key = key;
+                        dialog.new_state_value = value;
+                    }
+                    EventAction::SetPlayerAppearance { appearance } => {
+                        dialog.new_action_type = ActionType::SetPlayerAppearance;
+                        if let PlayerAppearance::Spritesheet { ref path } = appearance {
+                            dialog.new_appearance_path = path.clone();
+                        } else {
+                            dialog.new_appearance_path = String::new();
+                        }
+                        dialog.new_appearance = appearance;
+                    }
                 }
                 dialog.editing_index = Some(idx);
             }
@@ -732,12 +868,54 @@ fn event_trigger_panel_ui(
 
             ui.horizontal(|ui| {
                 ui.label("Action Type:");
-                ui.radio_value(&mut dialog.new_action_type, ActionType::JumpTo, "JumpTo");
-                ui.radio_value(
-                    &mut dialog.new_action_type,
-                    ActionType::ShowDialog,
-                    "ShowDialog",
-                );
+                let action_type_text = match dialog.new_action_type {
+                    ActionType::JumpTo => "JumpTo",
+                    ActionType::ShowDialog => "ShowDialog",
+                    ActionType::ScreenShake => "ScreenShake",
+                    ActionType::StopScreenShake => "StopScreenShake",
+                    ActionType::FadeTransition => "FadeTransition",
+                    ActionType::SetState => "SetState",
+                    ActionType::SetPlayerAppearance => "SetPlayerAppearance",
+                };
+                egui::ComboBox::from_id_salt("event_trigger_action_type")
+                    .selected_text(action_type_text)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut dialog.new_action_type,
+                            ActionType::JumpTo,
+                            "JumpTo",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.new_action_type,
+                            ActionType::ShowDialog,
+                            "ShowDialog",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.new_action_type,
+                            ActionType::ScreenShake,
+                            "ScreenShake",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.new_action_type,
+                            ActionType::StopScreenShake,
+                            "StopScreenShake",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.new_action_type,
+                            ActionType::FadeTransition,
+                            "FadeTransition",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.new_action_type,
+                            ActionType::SetState,
+                            "SetState",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.new_action_type,
+                            ActionType::SetPlayerAppearance,
+                            "SetPlayerAppearance",
+                        );
+                    });
             });
 
             ui.separator();
@@ -805,7 +983,6 @@ fn event_trigger_panel_ui(
                             target_y: y,
                         };
                         if let Some(idx) = dialog.editing_index {
-                            // Replace existing action
                             if idx < dialog.actions.len() {
                                 dialog.actions[idx] = new_action;
                             }
@@ -824,7 +1001,7 @@ fn event_trigger_panel_ui(
                     dialog.new_target_x = "0".to_string();
                     dialog.new_target_y = "0".to_string();
                 }
-            } else {
+            } else if dialog.new_action_type == ActionType::ShowDialog {
                 let show_dialog_form_label = if dialog.editing_index.is_some() {
                     "Edit ShowDialog Action:"
                 } else {
@@ -935,7 +1112,6 @@ fn event_trigger_panel_ui(
                         };
                         let new_action = EventAction::ShowDialog { text, config };
                         if let Some(idx) = dialog.editing_index {
-                            // Replace existing action
                             if idx < dialog.actions.len() {
                                 dialog.actions[idx] = new_action;
                             }
@@ -958,6 +1134,296 @@ fn event_trigger_panel_ui(
                     dialog.new_dialog_text_speed = "30".to_string();
                     dialog.new_dialog_position = DialogPositionData::Bottom;
                     dialog.new_dialog_movement_block = true;
+                }
+            } else if dialog.new_action_type == ActionType::ScreenShake {
+                // ScreenShake form
+                ui.horizontal(|ui| {
+                    ui.label("Mode:");
+                    ui.radio_value(&mut dialog.new_shake_mode, ScreenShakeMode::Timed, "Timed");
+                    ui.radio_value(
+                        &mut dialog.new_shake_mode,
+                        ScreenShakeMode::Continuous,
+                        "Continuous",
+                    );
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Intensity:");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.new_shake_intensity)
+                            .desired_width(60.0),
+                    );
+                    ui.label("(0.0 – 50.0)");
+                });
+
+                if dialog.new_shake_mode == ScreenShakeMode::Timed {
+                    ui.horizontal(|ui| {
+                        ui.label("Duration:");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut dialog.new_shake_duration)
+                                .desired_width(60.0),
+                        );
+                        ui.label("(0.0 – 10.0)");
+                    });
+                }
+
+                let btn_label = if dialog.editing_index.is_some() {
+                    "Update ScreenShake"
+                } else {
+                    "Add ScreenShake"
+                };
+                if ui.button(btn_label).clicked() {
+                    let intensity = dialog
+                        .new_shake_intensity
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap_or(5.0)
+                        .clamp(0.0, 50.0);
+                    let duration = dialog
+                        .new_shake_duration
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap_or(0.5)
+                        .clamp(0.0, 10.0);
+                    let new_action = EventAction::ScreenShake {
+                        intensity,
+                        duration,
+                        mode: dialog.new_shake_mode,
+                    };
+                    if let Some(idx) = dialog.editing_index {
+                        if idx < dialog.actions.len() {
+                            dialog.actions[idx] = new_action;
+                        }
+                        dialog.editing_index = None;
+                    } else {
+                        dialog.actions.push(new_action);
+                    }
+                    dialog.new_shake_intensity = "5.0".to_string();
+                    dialog.new_shake_duration = "0.5".to_string();
+                    dialog.new_shake_mode = ScreenShakeMode::Timed;
+                }
+                if dialog.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.editing_index = None;
+                    dialog.new_shake_intensity = "5.0".to_string();
+                    dialog.new_shake_duration = "0.5".to_string();
+                    dialog.new_shake_mode = ScreenShakeMode::Timed;
+                }
+            } else if dialog.new_action_type == ActionType::StopScreenShake {
+                // StopScreenShake — no configuration fields
+                ui.label("No additional configuration needed.");
+
+                let btn_label = if dialog.editing_index.is_some() {
+                    "Update StopScreenShake"
+                } else {
+                    "Add StopScreenShake"
+                };
+                if ui.button(btn_label).clicked() {
+                    let new_action = EventAction::StopScreenShake;
+                    if let Some(idx) = dialog.editing_index {
+                        if idx < dialog.actions.len() {
+                            dialog.actions[idx] = new_action;
+                        }
+                        dialog.editing_index = None;
+                    } else {
+                        dialog.actions.push(new_action);
+                    }
+                }
+                if dialog.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.editing_index = None;
+                }
+            } else if dialog.new_action_type == ActionType::FadeTransition {
+                // FadeTransition form
+                ui.horizontal(|ui| {
+                    ui.label("Fade Type:");
+                    ui.radio_value(&mut dialog.new_fade_type, FadeType::FadeIn, "FadeIn");
+                    ui.radio_value(&mut dialog.new_fade_type, FadeType::FadeOut, "FadeOut");
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Duration:");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.new_fade_duration)
+                            .desired_width(60.0),
+                    );
+                    ui.label("(0.0 – 10.0)");
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Color (RGBA):");
+                    let mut color3 = [
+                        dialog.new_fade_color[0],
+                        dialog.new_fade_color[1],
+                        dialog.new_fade_color[2],
+                    ];
+                    if ui.color_edit_button_rgb(&mut color3).changed() {
+                        dialog.new_fade_color[0] = color3[0];
+                        dialog.new_fade_color[1] = color3[1];
+                        dialog.new_fade_color[2] = color3[2];
+                    }
+                });
+
+                let btn_label = if dialog.editing_index.is_some() {
+                    "Update FadeTransition"
+                } else {
+                    "Add FadeTransition"
+                };
+                if ui.button(btn_label).clicked() {
+                    let duration = dialog
+                        .new_fade_duration
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap_or(1.0)
+                        .clamp(0.0, 10.0);
+                    let new_action = EventAction::FadeTransition {
+                        fade_type: dialog.new_fade_type,
+                        duration,
+                        color: dialog.new_fade_color,
+                    };
+                    if let Some(idx) = dialog.editing_index {
+                        if idx < dialog.actions.len() {
+                            dialog.actions[idx] = new_action;
+                        }
+                        dialog.editing_index = None;
+                    } else {
+                        dialog.actions.push(new_action);
+                    }
+                    dialog.new_fade_type = FadeType::FadeOut;
+                    dialog.new_fade_duration = "1.0".to_string();
+                    dialog.new_fade_color = [0.0, 0.0, 0.0, 1.0];
+                }
+                if dialog.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.editing_index = None;
+                    dialog.new_fade_type = FadeType::FadeOut;
+                    dialog.new_fade_duration = "1.0".to_string();
+                    dialog.new_fade_color = [0.0, 0.0, 0.0, 1.0];
+                }
+            } else if dialog.new_action_type == ActionType::SetState {
+                // SetState form
+                ui.horizontal(|ui| {
+                    ui.label("Key:");
+                    ui.text_edit_singleline(&mut dialog.new_state_key);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Value:");
+                    ui.text_edit_singleline(&mut dialog.new_state_value);
+                });
+
+                let btn_label = if dialog.editing_index.is_some() {
+                    "Update SetState"
+                } else {
+                    "Add SetState"
+                };
+                if ui.button(btn_label).clicked() && !dialog.new_state_key.is_empty() {
+                    let new_action = EventAction::SetState {
+                        key: dialog.new_state_key.clone(),
+                        value: dialog.new_state_value.clone(),
+                    };
+                    if let Some(idx) = dialog.editing_index {
+                        if idx < dialog.actions.len() {
+                            dialog.actions[idx] = new_action;
+                        }
+                        dialog.editing_index = None;
+                    } else {
+                        dialog.actions.push(new_action);
+                    }
+                    dialog.new_state_key = String::new();
+                    dialog.new_state_value = String::new();
+                }
+                if dialog.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.editing_index = None;
+                    dialog.new_state_key = String::new();
+                    dialog.new_state_value = String::new();
+                }
+            } else if dialog.new_action_type == ActionType::SetPlayerAppearance {
+                // SetPlayerAppearance form
+                ui.horizontal(|ui| {
+                    ui.label("Appearance:");
+                    let appearance_text = match &dialog.new_appearance {
+                        PlayerAppearance::Hidden => "Hidden",
+                        PlayerAppearance::Spritesheet { .. } => "Spritesheet",
+                        PlayerAppearance::Default => "Default",
+                    };
+                    egui::ComboBox::from_id_salt("event_trigger_appearance_select")
+                        .selected_text(appearance_text)
+                        .show_ui(ui, |ui| {
+                            if ui
+                                .selectable_label(
+                                    matches!(dialog.new_appearance, PlayerAppearance::Hidden),
+                                    "Hidden",
+                                )
+                                .clicked()
+                            {
+                                dialog.new_appearance = PlayerAppearance::Hidden;
+                            }
+                            if ui
+                                .selectable_label(
+                                    matches!(
+                                        dialog.new_appearance,
+                                        PlayerAppearance::Spritesheet { .. }
+                                    ),
+                                    "Spritesheet",
+                                )
+                                .clicked()
+                            {
+                                dialog.new_appearance = PlayerAppearance::Spritesheet {
+                                    path: dialog.new_appearance_path.clone(),
+                                };
+                            }
+                            if ui
+                                .selectable_label(
+                                    matches!(dialog.new_appearance, PlayerAppearance::Default),
+                                    "Default",
+                                )
+                                .clicked()
+                            {
+                                dialog.new_appearance = PlayerAppearance::Default;
+                            }
+                        });
+                });
+
+                if matches!(dialog.new_appearance, PlayerAppearance::Spritesheet { .. }) {
+                    ui.horizontal(|ui| {
+                        ui.label("Path:");
+                        ui.text_edit_singleline(&mut dialog.new_appearance_path);
+                    });
+                }
+
+                let btn_label = if dialog.editing_index.is_some() {
+                    "Update SetPlayerAppearance"
+                } else {
+                    "Add SetPlayerAppearance"
+                };
+                if ui.button(btn_label).clicked() {
+                    let appearance = match &dialog.new_appearance {
+                        PlayerAppearance::Spritesheet { .. } => {
+                            if dialog.new_appearance_path.is_empty() {
+                                None
+                            } else {
+                                Some(PlayerAppearance::Spritesheet {
+                                    path: dialog.new_appearance_path.clone(),
+                                })
+                            }
+                        }
+                        other => Some(other.clone()),
+                    };
+                    if let Some(appearance) = appearance {
+                        let new_action = EventAction::SetPlayerAppearance { appearance };
+                        if let Some(idx) = dialog.editing_index {
+                            if idx < dialog.actions.len() {
+                                dialog.actions[idx] = new_action;
+                            }
+                            dialog.editing_index = None;
+                        } else {
+                            dialog.actions.push(new_action);
+                        }
+                        dialog.new_appearance = PlayerAppearance::Hidden;
+                        dialog.new_appearance_path = String::new();
+                    }
+                }
+                if dialog.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.editing_index = None;
+                    dialog.new_appearance = PlayerAppearance::Hidden;
+                    dialog.new_appearance_path = String::new();
                 }
             }
 
@@ -1248,45 +1714,70 @@ fn npc_placement_dialog_ui(
             for (i, action) in dialog.event_triggers.iter().enumerate() {
                 let is_being_edited = dialog.npc_editing_action_index == Some(i);
                 ui.horizontal(|ui| {
-                    match action {
+                    let label = match action {
                         EventAction::JumpTo {
                             target_map_id,
                             target_x,
                             target_y,
                         } => {
-                            let label = format!(
+                            format!(
                                 "{}. JumpTo → map: {}, ({}, {})",
                                 i + 1,
                                 target_map_id,
                                 target_x,
                                 target_y
-                            );
-                            if is_being_edited {
-                                ui.label(
-                                    egui::RichText::new(label)
-                                        .strong()
-                                        .color(egui::Color32::from_rgb(100, 180, 255)),
-                                );
-                            } else {
-                                ui.label(label);
-                            }
+                            )
                         }
                         EventAction::ShowDialog { text, .. } => {
                             let preview = match text {
                                 DialogTextData::Inline(s) => truncate_preview(s, 30),
                                 DialogTextData::Id(id) => format!("ID: {}", id),
                             };
-                            let label = format!("{}. ShowDialog — {}", i + 1, preview);
-                            if is_being_edited {
-                                ui.label(
-                                    egui::RichText::new(label)
-                                        .strong()
-                                        .color(egui::Color32::from_rgb(100, 180, 255)),
-                                );
-                            } else {
-                                ui.label(label);
-                            }
+                            format!("{}. ShowDialog — {}", i + 1, preview)
                         }
+                        EventAction::ScreenShake {
+                            intensity,
+                            duration,
+                            mode,
+                        } => {
+                            format!(
+                                "{}. ScreenShake — intensity: {}, duration: {}, mode: {:?}",
+                                i + 1,
+                                intensity,
+                                duration,
+                                mode
+                            )
+                        }
+                        EventAction::StopScreenShake => {
+                            format!("{}. StopScreenShake", i + 1)
+                        }
+                        EventAction::FadeTransition {
+                            fade_type,
+                            duration,
+                            ..
+                        } => {
+                            format!(
+                                "{}. FadeTransition — {:?}, duration: {}",
+                                i + 1,
+                                fade_type,
+                                duration
+                            )
+                        }
+                        EventAction::SetState { key, value } => {
+                            format!("{}. SetState — {}: {}", i + 1, key, value)
+                        }
+                        EventAction::SetPlayerAppearance { appearance } => {
+                            format!("{}. SetPlayerAppearance — {:?}", i + 1, appearance)
+                        }
+                    };
+                    if is_being_edited {
+                        ui.label(
+                            egui::RichText::new(label)
+                                .strong()
+                                .color(egui::Color32::from_rgb(100, 180, 255)),
+                        );
+                    } else {
+                        ui.label(label);
                     }
 
                     if i > 0 && ui.small_button("▲").clicked() {
@@ -1358,6 +1849,43 @@ fn npc_placement_dialog_ui(
                         dialog.npc_new_dialog_position = config.position;
                         dialog.npc_new_dialog_movement_block = config.movement_block;
                     }
+                    EventAction::ScreenShake {
+                        intensity,
+                        duration,
+                        mode,
+                    } => {
+                        dialog.npc_new_action_type = ActionType::ScreenShake;
+                        dialog.npc_new_shake_intensity = intensity.to_string();
+                        dialog.npc_new_shake_duration = duration.to_string();
+                        dialog.npc_new_shake_mode = mode;
+                    }
+                    EventAction::StopScreenShake => {
+                        dialog.npc_new_action_type = ActionType::StopScreenShake;
+                    }
+                    EventAction::FadeTransition {
+                        fade_type,
+                        duration,
+                        color,
+                    } => {
+                        dialog.npc_new_action_type = ActionType::FadeTransition;
+                        dialog.npc_new_fade_type = fade_type;
+                        dialog.npc_new_fade_duration = duration.to_string();
+                        dialog.npc_new_fade_color = color;
+                    }
+                    EventAction::SetState { key, value } => {
+                        dialog.npc_new_action_type = ActionType::SetState;
+                        dialog.npc_new_state_key = key;
+                        dialog.npc_new_state_value = value;
+                    }
+                    EventAction::SetPlayerAppearance { appearance } => {
+                        dialog.npc_new_action_type = ActionType::SetPlayerAppearance;
+                        if let PlayerAppearance::Spritesheet { ref path } = appearance {
+                            dialog.npc_new_appearance_path = path.clone();
+                        } else {
+                            dialog.npc_new_appearance_path = String::new();
+                        }
+                        dialog.npc_new_appearance = appearance;
+                    }
                 }
                 dialog.npc_editing_action_index = Some(idx);
             }
@@ -1373,16 +1901,54 @@ fn npc_placement_dialog_ui(
 
             ui.horizontal(|ui| {
                 ui.label("Type:");
-                ui.radio_value(
-                    &mut dialog.npc_new_action_type,
-                    ActionType::JumpTo,
-                    "JumpTo",
-                );
-                ui.radio_value(
-                    &mut dialog.npc_new_action_type,
-                    ActionType::ShowDialog,
-                    "ShowDialog",
-                );
+                let npc_action_type_text = match dialog.npc_new_action_type {
+                    ActionType::JumpTo => "JumpTo",
+                    ActionType::ShowDialog => "ShowDialog",
+                    ActionType::ScreenShake => "ScreenShake",
+                    ActionType::StopScreenShake => "StopScreenShake",
+                    ActionType::FadeTransition => "FadeTransition",
+                    ActionType::SetState => "SetState",
+                    ActionType::SetPlayerAppearance => "SetPlayerAppearance",
+                };
+                egui::ComboBox::from_id_salt("npc_event_trigger_action_type")
+                    .selected_text(npc_action_type_text)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut dialog.npc_new_action_type,
+                            ActionType::JumpTo,
+                            "JumpTo",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.npc_new_action_type,
+                            ActionType::ShowDialog,
+                            "ShowDialog",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.npc_new_action_type,
+                            ActionType::ScreenShake,
+                            "ScreenShake",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.npc_new_action_type,
+                            ActionType::StopScreenShake,
+                            "StopScreenShake",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.npc_new_action_type,
+                            ActionType::FadeTransition,
+                            "FadeTransition",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.npc_new_action_type,
+                            ActionType::SetState,
+                            "SetState",
+                        );
+                        ui.selectable_value(
+                            &mut dialog.npc_new_action_type,
+                            ActionType::SetPlayerAppearance,
+                            "SetPlayerAppearance",
+                        );
+                    });
             });
 
             if dialog.npc_new_action_type == ActionType::JumpTo {
@@ -1458,7 +2024,7 @@ fn npc_placement_dialog_ui(
                     dialog.npc_new_target_x = "0".to_string();
                     dialog.npc_new_target_y = "0".to_string();
                 }
-            } else {
+            } else if dialog.npc_new_action_type == ActionType::ShowDialog {
                 // ShowDialog form
                 ui.horizontal(|ui| {
                     ui.label("Text Source:");
@@ -1583,6 +2149,303 @@ fn npc_placement_dialog_ui(
                     dialog.npc_new_dialog_text_speed = "30".to_string();
                     dialog.npc_new_dialog_position = DialogPositionData::Bottom;
                     dialog.npc_new_dialog_movement_block = true;
+                }
+            } else if dialog.npc_new_action_type == ActionType::ScreenShake {
+                // ScreenShake form
+                ui.horizontal(|ui| {
+                    ui.label("Mode:");
+                    ui.radio_value(
+                        &mut dialog.npc_new_shake_mode,
+                        ScreenShakeMode::Timed,
+                        "Timed",
+                    );
+                    ui.radio_value(
+                        &mut dialog.npc_new_shake_mode,
+                        ScreenShakeMode::Continuous,
+                        "Continuous",
+                    );
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Intensity:");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.npc_new_shake_intensity)
+                            .desired_width(60.0),
+                    );
+                    ui.label("(0.0 – 50.0)");
+                });
+
+                if dialog.npc_new_shake_mode == ScreenShakeMode::Timed {
+                    ui.horizontal(|ui| {
+                        ui.label("Duration:");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut dialog.npc_new_shake_duration)
+                                .desired_width(60.0),
+                        );
+                        ui.label("(0.0 – 10.0)");
+                    });
+                }
+
+                let btn_label = if dialog.npc_editing_action_index.is_some() {
+                    "Update ScreenShake"
+                } else {
+                    "Add ScreenShake"
+                };
+                if ui.button(btn_label).clicked() {
+                    let intensity = dialog
+                        .npc_new_shake_intensity
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap_or(5.0)
+                        .clamp(0.0, 50.0);
+                    let duration = dialog
+                        .npc_new_shake_duration
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap_or(0.5)
+                        .clamp(0.0, 10.0);
+                    let new_action = EventAction::ScreenShake {
+                        intensity,
+                        duration,
+                        mode: dialog.npc_new_shake_mode,
+                    };
+                    if let Some(idx) = dialog.npc_editing_action_index {
+                        if idx < dialog.event_triggers.len() {
+                            dialog.event_triggers[idx] = new_action;
+                        }
+                        dialog.npc_editing_action_index = None;
+                    } else {
+                        dialog.event_triggers.push(new_action);
+                    }
+                    dialog.npc_new_shake_intensity = "5.0".to_string();
+                    dialog.npc_new_shake_duration = "0.5".to_string();
+                    dialog.npc_new_shake_mode = ScreenShakeMode::Timed;
+                }
+                if dialog.npc_editing_action_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.npc_editing_action_index = None;
+                    dialog.npc_new_shake_intensity = "5.0".to_string();
+                    dialog.npc_new_shake_duration = "0.5".to_string();
+                    dialog.npc_new_shake_mode = ScreenShakeMode::Timed;
+                }
+            } else if dialog.npc_new_action_type == ActionType::StopScreenShake {
+                // StopScreenShake — no configuration fields
+                ui.label("No additional configuration needed.");
+
+                let btn_label = if dialog.npc_editing_action_index.is_some() {
+                    "Update StopScreenShake"
+                } else {
+                    "Add StopScreenShake"
+                };
+                if ui.button(btn_label).clicked() {
+                    let new_action = EventAction::StopScreenShake;
+                    if let Some(idx) = dialog.npc_editing_action_index {
+                        if idx < dialog.event_triggers.len() {
+                            dialog.event_triggers[idx] = new_action;
+                        }
+                        dialog.npc_editing_action_index = None;
+                    } else {
+                        dialog.event_triggers.push(new_action);
+                    }
+                }
+                if dialog.npc_editing_action_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.npc_editing_action_index = None;
+                }
+            } else if dialog.npc_new_action_type == ActionType::FadeTransition {
+                // FadeTransition form
+                ui.horizontal(|ui| {
+                    ui.label("Fade Type:");
+                    ui.radio_value(&mut dialog.npc_new_fade_type, FadeType::FadeIn, "FadeIn");
+                    ui.radio_value(&mut dialog.npc_new_fade_type, FadeType::FadeOut, "FadeOut");
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Duration:");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.npc_new_fade_duration)
+                            .desired_width(60.0),
+                    );
+                    ui.label("(0.0 – 10.0)");
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Color (RGBA):");
+                    let mut color3 = [
+                        dialog.npc_new_fade_color[0],
+                        dialog.npc_new_fade_color[1],
+                        dialog.npc_new_fade_color[2],
+                    ];
+                    if ui.color_edit_button_rgb(&mut color3).changed() {
+                        dialog.npc_new_fade_color[0] = color3[0];
+                        dialog.npc_new_fade_color[1] = color3[1];
+                        dialog.npc_new_fade_color[2] = color3[2];
+                    }
+                });
+
+                let btn_label = if dialog.npc_editing_action_index.is_some() {
+                    "Update FadeTransition"
+                } else {
+                    "Add FadeTransition"
+                };
+                if ui.button(btn_label).clicked() {
+                    let duration = dialog
+                        .npc_new_fade_duration
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap_or(1.0)
+                        .clamp(0.0, 10.0);
+                    let new_action = EventAction::FadeTransition {
+                        fade_type: dialog.npc_new_fade_type,
+                        duration,
+                        color: dialog.npc_new_fade_color,
+                    };
+                    if let Some(idx) = dialog.npc_editing_action_index {
+                        if idx < dialog.event_triggers.len() {
+                            dialog.event_triggers[idx] = new_action;
+                        }
+                        dialog.npc_editing_action_index = None;
+                    } else {
+                        dialog.event_triggers.push(new_action);
+                    }
+                    dialog.npc_new_fade_type = FadeType::FadeOut;
+                    dialog.npc_new_fade_duration = "1.0".to_string();
+                    dialog.npc_new_fade_color = [0.0, 0.0, 0.0, 1.0];
+                }
+                if dialog.npc_editing_action_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.npc_editing_action_index = None;
+                    dialog.npc_new_fade_type = FadeType::FadeOut;
+                    dialog.npc_new_fade_duration = "1.0".to_string();
+                    dialog.npc_new_fade_color = [0.0, 0.0, 0.0, 1.0];
+                }
+            } else if dialog.npc_new_action_type == ActionType::SetState {
+                // SetState form
+                ui.horizontal(|ui| {
+                    ui.label("Key:");
+                    ui.text_edit_singleline(&mut dialog.npc_new_state_key);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Value:");
+                    ui.text_edit_singleline(&mut dialog.npc_new_state_value);
+                });
+
+                let btn_label = if dialog.npc_editing_action_index.is_some() {
+                    "Update SetState"
+                } else {
+                    "Add SetState"
+                };
+                if ui.button(btn_label).clicked() && !dialog.npc_new_state_key.is_empty() {
+                    let new_action = EventAction::SetState {
+                        key: dialog.npc_new_state_key.clone(),
+                        value: dialog.npc_new_state_value.clone(),
+                    };
+                    if let Some(idx) = dialog.npc_editing_action_index {
+                        if idx < dialog.event_triggers.len() {
+                            dialog.event_triggers[idx] = new_action;
+                        }
+                        dialog.npc_editing_action_index = None;
+                    } else {
+                        dialog.event_triggers.push(new_action);
+                    }
+                    dialog.npc_new_state_key = String::new();
+                    dialog.npc_new_state_value = String::new();
+                }
+                if dialog.npc_editing_action_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.npc_editing_action_index = None;
+                    dialog.npc_new_state_key = String::new();
+                    dialog.npc_new_state_value = String::new();
+                }
+            } else if dialog.npc_new_action_type == ActionType::SetPlayerAppearance {
+                // SetPlayerAppearance form
+                ui.horizontal(|ui| {
+                    ui.label("Appearance:");
+                    let appearance_text = match &dialog.npc_new_appearance {
+                        PlayerAppearance::Hidden => "Hidden",
+                        PlayerAppearance::Spritesheet { .. } => "Spritesheet",
+                        PlayerAppearance::Default => "Default",
+                    };
+                    egui::ComboBox::from_id_salt("npc_event_trigger_appearance_select")
+                        .selected_text(appearance_text)
+                        .show_ui(ui, |ui| {
+                            if ui
+                                .selectable_label(
+                                    matches!(dialog.npc_new_appearance, PlayerAppearance::Hidden),
+                                    "Hidden",
+                                )
+                                .clicked()
+                            {
+                                dialog.npc_new_appearance = PlayerAppearance::Hidden;
+                            }
+                            if ui
+                                .selectable_label(
+                                    matches!(
+                                        dialog.npc_new_appearance,
+                                        PlayerAppearance::Spritesheet { .. }
+                                    ),
+                                    "Spritesheet",
+                                )
+                                .clicked()
+                            {
+                                dialog.npc_new_appearance = PlayerAppearance::Spritesheet {
+                                    path: dialog.npc_new_appearance_path.clone(),
+                                };
+                            }
+                            if ui
+                                .selectable_label(
+                                    matches!(dialog.npc_new_appearance, PlayerAppearance::Default),
+                                    "Default",
+                                )
+                                .clicked()
+                            {
+                                dialog.npc_new_appearance = PlayerAppearance::Default;
+                            }
+                        });
+                });
+
+                if matches!(
+                    dialog.npc_new_appearance,
+                    PlayerAppearance::Spritesheet { .. }
+                ) {
+                    ui.horizontal(|ui| {
+                        ui.label("Path:");
+                        ui.text_edit_singleline(&mut dialog.npc_new_appearance_path);
+                    });
+                }
+
+                let btn_label = if dialog.npc_editing_action_index.is_some() {
+                    "Update SetPlayerAppearance"
+                } else {
+                    "Add SetPlayerAppearance"
+                };
+                if ui.button(btn_label).clicked() {
+                    let appearance = match &dialog.npc_new_appearance {
+                        PlayerAppearance::Spritesheet { .. } => {
+                            if dialog.npc_new_appearance_path.is_empty() {
+                                None
+                            } else {
+                                Some(PlayerAppearance::Spritesheet {
+                                    path: dialog.npc_new_appearance_path.clone(),
+                                })
+                            }
+                        }
+                        other => Some(other.clone()),
+                    };
+                    if let Some(appearance) = appearance {
+                        let new_action = EventAction::SetPlayerAppearance { appearance };
+                        if let Some(idx) = dialog.npc_editing_action_index {
+                            if idx < dialog.event_triggers.len() {
+                                dialog.event_triggers[idx] = new_action;
+                            }
+                            dialog.npc_editing_action_index = None;
+                        } else {
+                            dialog.event_triggers.push(new_action);
+                        }
+                        dialog.npc_new_appearance = PlayerAppearance::Hidden;
+                        dialog.npc_new_appearance_path = String::new();
+                    }
+                }
+                if dialog.npc_editing_action_index.is_some() && ui.button("Cancel Edit").clicked() {
+                    dialog.npc_editing_action_index = None;
+                    dialog.npc_new_appearance = PlayerAppearance::Hidden;
+                    dialog.npc_new_appearance_path = String::new();
                 }
             }
 

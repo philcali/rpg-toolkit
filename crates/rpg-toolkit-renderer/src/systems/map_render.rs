@@ -135,14 +135,14 @@ pub fn spawn_npc_sprites(
         let idle_index = sprite_atlas_index(npc.facing, 1);
         let world_pos = grid_to_world(npc.x, npc.y, tw, th);
 
-        // Compute sprite scale and y_offset so the sprite width matches the
-        // map tile width and the character's feet align with the tile bottom.
+        // Render NPC sprites at 1:1 pixel scale — same as the player.
+        // The y_offset keeps the character's feet aligned with the tile bottom.
         let (sprite_scale, y_offset) = project_data
             .project_file
             .spritesheets
             .get(&npc.spritesheet_id)
             .map(|ss| {
-                let scale = tw as f32 / ss.sprite_width as f32;
+                let scale = 1.0_f32;
                 let scaled_height = ss.sprite_height as f32 * scale;
                 let offset = (scaled_height - th as f32) / 2.0;
                 (scale, offset)

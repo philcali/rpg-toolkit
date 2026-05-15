@@ -59,6 +59,35 @@ impl Default for DialogConfigData {
     }
 }
 
+/// Mode for screen shake effect.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScreenShakeMode {
+    #[default]
+    Timed,
+    Continuous,
+}
+
+/// Type of fade transition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FadeType {
+    FadeIn,
+    FadeOut,
+}
+
+/// Player visual appearance state.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum PlayerAppearance {
+    Hidden,
+    Spritesheet { path: String },
+    Default,
+}
+
+/// Returns the default fade color (opaque black).
+pub fn default_fade_color() -> [f32; 4] {
+    [0.0, 0.0, 0.0, 1.0]
+}
+
 /// A single action within an event trigger sequence.
 /// Uses `#[serde(tag = "type")]` for clean, forward-compatible JSON.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -72,6 +101,26 @@ pub enum EventAction {
     ShowDialog {
         text: DialogTextData,
         config: DialogConfigData,
+    },
+    ScreenShake {
+        intensity: f32,
+        duration: f32,
+        #[serde(default)]
+        mode: ScreenShakeMode,
+    },
+    StopScreenShake,
+    FadeTransition {
+        fade_type: FadeType,
+        duration: f32,
+        #[serde(default = "default_fade_color")]
+        color: [f32; 4],
+    },
+    SetState {
+        key: String,
+        value: String,
+    },
+    SetPlayerAppearance {
+        appearance: PlayerAppearance,
     },
 }
 
