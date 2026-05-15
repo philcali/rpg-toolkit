@@ -76,16 +76,15 @@ pub fn spawn_player(
         let atlas_layout = project_data.spritesheet_atlas_layouts[ss_id].clone();
         let idle_index = sprite_atlas_index(FacingDirection::Down, 1);
 
-        // Compute sprite scale so the sprite width matches the map tile width
+        // Render at 1:1 pixel scale — the character sprite is designed to be
+        // larger than the tile and overlap neighbors. The y-offset keeps the
+        // feet aligned with the tile bottom.
         let (sprite_scale, y_offset) = project_data
             .project_file
             .spritesheets
             .get(ss_id)
             .map(|ss| {
-                let scale = map.tile_width as f32 / ss.sprite_width as f32;
-                // The sprite is taller than the tile after scaling. Shift it
-                // up so the feet align with the tile bottom instead of
-                // centering the sprite on the tile.
+                let scale = 1.0_f32;
                 let scaled_height = ss.sprite_height as f32 * scale;
                 let offset = (scaled_height - map.tile_height as f32) / 2.0;
                 (scale, offset)

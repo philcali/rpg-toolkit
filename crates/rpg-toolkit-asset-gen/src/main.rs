@@ -45,11 +45,12 @@ fn main() {
 // ---------------------------------------------------------------------------
 
 /// Skin/body palette per direction row so you can visually tell them apart.
+/// Row order: Up (0), Right (1), Down (2), Left (3).
 const DIR_BODY_COLORS: [Rgba<u8>; 4] = [
-    Rgba([90, 130, 200, 255]), // Down  – blue-ish
-    Rgba([200, 130, 90, 255]), // Left  – orange-ish
-    Rgba([130, 200, 90, 255]), // Right – green-ish
-    Rgba([180, 90, 200, 255]), // Up    – purple-ish
+    Rgba([180, 90, 200, 255]), // Row 0: Up    – purple-ish
+    Rgba([130, 200, 90, 255]), // Row 1: Right – green-ish
+    Rgba([90, 130, 200, 255]), // Row 2: Down  – blue-ish
+    Rgba([200, 130, 90, 255]), // Row 3: Left  – orange-ish
 ];
 
 const SKIN: Rgba<u8> = Rgba([240, 200, 160, 255]);
@@ -99,11 +100,12 @@ fn draw_character_frame(
             put(img, ox + x, (oy as i32 + y + bob) as u32, HAIR);
         }
     }
-    // Eyes – only visible on Down/Left/Right
-    if dir != 3 {
+    // Eyes – only visible on Down/Left/Right (not Up, which faces away)
+    // Row order: 0=Up, 1=Right, 2=Down, 3=Left
+    if dir != 0 {
         let (lx, rx) = match dir {
-            1 => (9, 12),  // Left – eyes shifted left
-            2 => (12, 15), // Right – eyes shifted right
+            1 => (12, 15), // Right – eyes shifted right
+            3 => (9, 12),  // Left – eyes shifted left
             _ => (9, 14),  // Down – centered
         };
         let ey = (oy as i32 + 5 + bob) as u32;
@@ -162,32 +164,32 @@ fn draw_direction_arrow(img: &mut RgbaImage, cx: u32, cy: u32, dir: u32) {
     let white = Rgba([255, 255, 255, 255]);
     match dir {
         0 => {
-            // Down arrow
+            // Up arrow (row 0)
             put(img, cx, cy, white);
-            put(img, cx, cy + 1, white);
+            put(img, cx, cy - 1, white);
             put(img, cx - 1, cy, white);
             put(img, cx + 1, cy, white);
         }
         1 => {
-            // Left arrow
+            // Right arrow (row 1)
             put(img, cx, cy, white);
-            put(img, cx - 1, cy, white);
+            put(img, cx + 1, cy, white);
             put(img, cx, cy - 1, white);
             put(img, cx, cy + 1, white);
         }
         2 => {
-            // Right arrow
+            // Down arrow (row 2)
             put(img, cx, cy, white);
-            put(img, cx + 1, cy, white);
-            put(img, cx, cy - 1, white);
             put(img, cx, cy + 1, white);
-        }
-        3 => {
-            // Up arrow
-            put(img, cx, cy, white);
-            put(img, cx, cy - 1, white);
             put(img, cx - 1, cy, white);
             put(img, cx + 1, cy, white);
+        }
+        3 => {
+            // Left arrow (row 3)
+            put(img, cx, cy, white);
+            put(img, cx - 1, cy, white);
+            put(img, cx, cy - 1, white);
+            put(img, cx, cy + 1, white);
         }
         _ => {}
     }

@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use rpg_toolkit_common::{EventAction, MapId, ProjectFile, SpritesheetId, TilesetId};
+use rpg_toolkit_common::{
+    EventAction, FadeType, MapId, ProjectFile, ScreenShakeMode, SpritesheetId, TilesetId,
+};
 use std::collections::{HashMap, VecDeque};
 
 /// Input resource: consumers insert this before adding the plugin.
@@ -74,14 +76,54 @@ impl AnimationConfig {
     }
 }
 
+/// What the ActionQueue is currently waiting for before advancing.
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub enum WaitingFor {
+    #[default]
+    Nothing,
+    Dialog,
+    ScreenShake,
+    Fade,
+}
+
 /// Tracks the remaining EventActions in the current trigger sequence.
 /// Present only while a sequence is being processed.
 #[derive(Resource)]
 pub struct ActionQueue {
     /// The remaining actions to process (front = next action).
     pub actions: VecDeque<EventAction>,
-    /// Whether we're currently waiting for a dialog to be dismissed.
-    pub waiting_for_dialog: bool,
+    /// What blocking action the queue is currently waiting for.
+    pub waiting_for: WaitingFor,
+}
+
+/// Tracks an active screen shake effect.
+#[derive(Resource)]
+pub struct ScreenShakeState {
+    pub intensity: f32,
+    pub mode: ScreenShakeMode,
+    pub duration: f32,
+    pub elapsed: f32,
+}
+
+/// Tracks an active fade transition.
+#[derive(Resource)]
+pub struct FadeState {
+    pub fade_type: FadeType,
+    pub duration: f32,
+    pub elapsed: f32,
+    pub color: [f32; 4],
+}
+
+/// Persistent game state flags (key-value store).
+#[derive(Resource, Default)]
+pub struct GameState {
+    pub flags: HashMap<String, String>,
+}
+
+/// Tracks the player's original spritesheet for restoration.
+#[derive(Resource)]
+pub struct PlayerAppearanceState {
+    pub original_spritesheet_id: Option<SpritesheetId>,
 }
 
 /// Determines how the game world is scaled on screen.

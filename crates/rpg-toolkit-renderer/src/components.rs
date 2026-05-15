@@ -63,6 +63,10 @@ pub struct PlayerSpriteState {
 #[derive(Component)]
 pub struct GameCamera;
 
+/// Marker for the fade overlay UI entity.
+#[derive(Component)]
+pub struct FadeOverlay;
+
 /// Describes an in-progress tile-to-tile movement animation for an NPC.
 pub struct NpcMoveAnimation {
     /// World-space start position.

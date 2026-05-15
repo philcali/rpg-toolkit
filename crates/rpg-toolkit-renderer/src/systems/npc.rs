@@ -7,7 +7,7 @@ use crate::components::{
 use crate::dialog::DialogState;
 use crate::resources::{
     ActionQueue, AnimationConfig, InteractionIntent, NpcCollisionEvent, NpcPositions,
-    RendererProjectData, RendererState,
+    RendererProjectData, RendererState, WaitingFor,
 };
 use crate::systems::collision::is_tile_blocked;
 use crate::systems::player::grid_to_world;
@@ -362,7 +362,7 @@ pub fn npc_trigger_system(
         let actions: VecDeque<_> = npc_instance.event_triggers.iter().cloned().collect();
         commands.insert_resource(ActionQueue {
             actions,
-            waiting_for_dialog: false,
+            waiting_for: WaitingFor::Nothing,
         });
         return;
     }
@@ -424,7 +424,7 @@ pub fn npc_trigger_system(
         let actions: VecDeque<_> = npc_instance.event_triggers.iter().cloned().collect();
         commands.insert_resource(ActionQueue {
             actions,
-            waiting_for_dialog: false,
+            waiting_for: WaitingFor::Nothing,
         });
         return;
     }
