@@ -1,3 +1,4 @@
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::algorithms::flood_fill::flood_fill;
@@ -20,78 +21,86 @@ impl Plugin for PaintingPlugin {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn painting_system(
-    mouse: Res<ButtonInput<MouseButton>>,
-    keys: Res<ButtonInput<KeyCode>>,
-    cursor_state: Res<CursorWorldState>,
-    mut project: ResMut<Project>,
-    mut editor_state: ResMut<EditorState>,
-    tool: Res<EditorTool>,
-    mut edit_events: MessageWriter<EditCommand>,
-    any_dialog_open: Res<AnyDialogOpen>,
-) {
+/// Bundled parameters for the painting system.
+#[derive(SystemParam)]
+struct PaintingParams<'w> {
+    mouse: Res<'w, ButtonInput<MouseButton>>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    cursor_state: Res<'w, CursorWorldState>,
+    project: ResMut<'w, Project>,
+    editor_state: ResMut<'w, EditorState>,
+    tool: Res<'w, EditorTool>,
+    edit_events: MessageWriter<'w, EditCommand>,
+    any_dialog_open: Res<'w, AnyDialogOpen>,
+}
+
+fn painting_system(mut params: PaintingParams) {
     // Block all painting when a modal dialog is open
-    if any_dialog_open.0 {
+    if params.any_dialog_open.0 {
         return;
     }
 
     // Attribute mode: early return, no painting
-    if editor_state.editor_mode == EditorMode::Attribute {
+    if params.editor_state.editor_mode == EditorMode::Attribute {
         return;
     }
 
     // Pan mode: early return, no painting
-    if *tool == EditorTool::Pan {
+    if *params.tool == EditorTool::Pan {
         return;
     }
 
-    let ctrl_held = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+    let ctrl_held =
+        params.keys.pressed(KeyCode::ControlLeft) || params.keys.pressed(KeyCode::ControlRight);
 
     // --- Line drag cancellation: Ctrl released before mouse button ---
-    if editor_state.line_drag.active && !ctrl_held {
-        editor_state.line_drag.active = false;
-        editor_state.line_drag.start_tile = None;
+    if params.editor_state.line_drag.active && !ctrl_held {
+        params.editor_state.line_drag.active = false;
+        params.editor_state.line_drag.start_tile = None;
         return;
     }
 
     // --- Line drag commit: mouse released while Ctrl still held ---
-    if editor_state.line_drag.active && mouse.just_released(MouseButton::Left) && ctrl_held {
-        if let Some(start) = editor_state.line_drag.start_tile
-            && let Some((end_col, end_row)) = cursor_state.tile_pos
+    if params.editor_state.line_drag.active
+        && params.mouse.just_released(MouseButton::Left)
+        && ctrl_held
+    {
+        if let Some(start) = params.editor_state.line_drag.start_tile
+            && let Some((end_col, end_row)) = params.cursor_state.tile_pos
         {
             let line = bresenham_line(start.0, start.1, end_col, end_row);
 
             // Validate tileset compatibility for paint mode
-            if *tool == EditorTool::Paint {
-                if let Some(ref brush) = editor_state.active_brush {
-                    if let Some(active_map_id) = project.active_map_id().cloned()
-                        && project
+            if *params.tool == EditorTool::Paint {
+                if let Some(ref brush) = params.editor_state.active_brush {
+                    if let Some(active_map_id) = params.project.active_map_id().cloned()
+                        && params
+                            .project
                             .check_tileset_compatibility(&brush.tileset_id, &active_map_id)
                             .is_err()
                     {
-                        editor_state.line_drag.active = false;
-                        editor_state.line_drag.start_tile = None;
+                        params.editor_state.line_drag.active = false;
+                        params.editor_state.line_drag.start_tile = None;
                         return;
                     }
                 } else {
                     // No brush set — don't commit (Req 9.8)
-                    editor_state.line_drag.active = false;
-                    editor_state.line_drag.start_tile = None;
+                    params.editor_state.line_drag.active = false;
+                    params.editor_state.line_drag.start_tile = None;
                     return;
                 }
             }
 
-            if let Some(map) = project.active_map_mut() {
+            if let Some(map) = params.project.active_map_mut() {
                 let layer_index = map.active_layer_index;
                 for (col, row) in line {
-                    match *tool {
+                    match *params.tool {
                         EditorTool::Paint => {
-                            if let Some(ref brush) = editor_state.active_brush
+                            if let Some(ref brush) = params.editor_state.active_brush
                                 && let Ok(cmd) =
                                     map.place_tile(layer_index, col, row, brush.clone())
                             {
-                                edit_events.write(cmd);
+                                params.edit_events.write(cmd);
                             }
                         }
                         EditorTool::Erase => {
@@ -105,7 +114,7 @@ fn painting_system(
                                 .is_none();
                             if !already_empty && let Ok(cmd) = map.erase_tile(layer_index, col, row)
                             {
-                                edit_events.write(cmd);
+                                params.edit_events.write(cmd);
                             }
                         }
                         _ => {}
@@ -113,25 +122,27 @@ fn painting_system(
                 }
             }
         }
-        editor_state.line_drag.active = false;
-        editor_state.line_drag.start_tile = None;
+        params.editor_state.line_drag.active = false;
+        params.editor_state.line_drag.start_tile = None;
         return;
     }
 
     // While line drag is active, don't process normal clicks
-    if editor_state.line_drag.active {
+    if params.editor_state.line_drag.active {
         return;
     }
 
-    let left_just_pressed = mouse.just_pressed(MouseButton::Left);
-    let left_pressed = mouse.pressed(MouseButton::Left);
+    let left_just_pressed = params.mouse.just_pressed(MouseButton::Left);
+    let left_pressed = params.mouse.pressed(MouseButton::Left);
 
     // --- Ctrl+left-click starts line drag (Paint and Erase modes only) ---
-    if ctrl_held && left_just_pressed && (*tool == EditorTool::Paint || *tool == EditorTool::Erase)
+    if ctrl_held
+        && left_just_pressed
+        && (*params.tool == EditorTool::Paint || *params.tool == EditorTool::Erase)
     {
-        if let Some((col, row)) = cursor_state.tile_pos {
-            editor_state.line_drag.active = true;
-            editor_state.line_drag.start_tile = Some((col, row));
+        if let Some((col, row)) = params.cursor_state.tile_pos {
+            params.editor_state.line_drag.active = true;
+            params.editor_state.line_drag.start_tile = Some((col, row));
         }
         return;
     }
@@ -141,28 +152,29 @@ fn painting_system(
         return;
     }
 
-    let Some((col, row)) = cursor_state.tile_pos else {
+    let Some((col, row)) = params.cursor_state.tile_pos else {
         return;
     };
 
-    match *tool {
+    match *params.tool {
         EditorTool::Paint => {
             // Validate tileset compatibility before placing a tile
-            if let Some(ref brush) = editor_state.active_brush
-                && let Some(active_map_id) = project.active_map_id().cloned()
-                && project
+            if let Some(ref brush) = params.editor_state.active_brush
+                && let Some(active_map_id) = params.project.active_map_id().cloned()
+                && params
+                    .project
                     .check_tileset_compatibility(&brush.tileset_id, &active_map_id)
                     .is_err()
             {
                 return;
             }
 
-            let Some(map) = project.active_map_mut() else {
+            let Some(map) = params.project.active_map_mut() else {
                 return;
             };
             let layer_index = map.active_layer_index;
 
-            if let Some(ref brush) = editor_state.active_brush {
+            if let Some(ref brush) = params.editor_state.active_brush {
                 let already_set = map
                     .layers
                     .get(layer_index)
@@ -173,14 +185,14 @@ fn painting_system(
                 if !already_set
                     && let Ok(cmd) = map.place_tile(layer_index, col, row, brush.clone())
                 {
-                    edit_events.write(cmd);
+                    params.edit_events.write(cmd);
                 }
             }
             // Right-click is ignored in Paint mode (Req 3.2)
         }
 
         EditorTool::Erase => {
-            let Some(map) = project.active_map_mut() else {
+            let Some(map) = params.project.active_map_mut() else {
                 return;
             };
             let layer_index = map.active_layer_index;
@@ -194,7 +206,7 @@ fn painting_system(
                 .and_then(|cell| cell.as_ref())
                 .is_none();
             if !already_empty && let Ok(cmd) = map.erase_tile(layer_index, col, row) {
-                edit_events.write(cmd);
+                params.edit_events.write(cmd);
             }
             // Right-click is ignored in Erase mode (Req 8.2)
         }
@@ -205,21 +217,22 @@ fn painting_system(
                 return;
             }
 
-            let Some(ref brush) = editor_state.active_brush.clone() else {
+            let Some(ref brush) = params.editor_state.active_brush.clone() else {
                 // No brush set — don't perform flood fill (Req 5.5)
                 return;
             };
 
             // Validate tileset compatibility
-            if let Some(active_map_id) = project.active_map_id().cloned()
-                && project
+            if let Some(active_map_id) = params.project.active_map_id().cloned()
+                && params
+                    .project
                     .check_tileset_compatibility(&brush.tileset_id, &active_map_id)
                     .is_err()
             {
                 return;
             }
 
-            let Some(map) = project.active_map_mut() else {
+            let Some(map) = params.project.active_map_mut() else {
                 return;
             };
             let layer_index = map.active_layer_index;
@@ -237,7 +250,7 @@ fn painting_system(
             // Apply all fills
             for (fx, fy) in coords {
                 if let Ok(cmd) = map.place_tile(layer_index, fx, fy, brush.clone()) {
-                    edit_events.write(cmd);
+                    params.edit_events.write(cmd);
                 }
             }
         }
@@ -248,21 +261,22 @@ fn painting_system(
                 return;
             }
 
-            let Some(ref stamp) = editor_state.stamp_brush.clone() else {
+            let Some(ref stamp) = params.editor_state.stamp_brush.clone() else {
                 // No stamp selection — don't perform stamp (Req 6.5)
                 return;
             };
 
             // Validate tileset compatibility
-            if let Some(active_map_id) = project.active_map_id().cloned()
-                && project
+            if let Some(active_map_id) = params.project.active_map_id().cloned()
+                && params
+                    .project
                     .check_tileset_compatibility(&stamp.tileset_id, &active_map_id)
                     .is_err()
             {
                 return;
             }
 
-            let Some(map) = project.active_map_mut() else {
+            let Some(map) = params.project.active_map_mut() else {
                 return;
             };
             let layer_index = map.active_layer_index;
@@ -285,7 +299,7 @@ fn painting_system(
                     };
 
                     if let Ok(cmd) = map.place_tile(layer_index, tile_col, tile_row, tile_ref) {
-                        edit_events.write(cmd);
+                        params.edit_events.write(cmd);
                     }
                 }
             }

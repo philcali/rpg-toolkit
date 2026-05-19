@@ -3,7 +3,8 @@ pub use rpg_toolkit_common::{
     EventAction, Layer, MapData, MapId, SpawnPoint, TileAttributeLayer, TileRef,
 };
 
-use super::editor_state::{EditCommand, EditCommandKind, EditorError};
+use super::commands::{EditCommand, EditCommandKind};
+use super::state::EditorError;
 
 /// Editor-specific extension methods for `MapData`.
 ///

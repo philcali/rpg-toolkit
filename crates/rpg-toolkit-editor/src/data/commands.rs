@@ -1,125 +1,12 @@
-use bevy::prelude::*;
-use std::path::PathBuf;
+//! Reversible edit commands for undo/redo support.
+//!
+//! This module defines `EditCommand` and `EditCommandKind`, which represent all
+//! undoable editing operations in the editor. Each command knows how to apply
+//! itself forward (do) and backward (undo) against a `MapData`.
 
 use rpg_toolkit_common::{
-    CommonError, EventAction, Layer, MapData, NpcInstance, SpawnPoint, TileAttributeLayer, TileRef,
-    TilesetId,
+    EventAction, Layer, MapData, NpcInstance, SpawnPoint, TileAttributeLayer, TileRef,
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Resource)]
-pub enum EditorTool {
-    #[default]
-    Paint,
-    Erase,
-    Pan,
-    FloodFill,
-    StampBrush,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum EditorMode {
-    #[default]
-    Paint,
-    Attribute,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum AttributeTool {
-    #[default]
-    Opacity,
-    EventTrigger,
-    SpawnPoint,
-    NpcPlacement,
-}
-
-#[derive(Clone, Debug)]
-pub struct StampBrushSelection {
-    pub tileset_id: TilesetId,
-    pub top_left_col: u32,
-    pub top_left_row: u32,
-    pub width: u32,
-    pub height: u32,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct LineDragState {
-    pub active: bool,
-    pub start_tile: Option<(u32, u32)>,
-}
-
-#[derive(Debug, thiserror::Error)]
-#[allow(dead_code)]
-pub enum EditorError {
-    #[error("Invalid map dimensions: width and height must be between 1 and 256")]
-    InvalidDimensions,
-    #[error("Invalid tile size: must be one of 8, 16, 32, 64")]
-    InvalidTileSize,
-    #[error("Unsupported image format. Supported: PNG, JPEG")]
-    UnsupportedFormat,
-    #[error("Failed to parse project file: {0}")]
-    ProjectParseError(String),
-    #[error("Invalid project data: {0}")]
-    ProjectValidationError(String),
-    #[error(transparent)]
-    Common(#[from] CommonError),
-}
-
-/// Resource that is `true` whenever any modal dialog window is open.
-///
-/// This replaces the overly-broad `ctx.wants_pointer_input()` check that
-/// was blocking canvas interactions whenever *any* egui widget (including
-/// side panels and toolbar) was hovered.  Canvas systems should only be
-/// blocked when an actual dialog is in front of the canvas.
-#[derive(Resource, Default)]
-pub struct AnyDialogOpen(pub bool);
-
-/// Zoom level boundaries.
-const MIN_ZOOM: f32 = 0.25;
-const MAX_ZOOM: f32 = 8.0;
-
-#[derive(Resource)]
-pub struct EditorState {
-    pub active_brush: Option<TileRef>,
-    pub active_tileset_tab: Option<TilesetId>,
-    pub zoom_level: f32, // 0.25..=8.0
-    pub camera_offset: Vec2,
-    pub current_save_path: Option<PathBuf>,
-    pub stamp_brush: Option<StampBrushSelection>,
-    pub line_drag: LineDragState,
-    pub editor_mode: EditorMode,
-    pub attribute_tool: AttributeTool,
-    pub previous_tool: Option<EditorTool>,
-}
-
-impl Default for EditorState {
-    fn default() -> Self {
-        Self {
-            active_brush: None,
-            active_tileset_tab: None,
-            zoom_level: 1.0,
-            camera_offset: Vec2::ZERO,
-            current_save_path: None,
-            stamp_brush: None,
-            line_drag: LineDragState::default(),
-            editor_mode: EditorMode::default(),
-            attribute_tool: AttributeTool::default(),
-            previous_tool: None,
-        }
-    }
-}
-
-impl EditorState {
-    /// Clamps the current zoom level to the valid range [0.25, 8.0].
-    pub fn clamp_zoom(&mut self) {
-        self.zoom_level = self.zoom_level.clamp(MIN_ZOOM, MAX_ZOOM);
-    }
-
-    /// Sets the zoom level, clamping it to [0.25, 8.0].
-    pub fn set_zoom(&mut self, zoom: f32) {
-        self.zoom_level = zoom;
-        self.clamp_zoom();
-    }
-}
 
 /// A reversible editing command for undo/redo support.
 #[derive(Clone, Debug, bevy::prelude::Message)]
@@ -399,58 +286,6 @@ impl EditCommand {
             | EditCommandKind::RemoveDialogText { .. } => {
                 // No-op on MapData; handled at Project level by undo_redo plugin
             }
-        }
-    }
-}
-
-/// Undo/redo history resource. Maintains two stacks capped at `max_history`.
-#[derive(Resource)]
-pub struct UndoHistory {
-    pub undo_stack: Vec<EditCommand>,
-    pub redo_stack: Vec<EditCommand>,
-    pub max_history: usize,
-}
-
-impl Default for UndoHistory {
-    fn default() -> Self {
-        Self {
-            undo_stack: Vec::new(),
-            redo_stack: Vec::new(),
-            max_history: 50,
-        }
-    }
-}
-
-impl UndoHistory {
-    /// Pushes a command onto the undo stack, clears the redo stack,
-    /// and enforces the maximum history size.
-    pub fn push_command(&mut self, cmd: EditCommand) {
-        self.redo_stack.clear();
-        self.undo_stack.push(cmd);
-        if self.undo_stack.len() > self.max_history {
-            self.undo_stack.remove(0);
-        }
-    }
-
-    /// Undoes the most recent command. Returns `true` if an undo was performed.
-    pub fn undo(&mut self, map: &mut MapData) -> bool {
-        if let Some(cmd) = self.undo_stack.pop() {
-            cmd.apply_inverse(map);
-            self.redo_stack.push(cmd);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Redoes the most recently undone command. Returns `true` if a redo was performed.
-    pub fn redo(&mut self, map: &mut MapData) -> bool {
-        if let Some(cmd) = self.redo_stack.pop() {
-            cmd.apply(map);
-            self.undo_stack.push(cmd);
-            true
-        } else {
-            false
         }
     }
 }

@@ -5,7 +5,7 @@ use bevy_egui::egui;
 
 use rpg_toolkit_common::{DialogTextData, EventAction, MapData};
 
-use crate::data::editor_state::{EditCommand, EditCommandKind};
+use crate::data::commands::{EditCommand, EditCommandKind};
 use crate::data::map::MapId;
 use crate::data::project::Project;
 use crate::plugins::attribute::truncate_preview;
