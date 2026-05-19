@@ -3,8 +3,8 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::data::editor_state::UndoHistory;
 use crate::data::tileset::TilesetEntry;
+use crate::data::undo::UndoHistory;
 use crate::data::{EditorState, Project, ProjectFile};
 use crate::plugins::dialog_text_panel::{TextIdIndex, rebuild_text_id_index};
 

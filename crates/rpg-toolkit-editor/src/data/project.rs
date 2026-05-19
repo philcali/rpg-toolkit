@@ -9,8 +9,9 @@ use rpg_toolkit_common::{
     CharacterSpritesheet, MapData, MapId, SpawnPoint, SpritesheetId, TilesetId,
 };
 
-use super::editor_state::{EditorError, UndoHistory};
+use super::state::EditorError;
 use super::tileset::{TilesetEntry, TilesetMeta};
+use super::undo::UndoHistory;
 
 /// The central project resource holding all maps, tilesets, and editor state.
 #[derive(Resource, Default)]

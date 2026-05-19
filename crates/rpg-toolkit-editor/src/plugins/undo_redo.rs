@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::data::editor_state::EditCommandKind;
+use crate::data::commands::EditCommandKind;
 use crate::data::{EditCommand, Project};
 use crate::plugins::dialog_text_panel::{TextIdIndex, update_text_id_index_for_tile};
 
