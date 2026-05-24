@@ -1,13 +1,15 @@
 //! Click handling for attribute mode — dispatches to opacity toggle,
-//! event trigger dialog, spawn point placement, or NPC placement
-//! based on the active AttributeTool.
+//! event trigger dialog, spawn point placement, NPC placement,
+//! or elevation dialogs based on the active AttributeTool.
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
+use super::elevation_dialog::{ElevationDialog, ElevationTransitionDialog};
 use super::event_trigger_dialog::EventTriggerDialog;
 use super::npc_dialog::NpcPlacementDialog;
 use super::spawn_point_dialog::SpawnPointConfirmDialog;
+use crate::algorithms::line_engine::bresenham_line;
 use crate::data::commands::{EditCommand, EditCommandKind};
 use crate::data::map::SpawnPoint;
 use crate::data::{AnyDialogOpen, AttributeTool, EditorMode, EditorState, Project};
@@ -18,18 +20,21 @@ use rpg_toolkit_common::validate_waypoint_bounds;
 #[derive(SystemParam)]
 pub struct AttributeClickParams<'w> {
     mouse: Res<'w, ButtonInput<MouseButton>>,
-    editor_state: Res<'w, EditorState>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    editor_state: ResMut<'w, EditorState>,
     cursor_state: Res<'w, CursorWorldState>,
     project: ResMut<'w, Project>,
     edit_events: MessageWriter<'w, EditCommand>,
     event_trigger_dialog: ResMut<'w, EventTriggerDialog>,
     spawn_confirm_dialog: ResMut<'w, SpawnPointConfirmDialog>,
     npc_placement_dialog: ResMut<'w, NpcPlacementDialog>,
+    elevation_dialog: ResMut<'w, ElevationDialog>,
+    elevation_transition_dialog: ResMut<'w, ElevationTransitionDialog>,
     any_dialog_open: Res<'w, AnyDialogOpen>,
 }
 
 /// Handles left-click in attribute mode for opacity toggle, event trigger selection,
-/// and spawn point placement.
+/// and spawn point placement. Supports Ctrl+click line drag for opacity toggling.
 pub fn attribute_click_system(mut params: AttributeClickParams) {
     // Block all attribute clicks when any modal dialog is open,
     // EXCEPT when the NPC dialog is open and we're adding waypoints
@@ -47,6 +52,84 @@ pub fn attribute_click_system(mut params: AttributeClickParams) {
         return;
     }
 
+    let ctrl_held =
+        params.keys.pressed(KeyCode::ControlLeft) || params.keys.pressed(KeyCode::ControlRight);
+
+    // --- Ctrl+click line drag for Opacity tool ---
+    if params.editor_state.attribute_tool == AttributeTool::Opacity {
+        // Line drag cancellation: Ctrl released before mouse button
+        if params.editor_state.line_drag.active && !ctrl_held {
+            params.editor_state.line_drag.active = false;
+            params.editor_state.line_drag.start_tile = None;
+            return;
+        }
+
+        // Line drag commit: mouse released while Ctrl still held
+        if params.editor_state.line_drag.active
+            && params.mouse.just_released(MouseButton::Left)
+            && ctrl_held
+        {
+            if let Some(start) = params.editor_state.line_drag.start_tile
+                && let Some((end_col, end_row)) = params.cursor_state.tile_pos
+            {
+                let line = bresenham_line(start.0, start.1, end_col, end_row);
+
+                if let Some(map) = params.project.active_map_mut() {
+                    let layer_index = map.active_layer_index;
+                    for (col, row) in line {
+                        if col >= map.width || row >= map.height {
+                            continue;
+                        }
+                        let old_value = map
+                            .layers
+                            .get(layer_index)
+                            .and_then(|l| l.attributes.cells.get(row as usize))
+                            .and_then(|r| r.get(col as usize))
+                            .map(|a| a.opacity)
+                            .unwrap_or(false);
+
+                        let new_value = !old_value;
+
+                        if let Some(layer) = map.layers.get_mut(layer_index)
+                            && let Some(attr_row) = layer.attributes.cells.get_mut(row as usize)
+                            && let Some(cell) = attr_row.get_mut(col as usize)
+                        {
+                            cell.opacity = new_value;
+                        }
+
+                        params.edit_events.write(EditCommand {
+                            kind: EditCommandKind::SetOpacity {
+                                layer_index,
+                                x: col,
+                                y: row,
+                                old_value,
+                                new_value,
+                            },
+                        });
+                    }
+                }
+            }
+            params.editor_state.line_drag.active = false;
+            params.editor_state.line_drag.start_tile = None;
+            return;
+        }
+
+        // While line drag is active, don't process normal clicks
+        if params.editor_state.line_drag.active {
+            return;
+        }
+
+        // Ctrl+left-click starts line drag
+        if ctrl_held && params.mouse.just_pressed(MouseButton::Left) {
+            if let Some((col, row)) = params.cursor_state.tile_pos {
+                params.editor_state.line_drag.active = true;
+                params.editor_state.line_drag.start_tile = Some((col, row));
+            }
+            return;
+        }
+    }
+
+    // --- Normal single-click handling ---
     if !params.mouse.just_pressed(MouseButton::Left) {
         return;
     }
@@ -188,6 +271,53 @@ pub fn attribute_click_system(mut params: AttributeClickParams) {
                     .npc_placement_dialog
                     .open_new(col, row, first_spritesheet);
             }
+        }
+
+        AttributeTool::Elevation => {
+            let Some(map) = params.project.active_map() else {
+                return;
+            };
+            let layer_index = map.active_layer_index;
+
+            let old_value = map
+                .layers
+                .get(layer_index)
+                .and_then(|l| l.attributes.cells.get(row as usize))
+                .and_then(|r| r.get(col as usize))
+                .map(|a| a.elevation)
+                .unwrap_or(0);
+
+            // Open the elevation dialog populated with the current value
+            let dialog = &mut *params.elevation_dialog;
+            dialog.open = true;
+            dialog.layer_index = layer_index;
+            dialog.tile_x = col;
+            dialog.tile_y = row;
+            dialog.old_value = old_value;
+            dialog.value_str = old_value.to_string();
+        }
+
+        AttributeTool::ElevationTransition => {
+            let Some(map) = params.project.active_map() else {
+                return;
+            };
+            let layer_index = map.active_layer_index;
+
+            let old_value = map
+                .layers
+                .get(layer_index)
+                .and_then(|l| l.attributes.cells.get(row as usize))
+                .and_then(|r| r.get(col as usize))
+                .and_then(|a| a.target_elevation);
+
+            // Open the elevation transition dialog populated with the current value
+            let dialog = &mut *params.elevation_transition_dialog;
+            dialog.open = true;
+            dialog.layer_index = layer_index;
+            dialog.tile_x = col;
+            dialog.tile_y = row;
+            dialog.old_value = old_value;
+            dialog.value_str = old_value.map(|v| v.to_string()).unwrap_or_default();
         }
     }
 }

@@ -86,6 +86,9 @@ pub struct NpcInstance {
     pub patrol_config: Option<PatrolConfig>,
     #[serde(default)]
     pub trigger_mode: TriggerMode,
+    /// Elevation level at which this NPC exists.
+    #[serde(default)]
+    pub elevation: u32,
 }
 
 /// Validates that spritesheet image dimensions are exactly 72×128 pixels.

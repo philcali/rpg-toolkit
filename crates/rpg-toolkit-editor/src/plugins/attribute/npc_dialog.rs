@@ -294,6 +294,7 @@ pub fn npc_placement_dialog_ui(
                 event_triggers: dialog.event_triggers.clone(),
                 patrol_config,
                 trigger_mode: dialog.trigger_mode,
+                elevation: 0,
             };
 
             if let Some(map) = project.active_map_mut() {

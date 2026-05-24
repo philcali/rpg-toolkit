@@ -21,7 +21,10 @@ pub use resources::{
 };
 pub use systems::camera::{apply_pixel_scale, compute_zoom_to_fit, spawn_camera, update_camera};
 pub use systems::collision::is_tile_blocked;
-pub use systems::map_render::{init_npc_positions, spawn_npc_sprites, sync_map_sprites};
+pub use systems::map_render::{
+    compute_tile_z, init_npc_positions, resort_tile_z_on_elevation_change, spawn_npc_sprites,
+    sync_map_sprites,
+};
 pub use systems::npc::{
     npc_patrol_animation, npc_patrol_movement, npc_trigger_system, read_interaction_input,
 };
@@ -95,7 +98,8 @@ impl Plugin for ProjectRendererPlugin {
                     sync_map_sprites.after(handle_map_change),
                     spawn_npc_sprites.after(sync_map_sprites),
                     init_npc_positions.after(spawn_npc_sprites),
-                    apply_pixel_scale.after(init_npc_positions),
+                    resort_tile_z_on_elevation_change.after(init_npc_positions),
+                    apply_pixel_scale.after(resort_tile_z_on_elevation_change),
                     update_camera.after(apply_pixel_scale),
                 ),
             )

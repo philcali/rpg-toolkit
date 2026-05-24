@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::algorithms::line_engine::bresenham_line;
 use crate::data::map::MapId;
@@ -39,7 +40,8 @@ impl Plugin for CanvasPlugin {
                     draw_preview_gizmos.after(draw_grid),
                 )
                     .before(crate::systems::input::update_cursor_state),
-            );
+            )
+            .add_systems(EguiPrimaryContextPass, coordinate_tooltip_ui);
     }
 }
 
@@ -176,4 +178,30 @@ fn draw_tile_highlight(gizmos: &mut Gizmos, col: u32, row: u32, tile_size: f32, 
         Vec2::splat(tile_size),
         color,
     );
+}
+
+/// Display a coordinate tooltip showing `(x, y)` at the cursor position when
+/// hovering over the map canvas. Shown regardless of which editing tool is active.
+fn coordinate_tooltip_ui(mut contexts: EguiContexts, cursor: Res<CursorWorldState>) -> Result {
+    let Some((col, row)) = cursor.tile_pos else {
+        return Ok(());
+    };
+
+    let ctx = contexts.ctx_mut()?;
+
+    // Use a tooltip-style floating label near the cursor
+    if let Some(pointer_pos) = ctx.pointer_latest_pos() {
+        egui::Area::new(egui::Id::new("coord_tooltip"))
+            .fixed_pos(egui::pos2(pointer_pos.x + 16.0, pointer_pos.y + 16.0))
+            .order(egui::Order::Tooltip)
+            .interactable(false)
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                    ui.label(format!("({}, {})", col, row));
+                });
+            });
+    }
+
+    Ok(())
 }

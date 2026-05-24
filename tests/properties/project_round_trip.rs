@@ -81,6 +81,7 @@ fn arb_event_action() -> impl Strategy<Value = EventAction> {
                 target_map_id,
                 target_x,
                 target_y,
+                target_elevation: None,
             }
         }),
         (arb_dialog_text_data(), arb_dialog_config())
@@ -130,6 +131,7 @@ fn arb_npc_instance(ss_count: usize, map_w: u32, map_h: u32) -> impl Strategy<Va
                     event_triggers,
                     patrol_config,
                     trigger_mode,
+                    elevation: 0,
                 }
             },
         )

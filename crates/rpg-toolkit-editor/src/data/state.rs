@@ -33,6 +33,8 @@ pub enum AttributeTool {
     EventTrigger,
     SpawnPoint,
     NpcPlacement,
+    Elevation,
+    ElevationTransition,
 }
 
 #[derive(Clone, Debug)]

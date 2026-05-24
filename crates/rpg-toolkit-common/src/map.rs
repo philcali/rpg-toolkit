@@ -97,6 +97,9 @@ pub enum EventAction {
         target_map_id: MapId,
         target_x: u32,
         target_y: u32,
+        /// If set, player elevation is updated to this value after the map transition.
+        #[serde(default)]
+        target_elevation: Option<u32>,
     },
     ShowDialog {
         text: DialogTextData,
@@ -124,12 +127,18 @@ pub enum EventAction {
     },
 }
 
-/// Per-tile attribute data: opacity flag and event trigger list.
+/// Per-tile attribute data: opacity flag, event trigger list, and elevation.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct TileAttributes {
     pub opacity: bool,
     #[serde(default)]
     pub event_trigger: Vec<EventAction>,
+    /// Logical elevation level of this tile (0 = ground level).
+    #[serde(default)]
+    pub elevation: u32,
+    /// If set, stepping on this tile transitions the player to this elevation.
+    #[serde(default)]
+    pub target_elevation: Option<u32>,
 }
 
 /// A parallel grid of `TileAttributes` matching a layer's tile dimensions.
@@ -269,6 +278,28 @@ impl MapData {
                 self.active_layer_index,
                 self.layers.len()
             )));
+        }
+
+        // Validate attribute grid dimensions match layer tile dimensions
+        for (i, layer) in self.layers.iter().enumerate() {
+            let attr_rows = layer.attributes.cells.len();
+            if attr_rows != self.height as usize {
+                return Err(CommonError::ProjectValidationError(format!(
+                    "layer {} attribute grid has {} rows, expected {}",
+                    i, attr_rows, self.height
+                )));
+            }
+            for (y, row) in layer.attributes.cells.iter().enumerate() {
+                if row.len() != self.width as usize {
+                    return Err(CommonError::ProjectValidationError(format!(
+                        "layer {} attribute grid row {} has {} columns, expected {}",
+                        i,
+                        y,
+                        row.len(),
+                        self.width
+                    )));
+                }
+            }
         }
 
         Ok(())

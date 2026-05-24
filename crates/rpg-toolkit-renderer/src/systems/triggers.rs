@@ -25,8 +25,32 @@ pub fn check_triggers(
     renderer_state: Res<RendererState>,
     action_queue: Option<Res<ActionQueue>>,
     mut commands: Commands,
+    mut player_query: Query<&mut PlayerCharacter>,
 ) {
     for event in player_moved.read() {
+        // Apply elevation transition from tile attributes at the destination tile.
+        // This runs regardless of whether an action queue exists, since elevation
+        // transitions are a passive tile property (not an event action).
+        if let Some(map_id) = &renderer_state.active_map_id
+            && let Some(map) = project_data.project_file.maps.get(map_id)
+        {
+            let (x, y) = event.to;
+            // Check all layers for a target_elevation at the destination tile
+            for layer in &map.layers {
+                if let Some(row) = layer.attributes.cells.get(y as usize)
+                    && let Some(attrs) = row.get(x as usize)
+                    && let Some(target_elev) = attrs.target_elevation
+                {
+                    // Update the player's elevation
+                    if let Ok(mut player) = player_query.single_mut() {
+                        player.elevation = target_elev;
+                    }
+                    // Only apply the first matching transition
+                    break;
+                }
+            }
+        }
+
         // If a sequence is already in progress, ignore new triggers
         if action_queue.is_some() {
             continue;
@@ -149,9 +173,11 @@ pub fn advance_action_queue(
                 target_map_id,
                 target_x,
                 target_y,
+                target_elevation,
             } => {
                 renderer_state.pending_map_change = Some(target_map_id);
                 renderer_state.pending_target_coords = Some((target_x, target_y));
+                renderer_state.pending_target_elevation = target_elevation;
                 // Pop the JumpTo action itself; remaining actions (e.g. FadeIn)
                 // stay in the queue and will continue processing after the map loads.
                 queue.actions.pop_front();
@@ -325,6 +351,7 @@ pub fn handle_map_change(
         return;
     };
     let target_coords = renderer_state.pending_target_coords.take();
+    let target_elevation = renderer_state.pending_target_elevation.take();
 
     let Some(new_map) = project_data.project_file.maps.get(&new_map_id) else {
         warn!(
@@ -352,6 +379,11 @@ pub fn handle_map_change(
         player.grid_x = clamped_x;
         player.grid_y = clamped_y;
         player.move_animation = None; // Cancel any in-progress animation
+
+        // Apply target elevation if specified, otherwise preserve current elevation
+        if let Some(elev) = target_elevation {
+            player.elevation = elev;
+        }
 
         let world_pos = grid_to_world(
             clamped_x,

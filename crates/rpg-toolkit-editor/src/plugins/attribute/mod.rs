@@ -1,10 +1,11 @@
 //! Attribute editing plugin — coordinates overlay rendering, click handling,
-//! and modal dialogs for opacity, event triggers, spawn points, and NPCs.
+//! and modal dialogs for opacity, event triggers, spawn points, NPCs, and elevation.
 
 mod action_editor;
 mod action_editor_forms;
 mod action_editor_ui;
 mod click;
+mod elevation_dialog;
 mod event_trigger_dialog;
 mod npc_dialog;
 mod overlay;
@@ -12,6 +13,7 @@ mod spawn_point_dialog;
 
 #[allow(unused_imports)]
 pub use action_editor::{ActionEditorState, truncate_preview};
+pub use elevation_dialog::{ElevationDialog, ElevationTransitionDialog};
 pub use event_trigger_dialog::EventTriggerDialog;
 pub use npc_dialog::NpcPlacementDialog;
 pub use spawn_point_dialog::SpawnPointConfirmDialog;
@@ -26,12 +28,16 @@ impl Plugin for AttributePlugin {
         app.init_resource::<SpawnPointConfirmDialog>()
             .init_resource::<EventTriggerDialog>()
             .init_resource::<NpcPlacementDialog>()
+            .init_resource::<elevation_dialog::ElevationDialog>()
+            .init_resource::<elevation_dialog::ElevationTransitionDialog>()
             .add_systems(
                 EguiPrimaryContextPass,
                 (
                     event_trigger_dialog::event_trigger_panel_ui,
                     spawn_point_dialog::spawn_point_confirm_ui,
                     npc_dialog::npc_placement_dialog_ui,
+                    elevation_dialog::elevation_dialog_ui,
+                    elevation_dialog::elevation_transition_dialog_ui,
                 ),
             )
             .add_systems(

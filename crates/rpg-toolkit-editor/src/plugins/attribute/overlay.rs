@@ -1,5 +1,6 @@
 //! Gizmo overlay rendering for attribute mode — draws opacity indicators,
-//! event trigger markers, spawn point markers, NPC positions, and patrol paths.
+//! event trigger markers, spawn point markers, NPC positions, patrol paths,
+//! and elevation/transition overlays.
 
 use bevy::prelude::*;
 
@@ -140,6 +141,82 @@ pub fn attribute_overlay_system(
                         Isometry2d::from_translation(Vec2::new(px, py)),
                         Vec2::splat(tile * 0.3),
                         path_color,
+                    );
+                }
+            }
+        }
+    }
+
+    // Draw elevation overlays when the Elevation tool is active
+    if editor_state.attribute_tool == AttributeTool::Elevation
+        && let Some(layer) = map.layers.get(map.active_layer_index)
+    {
+        for (y, row) in layer.attributes.cells.iter().enumerate() {
+            for (x, attrs) in row.iter().enumerate() {
+                if attrs.elevation > 0 {
+                    let px = x as f32 * tile + tile / 2.0;
+                    let py = -(y as f32 * tile + tile / 2.0);
+
+                    // Color intensity scales with elevation level (capped at 5 for visibility)
+                    let intensity = (attrs.elevation as f32 / 5.0).min(1.0);
+                    gizmos.rect_2d(
+                        Isometry2d::from_translation(Vec2::new(px, py)),
+                        Vec2::splat(tile * 0.9),
+                        Color::srgba(0.2, 0.6, 1.0, 0.2 + intensity * 0.3),
+                    );
+
+                    // Draw a smaller inner rect to indicate the level number visually
+                    let inner_size = tile * 0.3;
+                    for i in 0..attrs.elevation.min(4) {
+                        let offset_y = (i as f32 - attrs.elevation.min(4) as f32 / 2.0 + 0.5)
+                            * (inner_size * 0.6);
+                        gizmos.rect_2d(
+                            Isometry2d::from_translation(Vec2::new(px, py + offset_y)),
+                            Vec2::new(inner_size, inner_size * 0.4),
+                            Color::srgba(0.2, 0.6, 1.0, 0.7),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // Draw elevation transition overlays when the ElevationTransition tool is active
+    if editor_state.attribute_tool == AttributeTool::ElevationTransition
+        && let Some(layer) = map.layers.get(map.active_layer_index)
+    {
+        for (y, row) in layer.attributes.cells.iter().enumerate() {
+            for (x, attrs) in row.iter().enumerate() {
+                if attrs.target_elevation.is_some() {
+                    let px = x as f32 * tile + tile / 2.0;
+                    let py = -(y as f32 * tile + tile / 2.0);
+
+                    // Draw a distinct diamond/arrow marker for transitions
+                    let half = tile * 0.35;
+                    let color = Color::srgba(1.0, 0.5, 0.0, 0.6);
+
+                    // Diamond shape
+                    gizmos.line_2d(Vec2::new(px, py + half), Vec2::new(px + half, py), color);
+                    gizmos.line_2d(Vec2::new(px + half, py), Vec2::new(px, py - half), color);
+                    gizmos.line_2d(Vec2::new(px, py - half), Vec2::new(px - half, py), color);
+                    gizmos.line_2d(Vec2::new(px - half, py), Vec2::new(px, py + half), color);
+
+                    // Upward arrow inside
+                    let arrow_half = tile * 0.15;
+                    gizmos.line_2d(
+                        Vec2::new(px, py - arrow_half),
+                        Vec2::new(px, py + arrow_half),
+                        color,
+                    );
+                    gizmos.line_2d(
+                        Vec2::new(px - arrow_half * 0.6, py + arrow_half * 0.3),
+                        Vec2::new(px, py + arrow_half),
+                        color,
+                    );
+                    gizmos.line_2d(
+                        Vec2::new(px + arrow_half * 0.6, py + arrow_half * 0.3),
+                        Vec2::new(px, py + arrow_half),
+                        color,
                     );
                 }
             }
