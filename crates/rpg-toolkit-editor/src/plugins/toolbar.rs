@@ -99,6 +99,12 @@ fn toolbar_ui(
                             (AttributeTool::EventTrigger, "⚡", "Event Trigger"),
                             (AttributeTool::SpawnPoint, "📍", "Spawn Point"),
                             (AttributeTool::NpcPlacement, "👤", "NPC Placement"),
+                            (AttributeTool::Elevation, "⬆", "Elevation"),
+                            (
+                                AttributeTool::ElevationTransition,
+                                "🔀",
+                                "Elevation Transition",
+                            ),
                         ];
 
                         for &(tool, icon, label) in attr_tools {

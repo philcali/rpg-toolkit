@@ -54,6 +54,7 @@ pub fn spawn_player(
         grid_x,
         grid_y,
         move_animation: None,
+        elevation: 0,
     };
 
     // Check if a valid player spritesheet is configured
@@ -202,22 +203,26 @@ pub fn player_movement(
         let target_x = target_x as u32;
         let target_y = target_y as u32;
 
-        // Check opacity blocking first (pass None for npc_positions to only check opacity)
-        let opacity_blocked = is_tile_blocked(map, target_x, target_y, None);
+        // Check opacity blocking first (pass player elevation for elevation-aware collision)
+        let opacity_blocked =
+            is_tile_blocked(map, target_x, target_y, Some(player.elevation), None);
 
         if opacity_blocked {
-            // Tile is blocked by opacity attributes — just block movement (existing behavior)
+            // Tile is blocked by opacity attributes at the player's elevation
             continue;
         }
 
-        // Check if an NPC occupies the destination tile
-        if npc_positions.is_occupied(target_x, target_y) {
-            // Find which NPC occupies this tile and check for collision triggers
-            if let Some((npc_index, _)) = npc_positions
-                .positions
-                .iter()
-                .enumerate()
-                .find(|(_, (nx, ny))| *nx == target_x && *ny == target_y)
+        // Check if an NPC at the same elevation occupies the destination tile
+        if npc_positions.is_occupied_at_elevation(target_x, target_y, player.elevation) {
+            // Find which NPC occupies this tile at the player's elevation and check for collision triggers
+            if let Some((npc_index, _)) =
+                npc_positions
+                    .positions
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (nx, ny, ne))| {
+                        *nx == target_x && *ny == target_y && *ne == player.elevation
+                    })
             {
                 // Check if the NPC has Collision trigger mode and non-empty event_triggers
                 if let Some(npc_instance) = map.npcs.get(npc_index)

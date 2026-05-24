@@ -64,6 +64,20 @@ pub enum EditCommandKind {
         npc_index: usize,
         removed_npc: NpcInstance,
     },
+    SetElevation {
+        layer_index: usize,
+        x: u32,
+        y: u32,
+        old_value: u32,
+        new_value: u32,
+    },
+    SetTargetElevation {
+        layer_index: usize,
+        x: u32,
+        y: u32,
+        old_value: Option<u32>,
+        new_value: Option<u32>,
+    },
     InsertDialogText {
         text_id: String,
         text: String,
@@ -174,6 +188,34 @@ impl EditCommand {
                     map.npcs.remove(*npc_index);
                 }
             }
+            EditCommandKind::SetElevation {
+                layer_index,
+                x,
+                y,
+                new_value,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.attributes.cells.get_mut(*y as usize)
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    cell.elevation = *new_value;
+                }
+            }
+            EditCommandKind::SetTargetElevation {
+                layer_index,
+                x,
+                y,
+                new_value,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.attributes.cells.get_mut(*y as usize)
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    cell.target_elevation = *new_value;
+                }
+            }
             EditCommandKind::InsertDialogText { .. }
             | EditCommandKind::UpdateDialogText { .. }
             | EditCommandKind::RemoveDialogText { .. } => {
@@ -280,6 +322,34 @@ impl EditCommand {
                 removed_npc,
             } => {
                 map.npcs.insert(*npc_index, removed_npc.clone());
+            }
+            EditCommandKind::SetElevation {
+                layer_index,
+                x,
+                y,
+                old_value,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.attributes.cells.get_mut(*y as usize)
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    cell.elevation = *old_value;
+                }
+            }
+            EditCommandKind::SetTargetElevation {
+                layer_index,
+                x,
+                y,
+                old_value,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.attributes.cells.get_mut(*y as usize)
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    cell.target_elevation = *old_value;
+                }
             }
             EditCommandKind::InsertDialogText { .. }
             | EditCommandKind::UpdateDialogText { .. }

@@ -326,7 +326,7 @@ fn render_map_browser(
                 } else {
                     let response = ui.selectable_label(is_active, map_name);
 
-                    if response.double_clicked() {
+                    if response.clicked() {
                         actions.push(BrowserAction::Open(map_id.clone()));
                     }
 

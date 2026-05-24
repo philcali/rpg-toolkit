@@ -9,6 +9,8 @@ pub struct PlayerCharacter {
     pub grid_y: u32,
     /// Movement animation state. `Some` while animating between tiles.
     pub move_animation: Option<MoveAnimation>,
+    /// Current elevation level (0 = ground).
+    pub elevation: u32,
 }
 
 /// Describes an in-progress tile-to-tile movement animation.

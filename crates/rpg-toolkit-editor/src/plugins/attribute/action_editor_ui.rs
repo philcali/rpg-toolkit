@@ -33,6 +33,7 @@ pub fn render_action_editor(
                     target_map_id,
                     target_x,
                     target_y,
+                    ..
                 } => {
                     format!(
                         "{}. JumpTo → map: {}, ({}, {})",

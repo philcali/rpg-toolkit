@@ -49,6 +49,7 @@ pub struct ActionEditorState {
     pub target_map_id: String,
     pub target_x: String,
     pub target_y: String,
+    pub target_elevation: String,
     // ShowDialog fields
     pub dialog_text_mode: DialogTextMode,
     pub dialog_inline_text: String,
@@ -80,6 +81,7 @@ impl Default for ActionEditorState {
             target_map_id: String::new(),
             target_x: "0".to_string(),
             target_y: "0".to_string(),
+            target_elevation: String::new(),
             dialog_text_mode: DialogTextMode::Inline,
             dialog_inline_text: String::new(),
             dialog_text_id: String::new(),
@@ -113,11 +115,14 @@ impl ActionEditorState {
                 target_map_id,
                 target_x,
                 target_y,
+                target_elevation,
+                ..
             } => {
                 self.action_type = ActionType::JumpTo;
                 self.target_map_id = target_map_id.clone();
                 self.target_x = target_x.to_string();
                 self.target_y = target_y.to_string();
+                self.target_elevation = target_elevation.map(|e| e.to_string()).unwrap_or_default();
             }
             EventAction::ShowDialog { text, config } => {
                 self.action_type = ActionType::ShowDialog;
@@ -188,10 +193,12 @@ impl ActionEditorState {
                 }
                 let x = self.target_x.trim().parse::<u32>().unwrap_or(0);
                 let y = self.target_y.trim().parse::<u32>().unwrap_or(0);
+                let target_elevation = self.target_elevation.trim().parse::<u32>().ok();
                 Some(EventAction::JumpTo {
                     target_map_id: self.target_map_id.clone(),
                     target_x: x,
                     target_y: y,
+                    target_elevation,
                 })
             }
             ActionType::ShowDialog => {

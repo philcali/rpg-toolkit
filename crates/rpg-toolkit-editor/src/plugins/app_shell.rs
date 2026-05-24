@@ -3,7 +3,10 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::data::project::Project;
 use crate::data::{AnyDialogOpen, EditorState, TilesetMeta};
-use crate::plugins::attribute::{EventTriggerDialog, NpcPlacementDialog, SpawnPointConfirmDialog};
+use crate::plugins::attribute::{
+    ElevationDialog, ElevationTransitionDialog, EventTriggerDialog, NpcPlacementDialog,
+    SpawnPointConfirmDialog,
+};
 use crate::plugins::serialization::{SerializationAction, SerializationRequest};
 use crate::plugins::spritesheet::RemoveSpritesheetDialog;
 use crate::plugins::toolbar::CanvasRect;
@@ -562,6 +565,8 @@ fn update_any_dialog_open(
     event_trigger: Res<EventTriggerDialog>,
     spawn_confirm: Res<SpawnPointConfirmDialog>,
     npc_placement: Res<NpcPlacementDialog>,
+    elevation: Res<ElevationDialog>,
+    elevation_transition: Res<ElevationTransitionDialog>,
     remove_spritesheet: Res<RemoveSpritesheetDialog>,
     map_delete: Res<crate::plugins::layer_panel::MapDeleteDialogOpen>,
     mut any_open: ResMut<AnyDialogOpen>,
@@ -573,6 +578,8 @@ fn update_any_dialog_open(
         || event_trigger.open
         || spawn_confirm.open
         || npc_placement.open
+        || elevation.open
+        || elevation_transition.open
         || remove_spritesheet.open
         || map_delete.0;
 }

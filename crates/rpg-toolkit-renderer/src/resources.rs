@@ -23,6 +23,8 @@ pub struct RendererState {
     pub pending_map_change: Option<MapId>,
     /// Target coordinates for the pending map change (from JumpTo action).
     pub pending_target_coords: Option<(u32, u32)>,
+    /// Target elevation for pending map change (from JumpTo).
+    pub pending_target_elevation: Option<u32>,
 }
 
 /// Configuration for player movement animation.
@@ -159,14 +161,21 @@ impl Default for PixelScaleConfig {
 /// Updated each frame as NPCs move, used for dynamic collision checks.
 #[derive(Resource, Default)]
 pub struct NpcPositions {
-    /// Maps npc_index → current grid position.
-    pub positions: Vec<(u32, u32)>,
+    /// Maps npc_index → current grid position and elevation (x, y, elevation).
+    pub positions: Vec<(u32, u32, u32)>,
 }
 
 impl NpcPositions {
-    /// Returns `true` if any NPC occupies the tile at `(x, y)`.
+    /// Returns `true` if any NPC occupies the tile at `(x, y)` regardless of elevation.
     pub fn is_occupied(&self, x: u32, y: u32) -> bool {
-        self.positions.iter().any(|&(px, py)| px == x && py == y)
+        self.positions.iter().any(|&(px, py, _)| px == x && py == y)
+    }
+
+    /// Returns `true` if any NPC at the given elevation occupies the tile at `(x, y)`.
+    pub fn is_occupied_at_elevation(&self, x: u32, y: u32, elevation: u32) -> bool {
+        self.positions
+            .iter()
+            .any(|&(px, py, pe)| px == x && py == y && pe == elevation)
     }
 
     /// Returns `true` if any NPC *other than* `exclude_index` occupies `(x, y)`.
@@ -174,7 +183,7 @@ impl NpcPositions {
         self.positions
             .iter()
             .enumerate()
-            .any(|(i, &(px, py))| i != exclude_index && px == x && py == y)
+            .any(|(i, &(px, py, _))| i != exclude_index && px == x && py == y)
     }
 }
 

@@ -201,8 +201,8 @@ pub fn npc_patrol_movement(
         let dest_y = dest_y as u32;
 
         // Check if destination is blocked:
-        // 1. Opacity blocking (pass None for npc_positions to only check opacity)
-        if is_tile_blocked(map, dest_x, dest_y, None) {
+        // 1. Opacity blocking (pass None for player_elevation — NPCs don't use elevation filtering)
+        if is_tile_blocked(map, dest_x, dest_y, None, None) {
             continue;
         }
         // 2. NPC-NPC collision (exclude self)
@@ -220,7 +220,8 @@ pub fn npc_patrol_movement(
         // Destination is clear — initiate movement
         // Update NpcPositions to destination tile immediately
         if let Some(pos) = npc_positions.positions.get_mut(npc_index) {
-            *pos = (dest_x, dest_y);
+            let elevation = pos.2;
+            *pos = (dest_x, dest_y, elevation);
         }
 
         let from_world = grid_to_world(cur_x, cur_y, tw, th);
@@ -393,7 +394,7 @@ pub fn npc_trigger_system(
     }
 
     // Find an NPC at the faced tile with Interaction trigger mode and non-empty triggers
-    for (idx, &(nx, ny)) in npc_positions.positions.iter().enumerate() {
+    for (idx, &(nx, ny, _)) in npc_positions.positions.iter().enumerate() {
         if nx != faced_x || ny != faced_y {
             continue;
         }

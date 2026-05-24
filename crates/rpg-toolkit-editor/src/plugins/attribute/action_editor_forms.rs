@@ -51,6 +51,11 @@ pub fn render_jumpto_form(
         ui.text_edit_singleline(&mut editor_state.target_y);
     });
 
+    ui.horizontal(|ui| {
+        ui.label("Target Elevation (optional):");
+        ui.text_edit_singleline(&mut editor_state.target_elevation);
+    });
+
     let jumpto_button_label = if editor_state.editing_index.is_some() {
         "Update JumpTo"
     } else {
@@ -70,12 +75,14 @@ pub fn render_jumpto_form(
         editor_state.target_map_id = String::new();
         editor_state.target_x = "0".to_string();
         editor_state.target_y = "0".to_string();
+        editor_state.target_elevation = String::new();
     }
     if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
         editor_state.editing_index = None;
         editor_state.target_map_id = String::new();
         editor_state.target_x = "0".to_string();
         editor_state.target_y = "0".to_string();
+        editor_state.target_elevation = String::new();
     }
 }
 
