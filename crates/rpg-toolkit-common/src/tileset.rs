@@ -6,7 +6,7 @@ use crate::error::CommonError;
 const VALID_TILE_SIZES: [u32; 4] = [8, 16, 32, 64];
 
 /// Metadata about a loaded tileset.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TilesetMeta {
     pub file_path: String,
     pub tile_width: u32,  // 8, 16, 32, or 64

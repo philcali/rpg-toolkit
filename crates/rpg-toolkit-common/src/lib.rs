@@ -1,10 +1,12 @@
 pub mod error;
+pub mod manifest;
 pub mod map;
 pub mod project;
 pub mod spritesheet;
 pub mod tileset;
 
 pub use error::CommonError;
+pub use manifest::ProjectManifest;
 pub use map::{
     DialogConfigData, DialogPositionData, DialogTextData, EventAction, FadeType, Layer, MapData,
     MapId, PlayerAppearance, ScreenShakeMode, SpawnPoint, TileAttributeLayer, TileAttributes,

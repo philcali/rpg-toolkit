@@ -18,6 +18,8 @@ rfd = { workspace = true }
 uuid = { workspace = true }
 image = { workspace = true }
 thiserror = { workspace = true }
+zip = { version = "0.6", features = ["deflate"] }
+tempfile = "3"
 
 [dev-dependencies]
 proptest = { workspace = true }

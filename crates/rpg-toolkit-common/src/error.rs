@@ -8,4 +8,8 @@ pub enum CommonError {
     ProjectParseError(String),
     #[error("Invalid project data: {0}")]
     ProjectValidationError(String),
+    #[error("Failed to read project directory: {0}")]
+    ProjectDirectoryError(String),
+    #[error("Failed to process ZIP archive: {0}")]
+    ZipError(String),
 }
