@@ -94,6 +94,8 @@ pub struct EditorState {
     pub editor_mode: EditorMode,
     pub attribute_tool: AttributeTool,
     pub previous_tool: Option<EditorTool>,
+    /// If the project was loaded from a ZIP file, this is the original path.
+    pub original_zip_path: Option<std::path::PathBuf>,
 }
 
 impl Default for EditorState {
@@ -109,6 +111,7 @@ impl Default for EditorState {
             editor_mode: EditorMode::default(),
             attribute_tool: AttributeTool::default(),
             previous_tool: None,
+            original_zip_path: None,
         }
     }
 }

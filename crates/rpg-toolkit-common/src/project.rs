@@ -163,4 +163,67 @@ impl ProjectFile {
 
         refs
     }
+
+    /// Serialize project to a directory-based format.
+    /// Writes `manifest.json` and `maps/<id>.json` for each map.
+    pub fn serialize_to_dir(&self, root: &std::path::Path) -> Result<(), CommonError> {
+        let maps_dir = root.join("maps");
+        std::fs::create_dir_all(&maps_dir).map_err(|e| {
+            CommonError::ProjectParseError(format!("could not create maps directory: {}", e))
+        })?;
+
+        for (map_id, map) in &self.maps {
+            let map_path = maps_dir.join(format!("{}.json", map_id));
+            let json = serde_json::to_string_pretty(map).map_err(|e| {
+                CommonError::ProjectParseError(format!(
+                    "failed to serialize map '{}': {}",
+                    map_id, e
+                ))
+            })?;
+            std::fs::write(&map_path, &json).map_err(|e| {
+                CommonError::ProjectParseError(format!("could not write map file: {}", e))
+            })?;
+        }
+
+        let manifest = self.to_manifest();
+        manifest.save_to_dir(root)?;
+        Ok(())
+    }
+
+    /// Deserialize project from a directory-based format.
+    pub fn deserialize_from_dir(root: &std::path::Path) -> Result<Self, CommonError> {
+        let manifest = crate::manifest::ProjectManifest::load_from_dir(root)?;
+
+        let errors = manifest.validate_refs(root);
+        if !errors.is_empty() {
+            return Err(CommonError::ProjectValidationError(errors.join("; ")));
+        }
+
+        manifest.into_project_file(root)
+    }
+
+    /// Deserialize project from ZIP bytes.
+    pub fn deserialize_from_zip(
+        zip_data: &[u8],
+        temp_dir: &std::path::Path,
+    ) -> Result<Self, CommonError> {
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip_data))
+            .map_err(|e| CommonError::ZipError(format!("failed to open zip: {}", e)))?;
+        archive
+            .extract(temp_dir)
+            .map_err(|e| CommonError::ZipError(format!("failed to extract zip: {}", e)))?;
+        Self::deserialize_from_dir(temp_dir)
+    }
+
+    /// Convert to a manifest (maps become just IDs).
+    pub fn to_manifest(&self) -> crate::manifest::ProjectManifest {
+        crate::manifest::ProjectManifest {
+            maps: self.maps.keys().cloned().collect(),
+            tilesets: self.tilesets.clone(),
+            spawn_point: self.spawn_point.clone(),
+            spritesheets: self.spritesheets.clone(),
+            player_spritesheet: self.player_spritesheet.clone(),
+            dialog_texts: self.dialog_texts.clone(),
+        }
+    }
 }

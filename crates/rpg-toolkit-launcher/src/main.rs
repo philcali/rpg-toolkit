@@ -14,6 +14,8 @@ struct PendingProjectLoad {
     project_file: ProjectFile,
     /// Maps tileset ID → resolved absolute path to the image file.
     tileset_paths: HashMap<String, std::path::PathBuf>,
+    /// Guard to keep temp directory alive for the app lifetime.
+    _temp_dir: Option<tempfile::TempDir>,
 }
 
 fn parse_scale_arg(args: &[String]) -> Option<PixelScaleMode> {
@@ -47,17 +49,104 @@ fn parse_scale_arg(args: &[String]) -> Option<PixelScaleMode> {
     None
 }
 
+/// Detect project format from a path.
+enum ProjectSource {
+    Directory(std::path::PathBuf),
+    Zip(std::path::PathBuf),
+    LegacyJson(std::path::PathBuf),
+}
+
+fn detect_project_source(path: &Path) -> Result<ProjectSource, String> {
+    if path.is_dir() {
+        if !path.join("manifest.json").exists() {
+            return Err(format!(
+                "directory '{}' does not contain manifest.json",
+                path.display()
+            ));
+        }
+        Ok(ProjectSource::Directory(path.to_path_buf()))
+    } else if path.extension().is_some_and(|e| e == "rpg") {
+        Ok(ProjectSource::Zip(path.to_path_buf()))
+    } else if path.extension().is_some_and(|e| e == "json") {
+        Ok(ProjectSource::LegacyJson(path.to_path_buf()))
+    } else {
+        Err(format!(
+            "unsupported project format: {}. Expected .rpg or .json",
+            path.display()
+        ))
+    }
+}
+
+/// Load a project from a directory-based format.
+fn load_from_dir(
+    path: &Path,
+) -> Result<(ProjectFile, HashMap<String, std::path::PathBuf>), String> {
+    let project_file = ProjectFile::deserialize_from_dir(path)
+        .map_err(|e| format!("failed to load project: {}", e))?;
+    let project_dir = path
+        .canonicalize()
+        .map_err(|e| format!("could not canonicalize path: {}", e))?;
+    let tileset_paths: HashMap<String, std::path::PathBuf> = project_file
+        .tilesets
+        .iter()
+        .map(|(id, meta)| (id.clone(), project_dir.join(&meta.file_path)))
+        .collect();
+    Ok((project_file, tileset_paths))
+}
+
+/// Load a project from a ZIP archive, extracting to a temp directory.
+fn load_from_zip(
+    path: &Path,
+) -> Result<
+    (
+        ProjectFile,
+        HashMap<String, std::path::PathBuf>,
+        tempfile::TempDir,
+    ),
+    String,
+> {
+    let zip_data = std::fs::read(path).map_err(|e| format!("could not read zip file: {}", e))?;
+    let temp_dir =
+        tempfile::tempdir().map_err(|e| format!("could not create temp directory: {}", e))?;
+    let project_file = ProjectFile::deserialize_from_zip(&zip_data, temp_dir.path())
+        .map_err(|e| format!("failed to load project from zip: {}", e))?;
+    let tileset_paths: HashMap<String, std::path::PathBuf> = project_file
+        .tilesets
+        .iter()
+        .map(|(id, meta)| (id.clone(), temp_dir.path().join(&meta.file_path)))
+        .collect();
+    Ok((project_file, tileset_paths, temp_dir))
+}
+
+/// Load a project from a legacy single-file JSON format.
+fn load_from_legacy_json(
+    path: &Path,
+) -> Result<(ProjectFile, HashMap<String, std::path::PathBuf>), String> {
+    let contents =
+        std::fs::read_to_string(path).map_err(|e| format!("could not read file: {}", e))?;
+    let project_file = ProjectFile::deserialize(&contents)
+        .map_err(|e| format!("failed to deserialize project: {}", e))?;
+    let project_dir = path
+        .parent()
+        .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let tileset_paths: HashMap<String, std::path::PathBuf> = project_file
+        .tilesets
+        .iter()
+        .map(|(id, meta)| (id.clone(), project_dir.join(&meta.file_path)))
+        .collect();
+    Ok((project_file, tileset_paths))
+}
+
 fn main() {
-    // Parse CLI arguments
     let args: Vec<String> = std::env::args().collect();
 
-    // Find the project path (first positional arg, skipping --scale and its value)
     let project_path_str = {
         let mut path = None;
-        let mut i = 1; // skip program name
+        let mut i = 1;
         while i < args.len() {
             if args[i] == "--scale" {
-                i += 2; // skip flag and value
+                i += 2;
                 continue;
             }
             if args[i].starts_with("--") {
@@ -74,43 +163,41 @@ fn main() {
     };
 
     let scale_mode = parse_scale_arg(&args);
-
-    // Read file contents
     let project_path = Path::new(&project_path_str);
-    let contents = std::fs::read_to_string(project_path).unwrap_or_else(|e| {
-        eprintln!("Error: could not read '{}': {}", project_path.display(), e);
+
+    let source = detect_project_source(project_path).unwrap_or_else(|e| {
+        eprintln!("Error: {}", e);
         std::process::exit(1);
     });
 
-    // Deserialize and validate
-    let project_file = ProjectFile::deserialize(&contents).unwrap_or_else(|e| {
-        eprintln!("Error: failed to load project: {}", e);
-        std::process::exit(1);
-    });
+    let (project_file, tileset_paths, temp_dir) = match source {
+        ProjectSource::Directory(dir) => {
+            let (pf, tp) = load_from_dir(&dir).unwrap_or_else(|e| {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            });
+            (pf, tp, None)
+        }
+        ProjectSource::Zip(zip_path) => {
+            let (pf, tp, td) = load_from_zip(&zip_path).unwrap_or_else(|e| {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            });
+            (pf, tp, Some(td))
+        }
+        ProjectSource::LegacyJson(json_path) => {
+            let (pf, tp) = load_from_legacy_json(&json_path).unwrap_or_else(|e| {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            });
+            (pf, tp, None)
+        }
+    };
 
-    // Validate spawn point exists
     if project_file.spawn_point.is_none() {
         eprintln!("Error: project has no spawn point defined");
         std::process::exit(1);
     }
-
-    // Resolve tileset image paths relative to the project file directory
-    let project_dir = project_path
-        .parent()
-        .unwrap_or(Path::new("."))
-        .canonicalize()
-        .unwrap_or_else(|_| {
-            project_path
-                .parent()
-                .unwrap_or(Path::new("."))
-                .to_path_buf()
-        });
-
-    let tileset_paths: HashMap<String, std::path::PathBuf> = project_file
-        .tilesets
-        .iter()
-        .map(|(id, meta)| (id.clone(), project_dir.join(&meta.file_path)))
-        .collect();
 
     let mut app = App::new();
     app.add_plugins(
@@ -129,7 +216,6 @@ fn main() {
             .set(ImagePlugin::default_nearest()),
     );
 
-    // Apply pixel scale from CLI if provided (overrides the default zoom-to-fit)
     if let Some(mode) = scale_mode {
         let effective = match &mode {
             PixelScaleMode::Fixed(n) => *n,
@@ -144,6 +230,7 @@ fn main() {
     app.insert_resource(PendingProjectLoad {
         project_file,
         tileset_paths,
+        _temp_dir: temp_dir,
     })
     .add_systems(PreStartup, load_project_resources)
     .add_plugins(ProjectRendererPlugin)
@@ -167,11 +254,9 @@ fn load_project_resources(
             .get(tileset_id)
             .expect("tileset path should exist");
 
-        // Load the texture via asset server using the absolute path
         let texture: Handle<Image> = asset_server.load(image_path.to_string_lossy().to_string());
         tileset_textures.insert(tileset_id.clone(), texture);
 
-        // Build the texture atlas layout from tileset metadata
         let layout = TextureAtlasLayout::from_grid(
             UVec2::new(meta.tile_width, meta.tile_height),
             meta.columns,
@@ -191,7 +276,6 @@ fn load_project_resources(
         spritesheet_atlas_layouts: HashMap::new(),
     });
 
-    // Populate the DialogTextRegistry from the project file's dialog_texts
     commands.insert_resource(DialogTextRegistry::from_map(
         pending.project_file.dialog_texts.clone(),
     ));
