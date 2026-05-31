@@ -203,3 +203,10 @@ pub struct NpcCollisionEvent {
     /// or None if no collision occurred this frame.
     pub npc_index: Option<usize>,
 }
+
+/// The path to the on-disk save file.
+/// Inserted by the launcher before adding the renderer plugin.
+#[derive(Resource)]
+pub struct SavePath {
+    pub path: std::path::PathBuf,
+}

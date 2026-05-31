@@ -4,7 +4,7 @@ use crate::components::{
     NpcPatrolState, NpcSprite, NpcSpriteState, PlayerCharacter, RendererTileSprite,
 };
 use crate::events::MapChanged;
-use crate::resources::{NpcPositions, RendererProjectData, RendererState};
+use crate::resources::{GameState, NpcPositions, RendererProjectData, RendererState};
 use crate::systems::player::grid_to_world;
 use rpg_toolkit_common::sprite_atlas_index;
 
@@ -35,6 +35,7 @@ pub fn compute_tile_z(
 /// Computes Z values based on tile elevation relative to the player's elevation.
 pub fn sync_map_sprites(
     mut map_changed: MessageReader<MapChanged>,
+    game_state: Res<GameState>,
     project_data: Res<RendererProjectData>,
     existing_tiles: Query<Entity, With<RendererTileSprite>>,
     player_query: Query<&PlayerCharacter>,
@@ -76,6 +77,19 @@ pub fn sync_map_sprites(
                 let Some(tile_ref) = tile_opt else {
                     continue;
                 };
+
+                // Skip tiles whose required_state condition is not met
+                if let Some(attrs) = layer.attributes.cells.get(y).and_then(|r| r.get(x))
+                    && let Some(ref required_state) = attrs.required_state
+                {
+                    let matches = game_state
+                        .flags
+                        .get(&required_state.0)
+                        .is_some_and(|v| v == &required_state.1);
+                    if !matches {
+                        continue;
+                    }
+                }
 
                 // Resolve tileset texture and atlas layout
                 let Some(texture) = project_data.tileset_textures.get(&tile_ref.tileset_id) else {
@@ -134,6 +148,7 @@ pub fn sync_map_sprites(
 /// above the player sprite; NPCs at or below render below.
 pub fn spawn_npc_sprites(
     mut map_changed: MessageReader<MapChanged>,
+    game_state: Res<GameState>,
     project_data: Res<RendererProjectData>,
     existing_npcs: Query<Entity, With<NpcSprite>>,
     player_query: Query<&PlayerCharacter>,
@@ -160,6 +175,17 @@ pub fn spawn_npc_sprites(
     let player_elevation = player_query.iter().next().map_or(0, |pc| pc.elevation);
 
     for (npc_idx, npc) in map.npcs.iter().enumerate() {
+        // Skip NPCs whose required_state condition is not met
+        if let Some(ref required_state) = npc.required_state {
+            let matches = game_state
+                .flags
+                .get(&required_state.0)
+                .is_some_and(|v| v == &required_state.1);
+            if !matches {
+                continue;
+            }
+        }
+
         let Some(texture) = project_data.spritesheet_textures.get(&npc.spritesheet_id) else {
             warn!(
                 "NPC {} references spritesheet '{}' with no loaded texture; skipping",
@@ -306,6 +332,7 @@ pub fn resort_tile_z_on_elevation_change(
 /// the active map's NPC instances so the collision system uses dynamic positions.
 pub fn init_npc_positions(
     mut map_changed: MessageReader<MapChanged>,
+    game_state: Res<GameState>,
     project_data: Res<RendererProjectData>,
     mut npc_positions: ResMut<NpcPositions>,
 ) {
@@ -321,6 +348,18 @@ pub fn init_npc_positions(
     npc_positions.positions = map
         .npcs
         .iter()
-        .map(|npc| (npc.x, npc.y, npc.elevation))
+        .filter_map(|npc| {
+            // Only include NPCs whose required_state condition is met
+            if let Some(ref required_state) = npc.required_state {
+                let matches = game_state
+                    .flags
+                    .get(&required_state.0)
+                    .is_some_and(|v| v == &required_state.1);
+                if !matches {
+                    return None;
+                }
+            }
+            Some((npc.x, npc.y, npc.elevation))
+        })
         .collect();
 }

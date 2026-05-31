@@ -19,6 +19,7 @@ pub enum ActionType {
     FadeTransition,
     SetState,
     SetPlayerAppearance,
+    StateCheck,
 }
 
 /// The text source mode for a ShowDialog action.
@@ -71,6 +72,11 @@ pub struct ActionEditorState {
     // SetPlayerAppearance fields
     pub appearance: PlayerAppearance,
     pub appearance_path: String,
+    // StateCheck fields
+    pub state_check_key: String,
+    pub state_check_value: String,
+    pub state_check_on_true_idx: usize,
+    pub state_check_on_false_idx: usize,
 }
 
 impl Default for ActionEditorState {
@@ -98,6 +104,10 @@ impl Default for ActionEditorState {
             state_value: String::new(),
             appearance: PlayerAppearance::Hidden,
             appearance_path: String::new(),
+            state_check_key: String::new(),
+            state_check_value: String::new(),
+            state_check_on_true_idx: 0,
+            state_check_on_false_idx: 0,
         }
     }
 }
@@ -178,6 +188,18 @@ impl ActionEditorState {
                     self.appearance_path = String::new();
                 }
                 self.appearance = appearance.clone();
+            }
+            EventAction::StateCheck {
+                key,
+                value,
+                on_true,
+                on_false,
+            } => {
+                self.action_type = ActionType::StateCheck;
+                self.state_check_key = key.clone();
+                self.state_check_value = value.clone().unwrap_or_default();
+                self.state_check_on_true_idx = on_true.len();
+                self.state_check_on_false_idx = on_false.len();
             }
         }
         self.editing_index = Some(index);
@@ -279,6 +301,19 @@ impl ActionEditorState {
                     other => other.clone(),
                 };
                 Some(EventAction::SetPlayerAppearance { appearance })
+            }
+            ActionType::StateCheck => {
+                let value = if self.state_check_value.is_empty() {
+                    None
+                } else {
+                    Some(self.state_check_value.clone())
+                };
+                Some(EventAction::StateCheck {
+                    key: self.state_check_key.clone(),
+                    value,
+                    on_true: Vec::new(),
+                    on_false: Vec::new(),
+                })
             }
         }
     }

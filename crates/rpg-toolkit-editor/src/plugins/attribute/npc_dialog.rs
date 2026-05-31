@@ -33,6 +33,10 @@ pub struct NpcPlacementDialog {
     pub event_triggers: Vec<EventAction>,
     // Shared action editor state
     pub action_editor: ActionEditorState,
+    // Conditional visibility
+    pub required_state_key: String,
+    pub required_state_value: String,
+    pub has_required_state: bool,
 }
 
 impl Default for NpcPlacementDialog {
@@ -53,6 +57,9 @@ impl Default for NpcPlacementDialog {
             trigger_mode: TriggerMode::Interaction,
             event_triggers: Vec::new(),
             action_editor: ActionEditorState::default(),
+            required_state_key: String::new(),
+            required_state_value: String::new(),
+            has_required_state: false,
         }
     }
 }
@@ -97,6 +104,14 @@ impl NpcPlacementDialog {
         // Pre-populate event trigger config
         self.trigger_mode = npc.trigger_mode;
         self.event_triggers = npc.event_triggers.clone();
+        // Pre-populate required_state
+        if let Some(ref rs) = npc.required_state {
+            self.has_required_state = true;
+            self.required_state_key = rs.0.clone();
+            self.required_state_value = rs.1.clone();
+        } else {
+            self.has_required_state = false;
+        }
     }
 }
 
@@ -222,6 +237,30 @@ pub fn npc_placement_dialog_ui(
                 ui.label("Click map tiles to add waypoints.");
             }
 
+            // Conditional visibility
+            ui.separator();
+            ui.label(egui::RichText::new("Conditional Visibility").strong());
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut dialog.has_required_state, "Required state");
+            });
+            if dialog.has_required_state {
+                ui.horizontal(|ui| {
+                    ui.label("Key:");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.required_state_key)
+                            .desired_width(80.0),
+                    );
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Value:");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.required_state_value)
+                            .desired_width(80.0),
+                    );
+                });
+                ui.label("NPC is hidden unless state key matches value.");
+            }
+
             // Event Trigger configuration
             ui.separator();
             ui.label(egui::RichText::new("Event Triggers").strong());
@@ -295,6 +334,14 @@ pub fn npc_placement_dialog_ui(
                 patrol_config,
                 trigger_mode: dialog.trigger_mode,
                 elevation: 0,
+                required_state: if dialog.has_required_state {
+                    Some((
+                        dialog.required_state_key.clone(),
+                        dialog.required_state_value.clone(),
+                    ))
+                } else {
+                    None
+                },
             };
 
             if let Some(map) = project.active_map_mut() {
