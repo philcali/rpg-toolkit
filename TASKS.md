@@ -20,11 +20,11 @@
 - [x] Editor: `required_state` field in NPC placement dialog
 - [x] All 21 tests pass
 
-## Phase 3: Editor State Panel (NOT STARTED)
-- [ ] New egui panel in editor showing current `GameState.flags`
-- [ ] Ability to manually add/edit/delete state keys for testing
-- [ ] Display which NPCs are conditionally hidden on the current map (by showing `required_state` column in NPC list)
-- [ ] Display which tiles are conditionally hidden on the current layer
+## Phase 3: Editor State Panel (DONE)
+- [x] New egui panel in editor showing current `GameState.flags`
+- [x] Ability to manually add/edit/delete state keys for testing
+- [x] Display which NPCs are conditionally hidden on the current map (by showing `required_state` column in NPC list)
+- [x] Display which tiles are conditionally hidden on the current layer
 
 ## Future / Out of Scope
 - [ ] Entity spawning (adding entities back)

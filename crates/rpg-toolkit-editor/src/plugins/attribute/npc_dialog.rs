@@ -246,11 +246,17 @@ pub fn npc_placement_dialog_ui(
             if dialog.has_required_state {
                 ui.horizontal(|ui| {
                     ui.label("Key:");
-                    ui.add(egui::TextEdit::singleline(&mut dialog.required_state_key).desired_width(80.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.required_state_key)
+                            .desired_width(80.0),
+                    );
                 });
                 ui.horizontal(|ui| {
                     ui.label("Value:");
-                    ui.add(egui::TextEdit::singleline(&mut dialog.required_state_value).desired_width(80.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut dialog.required_state_value)
+                            .desired_width(80.0),
+                    );
                 });
                 ui.label("NPC is hidden unless state key matches value.");
             }

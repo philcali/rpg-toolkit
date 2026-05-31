@@ -198,14 +198,12 @@ fn main() {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             });
-            let save_path = save_path_arg
-                .map(PathBuf::from)
-                .unwrap_or_else(|| {
-                    zip_path
-                        .parent()
-                        .map(|p| p.join("save.json"))
-                        .unwrap_or_else(|| PathBuf::from("save.json"))
-                });
+            let save_path = save_path_arg.map(PathBuf::from).unwrap_or_else(|| {
+                zip_path
+                    .parent()
+                    .map(|p| p.join("save.json"))
+                    .unwrap_or_else(|| PathBuf::from("save.json"))
+            });
             (pf, tp, Some(td), save_path)
         }
         ProjectSource::LegacyJson(json_path) => {
@@ -213,14 +211,12 @@ fn main() {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             });
-            let save_path = save_path_arg
-                .map(PathBuf::from)
-                .unwrap_or_else(|| {
-                    json_path
-                        .parent()
-                        .map(|p| p.join("save.json"))
-                        .unwrap_or_else(|| PathBuf::from("save.json"))
-                });
+            let save_path = save_path_arg.map(PathBuf::from).unwrap_or_else(|| {
+                json_path
+                    .parent()
+                    .map(|p| p.join("save.json"))
+                    .unwrap_or_else(|| PathBuf::from("save.json"))
+            });
             (pf, tp, None, save_path)
         }
     };
@@ -266,9 +262,7 @@ fn main() {
         tileset_paths,
         _temp_dir: temp_dir,
     })
-    .insert_resource(SavePath {
-        path: save_path,
-    })
+    .insert_resource(SavePath { path: save_path })
     .insert_resource(GameState {
         flags: save_file.state.into_iter().collect(),
     })

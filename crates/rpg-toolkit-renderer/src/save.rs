@@ -28,7 +28,6 @@ impl SaveFile {
             .map_err(|e| format!("could not create save directory: {}", e))?;
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("could not serialize save file: {}", e))?;
-        std::fs::write(path, json)
-            .map_err(|e| format!("could not write save file: {}", e))
+        std::fs::write(path, json).map_err(|e| format!("could not write save file: {}", e))
     }
 }

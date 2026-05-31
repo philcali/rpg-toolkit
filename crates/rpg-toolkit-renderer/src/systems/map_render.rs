@@ -79,15 +79,15 @@ pub fn sync_map_sprites(
                 };
 
                 // Skip tiles whose required_state condition is not met
-                if let Some(attrs) = layer.attributes.cells.get(y).and_then(|r| r.get(x)) {
-                    if let Some(ref required_state) = attrs.required_state {
-                        let matches = game_state
-                            .flags
-                            .get(&required_state.0)
-                            .is_some_and(|v| v == &required_state.1);
-                        if !matches {
-                            continue;
-                        }
+                if let Some(attrs) = layer.attributes.cells.get(y).and_then(|r| r.get(x))
+                    && let Some(ref required_state) = attrs.required_state
+                {
+                    let matches = game_state
+                        .flags
+                        .get(&required_state.0)
+                        .is_some_and(|v| v == &required_state.1);
+                    if !matches {
+                        continue;
                     }
                 }
 

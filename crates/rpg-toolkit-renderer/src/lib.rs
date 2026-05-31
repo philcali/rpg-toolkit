@@ -48,8 +48,8 @@ pub use dialog::{
 };
 pub use systems::dialog::{handle_dialog_event, handle_dialog_input, update_dialog_typewriter};
 
-pub use save::SaveFile;
 pub use resources::SavePath;
+pub use save::SaveFile;
 
 /// The renderer plugin that renders a loaded project as a playable game world.
 pub struct ProjectRendererPlugin;
@@ -101,7 +101,9 @@ impl Plugin for ProjectRendererPlugin {
                     handle_map_change.after(advance_action_queue),
                     sync_map_sprites.after(handle_map_change),
                     spawn_npc_sprites.after(sync_map_sprites),
-                    init_npc_positions.after(spawn_npc_sprites).before(npc_patrol_movement),
+                    init_npc_positions
+                        .after(spawn_npc_sprites)
+                        .before(npc_patrol_movement),
                     resort_tile_z_on_elevation_change.after(init_npc_positions),
                     apply_pixel_scale.after(resort_tile_z_on_elevation_change),
                     update_camera.after(apply_pixel_scale),
@@ -137,12 +139,13 @@ fn fire_initial_map_changed(
 }
 
 /// Last system that persists `GameState` to disk.
-fn save_shutdown(
-    save_path: Res<SavePath>,
-    game_state: Res<GameState>,
-) {
+fn save_shutdown(save_path: Res<SavePath>, game_state: Res<GameState>) {
     let save_file = SaveFile {
-        state: game_state.flags.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        state: game_state
+            .flags
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
     };
 
     if let Err(e) = save_file.save(&save_path.path) {

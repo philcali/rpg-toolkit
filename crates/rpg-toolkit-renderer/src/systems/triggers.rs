@@ -340,9 +340,7 @@ pub fn advance_action_queue(
             } => {
                 let matched = if let Some(ref gs) = game_state {
                     match value {
-                        Some(ref expected) => {
-                            gs.flags.get(&key) == Some(expected)
-                        }
+                        Some(ref expected) => gs.flags.get(&key) == Some(expected),
                         None => {
                             // Check key existence only
                             gs.flags.contains_key(&key)
