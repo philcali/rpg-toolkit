@@ -332,6 +332,37 @@ pub fn advance_action_queue(
                 queue.actions.pop_front();
                 continue;
             }
+            EventAction::StateCheck {
+                key,
+                value,
+                on_true,
+                on_false,
+            } => {
+                let matched = if let Some(ref gs) = game_state {
+                    match value {
+                        Some(ref expected) => {
+                            gs.flags.get(&key) == Some(expected)
+                        }
+                        None => {
+                            // Check key existence only
+                            gs.flags.contains_key(&key)
+                        }
+                    }
+                } else {
+                    // No GameState resource — state is effectively empty
+                    false
+                };
+
+                // Pop the StateCheck action
+                queue.actions.pop_front();
+
+                // Push the matching branch to the front so it executes next
+                let branch = if matched { on_true } else { on_false };
+                for action in branch.into_iter().rev() {
+                    queue.actions.push_front(action);
+                }
+                continue;
+            }
         }
     }
 }

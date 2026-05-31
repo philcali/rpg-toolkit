@@ -125,6 +125,14 @@ pub enum EventAction {
     SetPlayerAppearance {
         appearance: PlayerAppearance,
     },
+    /// Check a game state flag and execute one of two branches based on the result.
+    /// If `value` is `None`, checks only for key existence (key present = true).
+    StateCheck {
+        key: String,
+        value: Option<String>,
+        on_true: Vec<EventAction>,
+        on_false: Vec<EventAction>,
+    },
 }
 
 /// Per-tile attribute data: opacity flag, event trigger list, and elevation.
@@ -139,6 +147,10 @@ pub struct TileAttributes {
     /// If set, stepping on this tile transitions the player to this elevation.
     #[serde(default)]
     pub target_elevation: Option<u32>,
+    /// If set, the tile is only visible when the game state key matches the value.
+    /// When the condition fails, the tile cell renders as `None` (invisible).
+    #[serde(default)]
+    pub required_state: Option<(String, String)>,
 }
 
 /// A parallel grid of `TileAttributes` matching a layer's tile dimensions.

@@ -472,3 +472,45 @@ pub fn render_set_player_appearance_form(
         editor_state.appearance_path = String::new();
     }
 }
+
+pub fn render_state_check_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    _id_salt: &str,
+) {
+    ui.horizontal(|ui| {
+        ui.label("Key:");
+        ui.text_edit_singleline(&mut editor_state.state_check_key);
+    });
+    ui.horizontal(|ui| {
+        ui.label("Value (leave empty = key existence):");
+        ui.text_edit_singleline(&mut editor_state.state_check_value);
+    });
+    ui.label("Actions on true/false are managed in the action list above.");
+
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update StateCheck"
+    } else {
+        "Add StateCheck"
+    };
+    if ui.button(btn_label).clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        editor_state.state_check_key = String::new();
+        editor_state.state_check_value = String::new();
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.state_check_key = String::new();
+        editor_state.state_check_value = String::new();
+    }
+}

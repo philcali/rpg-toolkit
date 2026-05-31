@@ -2,11 +2,11 @@ use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use rpg_toolkit_common::ProjectFile;
 use rpg_toolkit_renderer::{
-    DialogTextRegistry, PixelScaleConfig, PixelScaleMode, ProjectRendererPlugin,
-    RendererProjectData,
+    DialogTextRegistry, GameState, PixelScaleConfig, PixelScaleMode, ProjectRendererPlugin,
+    RendererProjectData, SaveFile, SavePath,
 };
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Temporary resource to pass data from main() into the Bevy startup system.
 #[derive(Resource)]
@@ -43,6 +43,17 @@ fn parse_scale_arg(args: &[String]) -> Option<PixelScaleMode> {
                     PixelScaleMode::Fixed(n)
                 }
             });
+        }
+        i += 1;
+    }
+    None
+}
+
+fn parse_save_arg(args: &[String]) -> Option<String> {
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--save" {
+            return args.get(i + 1).cloned();
         }
         i += 1;
     }
@@ -157,12 +168,13 @@ fn main() {
             break;
         }
         path.unwrap_or_else(|| {
-            eprintln!("Usage: rpg-toolkit-launcher <path-to-project.rpg> [--scale <N|fit>]");
+            eprintln!("Usage: rpg-toolkit-launcher <path-to-project.rpg> [--scale <N|fit>] [--save <path>]");
             std::process::exit(1);
         })
     };
 
     let scale_mode = parse_scale_arg(&args);
+    let save_path_arg = parse_save_arg(&args);
     let project_path = Path::new(&project_path_str);
 
     let source = detect_project_source(project_path).unwrap_or_else(|e| {
@@ -170,27 +182,46 @@ fn main() {
         std::process::exit(1);
     });
 
-    let (project_file, tileset_paths, temp_dir) = match source {
+    let (project_file, tileset_paths, temp_dir, save_path) = match source {
         ProjectSource::Directory(dir) => {
             let (pf, tp) = load_from_dir(&dir).unwrap_or_else(|e| {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             });
-            (pf, tp, None)
+            let save_path = save_path_arg
+                .map(PathBuf::from)
+                .unwrap_or_else(|| dir.join("save.json"));
+            (pf, tp, None, save_path)
         }
         ProjectSource::Zip(zip_path) => {
             let (pf, tp, td) = load_from_zip(&zip_path).unwrap_or_else(|e| {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             });
-            (pf, tp, Some(td))
+            let save_path = save_path_arg
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    zip_path
+                        .parent()
+                        .map(|p| p.join("save.json"))
+                        .unwrap_or_else(|| PathBuf::from("save.json"))
+                });
+            (pf, tp, Some(td), save_path)
         }
         ProjectSource::LegacyJson(json_path) => {
             let (pf, tp) = load_from_legacy_json(&json_path).unwrap_or_else(|e| {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             });
-            (pf, tp, None)
+            let save_path = save_path_arg
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    json_path
+                        .parent()
+                        .map(|p| p.join("save.json"))
+                        .unwrap_or_else(|| PathBuf::from("save.json"))
+                });
+            (pf, tp, None, save_path)
         }
     };
 
@@ -198,6 +229,9 @@ fn main() {
         eprintln!("Error: project has no spawn point defined");
         std::process::exit(1);
     }
+
+    // Load save file (defaults to empty state if not found)
+    let save_file = SaveFile::load(&save_path);
 
     let mut app = App::new();
     app.add_plugins(
@@ -231,6 +265,12 @@ fn main() {
         project_file,
         tileset_paths,
         _temp_dir: temp_dir,
+    })
+    .insert_resource(SavePath {
+        path: save_path,
+    })
+    .insert_resource(GameState {
+        flags: save_file.state.into_iter().collect(),
     })
     .add_systems(PreStartup, load_project_resources)
     .add_plugins(ProjectRendererPlugin)

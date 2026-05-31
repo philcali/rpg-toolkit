@@ -6,7 +6,7 @@ use crate::components::{
 };
 use crate::dialog::DialogState;
 use crate::resources::{
-    ActionQueue, AnimationConfig, InteractionIntent, NpcCollisionEvent, NpcPositions,
+    ActionQueue, AnimationConfig, GameState, InteractionIntent, NpcCollisionEvent, NpcPositions,
     RendererProjectData, RendererState, WaitingFor,
 };
 use crate::systems::collision::is_tile_blocked;
@@ -48,6 +48,7 @@ pub fn read_interaction_input(
 pub fn npc_patrol_movement(
     time: Res<Time>,
     project_data: Res<RendererProjectData>,
+    game_state: Res<GameState>,
     renderer_state: Res<RendererState>,
     mut npc_positions: ResMut<NpcPositions>,
     dialog_state: Option<Res<DialogState>>,
@@ -78,6 +79,21 @@ pub fn npc_patrol_movement(
         // Only process NPCs that have a patrol state
         if npc_state.patrol.is_none() {
             continue;
+        }
+
+        // Check required_state condition
+        if let Some(npc_instance) = map.npcs.get(npc_index) {
+            let state_ok = if let Some(ref required_state) = npc_instance.required_state {
+                game_state
+                    .flags
+                    .get(&required_state.0)
+                    .is_some_and(|v| v == &required_state.1)
+            } else {
+                true
+            };
+            if !state_ok {
+                continue;
+            }
         }
 
         // Look up the patrol config from the map data
@@ -331,6 +347,7 @@ pub fn npc_trigger_system(
     collision_event: Res<NpcCollisionEvent>,
     intent: Res<InteractionIntent>,
     npc_positions: Res<NpcPositions>,
+    game_state: Res<GameState>,
     project_data: Res<RendererProjectData>,
     renderer_state: Res<RendererState>,
     player_query: Query<(&PlayerCharacter, Option<&PlayerSpriteState>)>,
@@ -360,12 +377,23 @@ pub fn npc_trigger_system(
         && npc_instance.trigger_mode == TriggerMode::Collision
         && !npc_instance.event_triggers.is_empty()
     {
-        let actions: VecDeque<_> = npc_instance.event_triggers.iter().cloned().collect();
-        commands.insert_resource(ActionQueue {
-            actions,
-            waiting_for: WaitingFor::Nothing,
-        });
-        return;
+        // Check required_state condition
+        let state_ok = if let Some(ref required_state) = npc_instance.required_state {
+            game_state
+                .flags
+                .get(&required_state.0)
+                .is_some_and(|v| v == &required_state.1)
+        } else {
+            true
+        };
+        if state_ok {
+            let actions: VecDeque<_> = npc_instance.event_triggers.iter().cloned().collect();
+            commands.insert_resource(ActionQueue {
+                actions,
+                waiting_for: WaitingFor::Nothing,
+            });
+            return;
+        }
     }
     // If event_triggers is empty, default block behavior applies (no-op)
 
@@ -404,6 +432,19 @@ pub fn npc_trigger_system(
         };
 
         if npc_instance.trigger_mode != TriggerMode::Interaction {
+            continue;
+        }
+
+        // Check required_state condition
+        let state_ok = if let Some(ref required_state) = npc_instance.required_state {
+            game_state
+                .flags
+                .get(&required_state.0)
+                .is_some_and(|v| v == &required_state.1)
+        } else {
+            true
+        };
+        if !state_ok {
             continue;
         }
 

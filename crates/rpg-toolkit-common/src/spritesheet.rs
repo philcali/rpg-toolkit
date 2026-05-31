@@ -89,6 +89,10 @@ pub struct NpcInstance {
     /// Elevation level at which this NPC exists.
     #[serde(default)]
     pub elevation: u32,
+    /// If set, the NPC is only visible when the game state key matches the value.
+    /// When the condition fails, the NPC sprite is not spawned and collision is ignored.
+    #[serde(default)]
+    pub required_state: Option<(String, String)>,
 }
 
 /// Validates that spritesheet image dimensions are exactly 72×128 pixels.

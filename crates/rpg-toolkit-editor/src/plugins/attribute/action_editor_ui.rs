@@ -86,6 +86,22 @@ pub fn render_action_editor(
                 EventAction::SetPlayerAppearance { appearance } => {
                     format!("{}. SetPlayerAppearance — {:?}", i + 1, appearance)
                 }
+                EventAction::StateCheck {
+                    key,
+                    value,
+                    on_true,
+                    on_false,
+                } => {
+                    let val_str = value.as_deref().unwrap_or("*");
+                    format!(
+                        "{}. StateCheck — {}: {} | true:{} false:{}",
+                        i + 1,
+                        key,
+                        val_str,
+                        on_true.len(),
+                        on_false.len()
+                    )
+                }
             };
             if is_being_edited {
                 ui.label(
@@ -161,6 +177,7 @@ pub fn render_action_editor(
             ActionType::FadeTransition => "FadeTransition",
             ActionType::SetState => "SetState",
             ActionType::SetPlayerAppearance => "SetPlayerAppearance",
+            ActionType::StateCheck => "StateCheck",
         };
         egui::ComboBox::from_id_salt(format!("{}_action_type", id_salt))
             .selected_text(action_type_text)
@@ -195,6 +212,11 @@ pub fn render_action_editor(
                     &mut editor_state.action_type,
                     ActionType::SetPlayerAppearance,
                     "SetPlayerAppearance",
+                );
+                ui.selectable_value(
+                    &mut editor_state.action_type,
+                    ActionType::StateCheck,
+                    "StateCheck",
                 );
             });
     });
@@ -234,6 +256,9 @@ pub fn render_action_editor(
                 editor_state,
                 id_salt,
             );
+        }
+        ActionType::StateCheck => {
+            action_editor_forms::render_state_check_form(ui, actions, editor_state, id_salt);
         }
     }
 }
