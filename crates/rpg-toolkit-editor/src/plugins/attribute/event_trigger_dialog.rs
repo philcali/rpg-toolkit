@@ -62,6 +62,7 @@ pub fn event_trigger_panel_ui(
                 &mut dialog.action_editor,
                 "event_trigger",
                 &map_entries,
+                &project.face_portraits,
             );
 
             ui.separator();

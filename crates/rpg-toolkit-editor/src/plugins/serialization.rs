@@ -115,6 +115,7 @@ fn to_project_file(project: &Project) -> ProjectFile {
         project.spritesheets.clone(),
         project.player_spritesheet.clone(),
         project.dialog_texts.clone(),
+        project.face_portraits.clone(),
     )
 }
 
@@ -199,6 +200,7 @@ fn load_project_from_dir(
         spritesheets: project_file.spritesheets,
         player_spritesheet: project_file.player_spritesheet,
         dialog_texts: project_file.dialog_texts,
+        face_portraits: project_file.face_portraits,
     };
 
     editor_state.current_save_path = Some(dir.to_path_buf());
@@ -280,6 +282,7 @@ fn load_project_from_zip(
         spritesheets: project_file.spritesheets,
         player_spritesheet: project_file.player_spritesheet,
         dialog_texts: project_file.dialog_texts,
+        face_portraits: project_file.face_portraits,
     };
 
     editor_state.current_save_path = Some(temp_dir.path().to_path_buf());
@@ -344,6 +347,7 @@ fn load_project_from_json(
         spritesheets: project_file.spritesheets,
         player_spritesheet: project_file.player_spritesheet,
         dialog_texts: project_file.dialog_texts,
+        face_portraits: project_file.face_portraits,
     };
 
     editor_state.current_save_path = Some(json_path.to_path_buf());
@@ -598,6 +602,7 @@ fn save_to_json(
         project.spritesheets.clone(),
         project.player_spritesheet.clone(),
         project.dialog_texts.clone(),
+        project.face_portraits.clone(),
     );
 
     match project_file.serialize() {

@@ -20,6 +20,11 @@ path = "dialog_bleedthrough.rs"
 name = "preservation"
 path = "preservation.rs"
 
+[[test]]
+name = "markup_style_classification"
+path = "markup_style_classification.rs"
+
 [dev-dependencies]
 proptest = { workspace = true }
 rpg-toolkit-common = { path = "../../crates/rpg-toolkit-common" }
+rpg-toolkit-renderer = { path = "../../crates/rpg-toolkit-renderer" }

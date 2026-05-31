@@ -91,6 +91,19 @@ pub enum EditCommandKind {
         text_id: String,
         old_text: String,
     },
+    InsertFacePortrait {
+        id: String,
+        path: String,
+    },
+    UpdateFacePortrait {
+        id: String,
+        old_path: String,
+        new_path: String,
+    },
+    RemoveFacePortrait {
+        id: String,
+        path: String,
+    },
 }
 
 impl EditCommand {
@@ -218,7 +231,10 @@ impl EditCommand {
             }
             EditCommandKind::InsertDialogText { .. }
             | EditCommandKind::UpdateDialogText { .. }
-            | EditCommandKind::RemoveDialogText { .. } => {
+            | EditCommandKind::RemoveDialogText { .. }
+            | EditCommandKind::InsertFacePortrait { .. }
+            | EditCommandKind::UpdateFacePortrait { .. }
+            | EditCommandKind::RemoveFacePortrait { .. } => {
                 // No-op on MapData; handled at Project level by undo_redo plugin
             }
         }
@@ -353,7 +369,10 @@ impl EditCommand {
             }
             EditCommandKind::InsertDialogText { .. }
             | EditCommandKind::UpdateDialogText { .. }
-            | EditCommandKind::RemoveDialogText { .. } => {
+            | EditCommandKind::RemoveDialogText { .. }
+            | EditCommandKind::InsertFacePortrait { .. }
+            | EditCommandKind::UpdateFacePortrait { .. }
+            | EditCommandKind::RemoveFacePortrait { .. } => {
                 // No-op on MapData; handled at Project level by undo_redo plugin
             }
         }

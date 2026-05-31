@@ -5486,6 +5486,7 @@ version = "0.1.0"
 dependencies = [
  "proptest",
  "rpg-toolkit-common",
+ "rpg-toolkit-renderer",
 ]
 
 [[package]]

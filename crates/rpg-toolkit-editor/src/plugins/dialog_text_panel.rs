@@ -34,6 +34,14 @@ pub struct DialogTextPanelState {
     pub modal_text_content: String,
     /// If Some, we're editing an existing entry; if None, we're adding a new one.
     pub modal_editing_id: Option<String>,
+    /// Face portrait modal state.
+    pub portrait_modal_open: bool,
+    /// The portrait ID field in the modal.
+    pub portrait_modal_id: String,
+    /// The portrait asset path field in the modal.
+    pub portrait_modal_path: String,
+    /// If Some, we're editing an existing portrait entry; if None, we're adding a new one.
+    pub portrait_modal_editing_id: Option<String>,
 }
 
 /// A single usage of a Text_Id in the project.
@@ -164,6 +172,16 @@ pub enum DialogTextAction {
     NavigateToUsage {
         map_id: MapId,
     },
+}
+
+/// Deferred action from the face portrait section.
+pub enum FacePortraitAction {
+    Insert { id: String, path: String },
+    Update { id: String, new_path: String },
+    Remove { id: String },
+    OpenAddModal,
+    OpenEditModal { id: String, current_path: String },
+    CloseModal,
 }
 
 /// Renders the Dialog Text Panel section inside the left side panel.
@@ -346,6 +364,123 @@ pub fn render_dialog_text_panel(
             }
         }
     }
+
+    // ── Face Portraits section ──
+    ui.add_space(8.0);
+    ui.heading("Face Portraits");
+    ui.separator();
+
+    let mut portrait_actions: Vec<FacePortraitAction> = Vec::new();
+
+    let mut portrait_entries: Vec<(String, String)> = project
+        .face_portraits
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    portrait_entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+    if portrait_entries.is_empty() {
+        ui.label("No face portraits.");
+    } else {
+        egui::ScrollArea::vertical()
+            .id_salt("face_portraits_scroll")
+            .max_height(150.0)
+            .show(ui, |ui| {
+                for (portrait_id, asset_path) in &portrait_entries {
+                    ui.horizontal(|ui| {
+                        let filename = std::path::Path::new(asset_path)
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or(asset_path);
+                        let label_text = format!("{} — {}", portrait_id, filename);
+                        ui.label(&label_text);
+
+                        if ui
+                            .small_button("🔄")
+                            .on_hover_text("Replace image")
+                            .clicked()
+                        {
+                            portrait_actions.push(FacePortraitAction::OpenEditModal {
+                                id: portrait_id.clone(),
+                                current_path: asset_path.clone(),
+                            });
+                        }
+                        if ui.small_button("✕").clicked() {
+                            portrait_actions.push(FacePortraitAction::Remove {
+                                id: portrait_id.clone(),
+                            });
+                        }
+                    });
+                }
+            });
+    }
+
+    ui.add_space(4.0);
+
+    if ui.button("Add Portrait…").clicked() {
+        portrait_actions.push(FacePortraitAction::OpenAddModal);
+    }
+
+    // Apply deferred face portrait actions
+    for action in portrait_actions {
+        match action {
+            FacePortraitAction::Insert { id, path } => {
+                edit_events.write(EditCommand {
+                    kind: EditCommandKind::InsertFacePortrait {
+                        id: id.clone(),
+                        path,
+                    },
+                });
+                state.portrait_modal_open = false;
+                state.portrait_modal_id.clear();
+                state.portrait_modal_path.clear();
+                state.portrait_modal_editing_id = None;
+            }
+            FacePortraitAction::Update { id, new_path } => {
+                if let Some(old_path) = project.face_portraits.get(&id) {
+                    edit_events.write(EditCommand {
+                        kind: EditCommandKind::UpdateFacePortrait {
+                            id,
+                            old_path: old_path.clone(),
+                            new_path,
+                        },
+                    });
+                }
+                state.portrait_modal_open = false;
+                state.portrait_modal_id.clear();
+                state.portrait_modal_path.clear();
+                state.portrait_modal_editing_id = None;
+            }
+            FacePortraitAction::Remove { id } => {
+                if let Some(old_path) = project.face_portraits.get(&id) {
+                    edit_events.write(EditCommand {
+                        kind: EditCommandKind::RemoveFacePortrait {
+                            id: id.clone(),
+                            path: old_path.clone(),
+                        },
+                    });
+                }
+            }
+            FacePortraitAction::OpenAddModal => {
+                state.portrait_modal_open = true;
+                state.portrait_modal_id.clear();
+                state.portrait_modal_path.clear();
+                state.portrait_modal_editing_id = None;
+            }
+            FacePortraitAction::OpenEditModal { id, current_path } => {
+                state.portrait_modal_open = true;
+                state.portrait_modal_id = id.clone();
+                state.portrait_modal_path = current_path;
+                state.portrait_modal_editing_id = Some(id);
+            }
+            FacePortraitAction::CloseModal => {
+                state.portrait_modal_open = false;
+                state.portrait_modal_id.clear();
+                state.portrait_modal_path.clear();
+                state.portrait_modal_editing_id = None;
+            }
+        }
+    }
 }
 
 /// Renders the Dialog Text add/edit modal window.
@@ -466,6 +601,152 @@ pub fn render_dialog_text_modal(
                 state.modal_text_id.clear();
                 state.modal_text_content.clear();
                 state.modal_editing_id = None;
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Renders the Face Portrait add/edit modal window.
+/// Called from the egui system that has access to the egui context.
+pub fn render_face_portrait_modal(
+    ctx: &egui::Context,
+    project: &Project,
+    state: &mut DialogTextPanelState,
+    edit_events: &mut MessageWriter<EditCommand>,
+) {
+    if !state.portrait_modal_open {
+        return;
+    }
+
+    let is_editing = state.portrait_modal_editing_id.is_some();
+    let title = if is_editing {
+        "Edit Face Portrait"
+    } else {
+        "Add Face Portrait"
+    };
+
+    let mut action: Option<FacePortraitAction> = None;
+
+    egui::Window::new(title)
+        .collapsible(false)
+        .resizable(true)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Portrait ID:");
+                if is_editing {
+                    ui.label(egui::RichText::new(&state.portrait_modal_id).strong());
+                } else {
+                    ui.text_edit_singleline(&mut state.portrait_modal_id);
+                }
+            });
+
+            // File picker for portrait image
+            ui.horizontal(|ui| {
+                ui.label("Image:");
+                if state.portrait_modal_path.is_empty() {
+                    ui.label(egui::RichText::new("No file selected").weak());
+                } else {
+                    let filename = std::path::Path::new(&state.portrait_modal_path)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(&state.portrait_modal_path);
+                    ui.label(filename);
+                }
+                if ui.button("Load Portrait…").clicked() {
+                    let file = rfd::FileDialog::new()
+                        .add_filter("Images", &["png", "jpg", "jpeg"])
+                        .pick_file();
+                    if let Some(path) = file {
+                        state.portrait_modal_path = path.to_string_lossy().to_string();
+                    }
+                }
+            });
+
+            // Validation
+            if !is_editing {
+                let id_exists = !state.portrait_modal_id.is_empty()
+                    && project
+                        .face_portraits
+                        .contains_key(&state.portrait_modal_id);
+                if id_exists {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(255, 180, 0),
+                        "⚠ Portrait ID already exists",
+                    );
+                }
+            }
+
+            ui.separator();
+            ui.horizontal(|ui| {
+                if is_editing {
+                    let can_save = !state.portrait_modal_path.is_empty();
+                    if ui
+                        .add_enabled(can_save, egui::Button::new("Save"))
+                        .clicked()
+                    {
+                        action = Some(FacePortraitAction::Update {
+                            id: state.portrait_modal_id.clone(),
+                            new_path: state.portrait_modal_path.clone(),
+                        });
+                    }
+                } else {
+                    let id_exists = !state.portrait_modal_id.is_empty()
+                        && project
+                            .face_portraits
+                            .contains_key(&state.portrait_modal_id);
+                    let can_add = !state.portrait_modal_id.is_empty()
+                        && !state.portrait_modal_path.is_empty()
+                        && !id_exists;
+                    if ui.add_enabled(can_add, egui::Button::new("Add")).clicked() {
+                        action = Some(FacePortraitAction::Insert {
+                            id: state.portrait_modal_id.clone(),
+                            path: state.portrait_modal_path.clone(),
+                        });
+                    }
+                }
+                if ui.button("Cancel").clicked() {
+                    action = Some(FacePortraitAction::CloseModal);
+                }
+            });
+        });
+
+    // Apply action outside the closure
+    if let Some(action) = action {
+        match action {
+            FacePortraitAction::Insert { id, path } => {
+                edit_events.write(EditCommand {
+                    kind: EditCommandKind::InsertFacePortrait {
+                        id: id.clone(),
+                        path,
+                    },
+                });
+                state.portrait_modal_open = false;
+                state.portrait_modal_id.clear();
+                state.portrait_modal_path.clear();
+                state.portrait_modal_editing_id = None;
+            }
+            FacePortraitAction::Update { id, new_path } => {
+                if let Some(old_path) = project.face_portraits.get(&id) {
+                    edit_events.write(EditCommand {
+                        kind: EditCommandKind::UpdateFacePortrait {
+                            id,
+                            old_path: old_path.clone(),
+                            new_path,
+                        },
+                    });
+                }
+                state.portrait_modal_open = false;
+                state.portrait_modal_id.clear();
+                state.portrait_modal_path.clear();
+                state.portrait_modal_editing_id = None;
+            }
+            FacePortraitAction::CloseModal => {
+                state.portrait_modal_open = false;
+                state.portrait_modal_id.clear();
+                state.portrait_modal_path.clear();
+                state.portrait_modal_editing_id = None;
             }
             _ => {}
         }

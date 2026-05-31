@@ -27,6 +27,8 @@ pub struct Project {
     pub player_spritesheet: Option<SpritesheetId>,
     /// Dialog text entries: Text_Id → text string.
     pub dialog_texts: HashMap<String, String>,
+    /// Face portrait entries: portrait ID → asset path.
+    pub face_portraits: HashMap<String, String>,
 }
 
 impl Project {

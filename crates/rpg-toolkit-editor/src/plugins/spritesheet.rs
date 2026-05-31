@@ -225,6 +225,7 @@ pub fn process_spritesheet_remove(
             project.spritesheets.clone(),
             project.player_spritesheet.clone(),
             HashMap::new(),
+            HashMap::new(),
         );
         let refs = temp_project_file.compute_spritesheet_references(&remove_id);
 

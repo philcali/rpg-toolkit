@@ -91,6 +91,7 @@ pub fn render_show_dialog_form(
     actions: &mut Vec<EventAction>,
     editor_state: &mut ActionEditorState,
     id_salt: &str,
+    face_portraits: &std::collections::HashMap<String, String>,
 ) {
     let show_dialog_form_label = if editor_state.editing_index.is_some() {
         "Edit ShowDialog Action:"
@@ -161,6 +162,34 @@ pub fn render_show_dialog_form(
 
     ui.checkbox(&mut editor_state.dialog_movement_block, "Movement Block");
 
+    // Face portrait selector
+    ui.horizontal(|ui| {
+        ui.label("Face Portrait:");
+        let selected_text = match &editor_state.dialog_face_portrait {
+            Some(id) => id.clone(),
+            None => "None".to_string(),
+        };
+        egui::ComboBox::from_id_salt(format!("{}_face_portrait_select", id_salt))
+            .selected_text(&selected_text)
+            .show_ui(ui, |ui| {
+                if ui
+                    .selectable_label(editor_state.dialog_face_portrait.is_none(), "None")
+                    .clicked()
+                {
+                    editor_state.dialog_face_portrait = None;
+                }
+                let mut portrait_ids: Vec<&String> = face_portraits.keys().collect();
+                portrait_ids.sort();
+                for portrait_id in portrait_ids {
+                    let is_selected =
+                        editor_state.dialog_face_portrait.as_ref() == Some(portrait_id);
+                    if ui.selectable_label(is_selected, portrait_id).clicked() {
+                        editor_state.dialog_face_portrait = Some(portrait_id.clone());
+                    }
+                }
+            });
+    });
+
     let show_dialog_button_label = if editor_state.editing_index.is_some() {
         "Update ShowDialog"
     } else {
@@ -183,6 +212,7 @@ pub fn render_show_dialog_form(
         editor_state.dialog_text_speed = "30".to_string();
         editor_state.dialog_position = DialogPositionData::Bottom;
         editor_state.dialog_movement_block = true;
+        editor_state.dialog_face_portrait = None;
     }
     if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
         editor_state.editing_index = None;
@@ -191,6 +221,7 @@ pub fn render_show_dialog_form(
         editor_state.dialog_text_speed = "30".to_string();
         editor_state.dialog_position = DialogPositionData::Bottom;
         editor_state.dialog_movement_block = true;
+        editor_state.dialog_face_portrait = None;
     }
 }
 

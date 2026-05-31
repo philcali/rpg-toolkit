@@ -47,6 +47,10 @@ pub struct DialogConfigData {
     pub position: DialogPositionData,
     #[serde(default = "default_movement_block")]
     pub movement_block: bool,
+    #[serde(default)]
+    pub attribute_dialog: bool,
+    #[serde(default)]
+    pub face_portrait: Option<String>,
 }
 
 impl Default for DialogConfigData {
@@ -55,6 +59,8 @@ impl Default for DialogConfigData {
             text_speed: 30.0,
             position: DialogPositionData::Bottom,
             movement_block: true,
+            attribute_dialog: false,
+            face_portrait: None,
         }
     }
 }

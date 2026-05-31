@@ -18,6 +18,7 @@ pub fn render_action_editor(
     editor_state: &mut ActionEditorState,
     id_salt: &str,
     map_entries: &[(String, String)],
+    face_portraits: &std::collections::HashMap<String, String>,
 ) {
     // Display existing actions with remove/reorder/edit controls
     let mut remove_idx: Option<usize> = None;
@@ -235,7 +236,13 @@ pub fn render_action_editor(
             );
         }
         ActionType::ShowDialog => {
-            action_editor_forms::render_show_dialog_form(ui, actions, editor_state, id_salt);
+            action_editor_forms::render_show_dialog_form(
+                ui,
+                actions,
+                editor_state,
+                id_salt,
+                face_portraits,
+            );
         }
         ActionType::ScreenShake => {
             action_editor_forms::render_screen_shake_form(ui, actions, editor_state, id_salt);

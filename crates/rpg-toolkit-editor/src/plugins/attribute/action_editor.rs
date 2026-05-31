@@ -58,6 +58,7 @@ pub struct ActionEditorState {
     pub dialog_text_speed: String,
     pub dialog_position: DialogPositionData,
     pub dialog_movement_block: bool,
+    pub dialog_face_portrait: Option<String>,
     // ScreenShake fields
     pub shake_mode: ScreenShakeMode,
     pub shake_intensity: String,
@@ -94,6 +95,7 @@ impl Default for ActionEditorState {
             dialog_text_speed: "30".to_string(),
             dialog_position: DialogPositionData::Bottom,
             dialog_movement_block: true,
+            dialog_face_portrait: None,
             shake_mode: ScreenShakeMode::Timed,
             shake_intensity: "5.0".to_string(),
             shake_duration: "0.5".to_string(),
@@ -151,6 +153,7 @@ impl ActionEditorState {
                 self.dialog_text_speed = config.text_speed.to_string();
                 self.dialog_position = config.position.clone();
                 self.dialog_movement_block = config.movement_block;
+                self.dialog_face_portrait = config.face_portrait.clone();
             }
             EventAction::ScreenShake {
                 intensity,
@@ -243,6 +246,8 @@ impl ActionEditorState {
                     text_speed,
                     position: self.dialog_position.clone(),
                     movement_block: self.dialog_movement_block,
+                    attribute_dialog: false,
+                    face_portrait: self.dialog_face_portrait.clone(),
                 };
                 Some(EventAction::ShowDialog { text, config })
             }

@@ -6,6 +6,7 @@ use crate::data::project::Project;
 use crate::data::{EditCommand, MapDataEditorExt};
 use crate::plugins::dialog_text_panel::{
     DialogTextPanelState, TextIdIndex, render_dialog_text_modal, render_dialog_text_panel,
+    render_face_portrait_modal,
 };
 
 /// Plugin that renders the layer management panel and the map browser,
@@ -227,6 +228,9 @@ fn layer_panel_ui(
 
     // Dialog Text add/edit modal (rendered outside the panel)
     render_dialog_text_modal(ctx, &project, &mut dialog_text_state, &mut edit_events);
+
+    // Face Portrait add/edit modal (rendered outside the panel)
+    render_face_portrait_modal(ctx, &project, &mut dialog_text_state, &mut edit_events);
 
     // Apply deferred browser actions
     for action in browser_actions {
