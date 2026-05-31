@@ -5,6 +5,7 @@ pub mod dialog;
 pub mod effects;
 pub mod events;
 pub mod input;
+pub mod markup;
 pub mod resources;
 pub mod save;
 pub mod systems;
@@ -43,10 +44,13 @@ pub use effects::{
 };
 
 pub use dialog::{
-    DialogBox, DialogConfig, DialogPosition, DialogState, DialogText, DialogTextNode,
-    DialogTextRegistry, compute_visible_chars, dialog_config_from_data, dialog_text_from_data,
+    DialogBox, DialogConfig, DialogPanel, DialogPosition, DialogState, DialogText, DialogTextNode,
+    DialogTextRegistry, FacePortrait, OverflowIndicator, compute_visible_chars,
+    dialog_config_from_data, dialog_text_from_data,
 };
-pub use systems::dialog::{handle_dialog_event, handle_dialog_input, update_dialog_typewriter};
+pub use systems::dialog::{
+    detect_overflow, handle_dialog_event, handle_dialog_input, update_dialog_typewriter,
+};
 
 pub use resources::SavePath;
 pub use save::SaveFile;
@@ -116,6 +120,7 @@ impl Plugin for ProjectRendererPlugin {
                     screen_shake_system.after(update_camera),
                     fade_system.after(advance_action_queue),
                     handle_dialog_event.after(advance_action_queue),
+                    detect_overflow.after(handle_dialog_event),
                     update_dialog_typewriter.after(handle_dialog_event),
                     handle_dialog_input.after(update_dialog_typewriter),
                 ),

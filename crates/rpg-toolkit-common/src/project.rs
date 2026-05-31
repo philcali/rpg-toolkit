@@ -30,6 +30,9 @@ pub struct ProjectFile {
     /// Dialog text entries: Text_Id → text string.
     #[serde(default)]
     pub dialog_texts: HashMap<String, String>,
+    /// Face portrait entries: portrait ID → asset path.
+    #[serde(default)]
+    pub face_portraits: HashMap<String, String>,
 }
 
 impl ProjectFile {
@@ -41,6 +44,7 @@ impl ProjectFile {
         spritesheets: HashMap<SpritesheetId, CharacterSpritesheet>,
         player_spritesheet: Option<SpritesheetId>,
         dialog_texts: HashMap<String, String>,
+        face_portraits: HashMap<String, String>,
     ) -> Self {
         Self {
             maps,
@@ -49,6 +53,7 @@ impl ProjectFile {
             spritesheets,
             player_spritesheet,
             dialog_texts,
+            face_portraits,
         }
     }
 
@@ -224,6 +229,7 @@ impl ProjectFile {
             spritesheets: self.spritesheets.clone(),
             player_spritesheet: self.player_spritesheet.clone(),
             dialog_texts: self.dialog_texts.clone(),
+            face_portraits: self.face_portraits.clone(),
         }
     }
 }

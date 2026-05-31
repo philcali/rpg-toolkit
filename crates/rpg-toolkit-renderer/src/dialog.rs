@@ -23,6 +23,12 @@ pub struct DialogConfig {
     /// Whether to block player movement while dialog is active.
     #[serde(default = "default_movement_block")]
     pub movement_block: bool,
+    /// When true, renders without background/border (floating text).
+    #[serde(default)]
+    pub attribute_dialog: bool,
+    /// Optional face portrait image path (relative to project assets).
+    #[serde(default)]
+    pub face_portrait: Option<String>,
 }
 
 fn default_text_speed() -> f32 {
@@ -39,6 +45,8 @@ impl Default for DialogConfig {
             text_speed: 30.0,
             position: DialogPosition::Bottom,
             movement_block: true,
+            attribute_dialog: false,
+            face_portrait: None,
         }
     }
 }
@@ -117,6 +125,18 @@ pub struct DialogBox;
 #[derive(Component)]
 pub struct DialogTextNode;
 
+/// Marker for the inner dialog panel (the bordered/backgrounded box).
+#[derive(Component)]
+pub struct DialogPanel;
+
+/// Marker for the overflow indicator entity.
+#[derive(Component)]
+pub struct OverflowIndicator;
+
+/// Marker for the face portrait image entity.
+#[derive(Component)]
+pub struct FacePortrait;
+
 /// Convert common DialogTextData to renderer DialogText.
 pub fn dialog_text_from_data(data: &rpg_toolkit_common::DialogTextData) -> DialogText {
     match data {
@@ -135,6 +155,8 @@ pub fn dialog_config_from_data(data: &rpg_toolkit_common::DialogConfigData) -> D
             rpg_toolkit_common::DialogPositionData::Bottom => DialogPosition::Bottom,
         },
         movement_block: data.movement_block,
+        attribute_dialog: data.attribute_dialog,
+        face_portrait: data.face_portrait.clone(),
     }
 }
 

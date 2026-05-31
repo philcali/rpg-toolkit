@@ -58,13 +58,28 @@ fn arb_dialog_position() -> impl Strategy<Value = DialogPositionData> {
 }
 
 fn arb_dialog_config() -> impl Strategy<Value = DialogConfigData> {
-    (10.0f32..100.0, arb_dialog_position(), any::<bool>()).prop_map(
-        |(text_speed, position, movement_block)| DialogConfigData {
-            text_speed,
-            position,
-            movement_block,
-        },
+    (
+        10.0f32..100.0,
+        arb_dialog_position(),
+        any::<bool>(),
+        any::<bool>(),
+        any::<bool>(),
     )
+        .prop_map(
+            |(text_speed, position, movement_block, attribute_dialog, has_portrait)| {
+                DialogConfigData {
+                    text_speed,
+                    position,
+                    movement_block,
+                    attribute_dialog,
+                    face_portrait: if has_portrait {
+                        Some("assets/portrait.png".to_string())
+                    } else {
+                        None
+                    },
+                }
+            },
+        )
 }
 
 fn arb_dialog_text_data() -> impl Strategy<Value = DialogTextData> {
@@ -214,6 +229,7 @@ fn arb_project_file() -> impl Strategy<Value = ProjectFile> {
                     spritesheets,
                     player_spritesheet,
                     HashMap::new(), // no dialog texts needed for this property
+                    HashMap::new(), // no face portraits needed for this property
                 )
             },
         )

@@ -48,6 +48,19 @@ fn consume_edit_commands(
             }
             _ => {}
         }
+        // Face portrait commands operate on Project, not MapData
+        match &cmd.kind {
+            EditCommandKind::InsertFacePortrait { id, path } => {
+                project.face_portraits.insert(id.clone(), path.clone());
+            }
+            EditCommandKind::UpdateFacePortrait { id, new_path, .. } => {
+                project.face_portraits.insert(id.clone(), new_path.clone());
+            }
+            EditCommandKind::RemoveFacePortrait { id, .. } => {
+                project.face_portraits.remove(id);
+            }
+            _ => {}
+        }
         // Update TextIdIndex when event triggers change (apply direction)
         if let EditCommandKind::SetEventTrigger {
             layer_index,
@@ -131,6 +144,21 @@ fn undo_redo_keyboard(
                 _ => {}
             }
         }
+        // Handle face portrait undo at Project level
+        if let Some(cmd) = history.undo_stack.last() {
+            match &cmd.kind {
+                EditCommandKind::InsertFacePortrait { id, .. } => {
+                    project.face_portraits.remove(id);
+                }
+                EditCommandKind::UpdateFacePortrait { id, old_path, .. } => {
+                    project.face_portraits.insert(id.clone(), old_path.clone());
+                }
+                EditCommandKind::RemoveFacePortrait { id, path } => {
+                    project.face_portraits.insert(id.clone(), path.clone());
+                }
+                _ => {}
+            }
+        }
         // Update TextIdIndex on undo of SetEventTrigger (reverse direction: new→old)
         if let Some(cmd) = history.undo_stack.last()
             && let EditCommandKind::SetEventTrigger {
@@ -186,6 +214,21 @@ fn undo_redo_keyboard(
                 }
                 EditCommandKind::RemoveDialogText { text_id, .. } => {
                     project.dialog_texts.remove(text_id);
+                }
+                _ => {}
+            }
+        }
+        // Handle face portrait redo at Project level
+        if let Some(cmd) = history.redo_stack.last() {
+            match &cmd.kind {
+                EditCommandKind::InsertFacePortrait { id, path } => {
+                    project.face_portraits.insert(id.clone(), path.clone());
+                }
+                EditCommandKind::UpdateFacePortrait { id, new_path, .. } => {
+                    project.face_portraits.insert(id.clone(), new_path.clone());
+                }
+                EditCommandKind::RemoveFacePortrait { id, .. } => {
+                    project.face_portraits.remove(id);
                 }
                 _ => {}
             }

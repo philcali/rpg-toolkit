@@ -287,6 +287,7 @@ pub fn npc_placement_dialog_ui(
                 &mut dialog.action_editor,
                 "npc_event_trigger",
                 &map_entries,
+                &project.face_portraits,
             );
 
             ui.separator();

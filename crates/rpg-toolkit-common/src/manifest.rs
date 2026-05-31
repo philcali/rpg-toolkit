@@ -24,6 +24,8 @@ pub struct ProjectManifest {
     pub player_spritesheet: Option<SpritesheetId>,
     #[serde(default)]
     pub dialog_texts: HashMap<String, String>,
+    #[serde(default)]
+    pub face_portraits: HashMap<String, String>,
 }
 
 impl ProjectManifest {
@@ -162,6 +164,7 @@ impl ProjectManifest {
             self.spritesheets,
             self.player_spritesheet,
             self.dialog_texts,
+            self.face_portraits,
         ))
     }
 
@@ -273,6 +276,7 @@ mod tests {
             spritesheets,
             player_spritesheet: Some("ss-1".to_string()),
             dialog_texts: HashMap::new(),
+            face_portraits: HashMap::new(),
         };
 
         let bytes = manifest.to_bytes().unwrap();
@@ -295,6 +299,7 @@ mod tests {
             None,
             HashMap::new(),
             None,
+            HashMap::new(),
             HashMap::new(),
         );
 
@@ -340,6 +345,7 @@ mod tests {
             spritesheets: HashMap::new(),
             player_spritesheet: None,
             dialog_texts: HashMap::new(),
+            face_portraits: HashMap::new(),
         };
 
         let errors = manifest.validate_refs(&tmp);
