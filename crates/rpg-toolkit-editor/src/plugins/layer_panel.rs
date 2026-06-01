@@ -303,7 +303,7 @@ fn render_map_browser(
             .iter()
             .map(|(id, map)| (id.clone(), map.name.clone()))
             .collect();
-        entries.sort_by(|a, b| a.1.to_lowercase().cmp(&b.1.to_lowercase()));
+        entries.sort_by_key(|a| a.1.to_lowercase());
         entries
     };
 

@@ -15,8 +15,7 @@ pub fn filter_items<'a>(items: &'a [(String, String)], query: &str) -> Vec<&'a (
             .filter(|(_, label)| label.to_lowercase().contains(&query_lower))
             .collect()
     };
-    filtered
-        .sort_by(|(_, a_label), (_, b_label)| a_label.to_lowercase().cmp(&b_label.to_lowercase()));
+    filtered.sort_by_key(|(_, label)| label.to_lowercase());
     filtered
 }
 
