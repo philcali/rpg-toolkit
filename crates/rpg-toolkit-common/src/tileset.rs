@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::animation::TileAnimation;
 use crate::error::CommonError;
 
 /// Valid tile sizes in pixels.
@@ -13,6 +14,8 @@ pub struct TilesetMeta {
     pub tile_height: u32, // 8, 16, 32, or 64
     pub columns: u32,
     pub rows: u32,
+    #[serde(default)]
+    pub animations: Vec<TileAnimation>,
 }
 
 impl TilesetMeta {
@@ -43,6 +46,7 @@ impl TilesetMeta {
             tile_height: tile_h,
             columns,
             rows,
+            animations: Vec::new(),
         })
     }
 }

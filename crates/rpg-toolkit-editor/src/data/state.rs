@@ -7,7 +7,7 @@
 use bevy::prelude::*;
 use std::path::PathBuf;
 
-use rpg_toolkit_common::{CommonError, TileRef, TilesetId};
+use rpg_toolkit_common::{AnimationFrame, CommonError, TileRef, TilesetId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Resource)]
 pub enum EditorTool {
@@ -78,9 +78,42 @@ pub enum EditorError {
 #[derive(Resource, Default)]
 pub struct AnyDialogOpen(pub bool);
 
+/// State for the animation editor UI mode.
+///
+/// Tracks whether the animation editor panel is active, the in-progress
+/// frame sequence, and the frame duration setting.
+#[derive(Resource)]
+pub struct AnimationEditorState {
+    pub active: bool,
+    pub frames: Vec<AnimationFrame>,
+    pub frame_duration_ms: u32,
+    /// Inline error message shown when validation fails on confirm.
+    pub error_message: Option<String>,
+}
+
+impl Default for AnimationEditorState {
+    fn default() -> Self {
+        Self {
+            active: false,
+            frames: Vec::new(),
+            frame_duration_ms: 200,
+            error_message: None,
+        }
+    }
+}
+
 /// Zoom level boundaries.
 const MIN_ZOOM: f32 = 0.25;
 const MAX_ZOOM: f32 = 8.0;
+
+/// Palette tile scale boundaries.
+const MIN_PALETTE_SCALE: f32 = 16.0;
+const MAX_PALETTE_SCALE: f32 = 128.0;
+
+/// Clamps a palette tile scale value to the valid range [16.0, 128.0].
+pub fn clamp_palette_scale(scale: f32) -> f32 {
+    scale.clamp(MIN_PALETTE_SCALE, MAX_PALETTE_SCALE)
+}
 
 #[derive(Resource)]
 pub struct EditorState {
@@ -96,6 +129,10 @@ pub struct EditorState {
     pub previous_tool: Option<EditorTool>,
     /// If the project was loaded from a ZIP file, this is the original path.
     pub original_zip_path: Option<std::path::PathBuf>,
+    /// Display tile size for the palette grid (pixels). Clamped to [16, 128].
+    pub palette_tile_scale: f32,
+    /// Search buffer for the tileset searchable combobox.
+    pub tileset_search_buffer: String,
 }
 
 impl Default for EditorState {
@@ -112,6 +149,8 @@ impl Default for EditorState {
             attribute_tool: AttributeTool::default(),
             previous_tool: None,
             original_zip_path: None,
+            palette_tile_scale: 24.0,
+            tileset_search_buffer: String::new(),
         }
     }
 }

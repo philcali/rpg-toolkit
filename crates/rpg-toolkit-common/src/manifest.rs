@@ -250,6 +250,7 @@ mod tests {
                 tile_height: 16,
                 columns: 16,
                 rows: 16,
+                animations: Vec::new(),
             },
         );
 
@@ -333,6 +334,7 @@ mod tests {
                         tile_height: 16,
                         columns: 16,
                         rows: 16,
+                        animations: Vec::new(),
                     },
                 );
                 m

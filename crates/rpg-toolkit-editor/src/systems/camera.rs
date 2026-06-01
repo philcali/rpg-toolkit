@@ -4,6 +4,7 @@ use bevy::window::PrimaryWindow;
 
 use crate::data::{AnyDialogOpen, EditorState, EditorTool};
 use crate::plugins::canvas::EditorCamera;
+use crate::plugins::toolbar::CanvasRect;
 
 /// Zoom speed factor applied to each scroll tick.
 const ZOOM_SPEED: f32 = 0.1;
@@ -17,6 +18,7 @@ pub fn zoom_system(
     windows: Query<&Window, With<PrimaryWindow>>,
     mut editor: ResMut<EditorState>,
     any_dialog_open: Res<AnyDialogOpen>,
+    canvas_rect: Res<CanvasRect>,
 ) {
     // Block zoom when a modal dialog is open
     if any_dialog_open.0 {
@@ -32,6 +34,16 @@ pub fn zoom_system(
     let Some(cursor_screen) = window.cursor_position() else {
         return;
     };
+
+    // Block zoom when the cursor is over an egui panel (not on the canvas).
+    // This prevents scroll events in the tile palette from zooming the canvas.
+    if cursor_screen.x < canvas_rect.left
+        || cursor_screen.y < canvas_rect.top
+        || cursor_screen.x > canvas_rect.right
+        || cursor_screen.y > canvas_rect.bottom
+    {
+        return;
+    }
 
     let old_zoom = editor.zoom_level;
     let new_zoom = (old_zoom * (1.0 + scroll_y * ZOOM_SPEED)).clamp(0.25, 8.0);

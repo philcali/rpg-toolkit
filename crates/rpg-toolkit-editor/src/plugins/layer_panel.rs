@@ -8,6 +8,7 @@ use crate::plugins::dialog_text_panel::{
     DialogTextPanelState, TextIdIndex, render_dialog_text_modal, render_dialog_text_panel,
     render_face_portrait_modal,
 };
+use crate::plugins::searchable_combobox::filter_items;
 
 /// Plugin that renders the layer management panel and the map browser,
 /// combined into a single left side panel.
@@ -40,6 +41,7 @@ struct MapBrowserState {
     renaming: Option<MapId>,
     rename_buffer: String,
     pending_delete: Option<MapId>,
+    search_buffer: String,
 }
 
 /// Whether the map delete confirmation dialog is currently open.
@@ -294,62 +296,86 @@ fn render_map_browser(
         return;
     }
 
-    let mut sorted_maps: Vec<_> = project
-        .maps
-        .iter()
-        .map(|(id, map)| (id.clone(), map.name.clone()))
-        .collect();
-    sorted_maps.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
+    // Build sorted (id, name) pairs for the combobox
+    let sorted_maps: Vec<(String, String)> = {
+        let mut entries: Vec<_> = project
+            .maps
+            .iter()
+            .map(|(id, map)| (id.clone(), map.name.clone()))
+            .collect();
+        entries.sort_by_key(|a| a.1.to_lowercase());
+        entries
+    };
 
-    let active_map_id = project.active_map_id().cloned();
+    // Determine the currently active map name for display
+    let current_label = project
+        .active_map_id()
+        .and_then(|id| project.maps.get(id))
+        .map(|m| m.name.clone())
+        .unwrap_or_else(|| "Select a map…".to_string());
 
-    egui::ScrollArea::vertical()
-        .id_salt("maps_scroll")
-        .show(ui, |ui| {
-            for (map_id, map_name) in &sorted_maps {
-                let is_active = active_map_id.as_ref() == Some(map_id);
-                let is_renaming = browser_state.renaming.as_ref() == Some(map_id);
+    // Inline searchable combobox with context menu support on each item
+    egui::ComboBox::from_id_salt("map_browser_combo")
+        .selected_text(&current_label)
+        .show_ui(ui, |ui| {
+            // Search input at the top
+            ui.add(
+                egui::TextEdit::singleline(&mut browser_state.search_buffer)
+                    .hint_text("Search…")
+                    .desired_width(f32::INFINITY),
+            );
 
-                if is_renaming {
-                    let response = ui.text_edit_singleline(&mut browser_state.rename_buffer);
+            ui.separator();
 
-                    if response.gained_focus() || !response.has_focus() {
-                        response.request_focus();
-                    }
+            // Filter and display items
+            let filtered = filter_items(&sorted_maps, &browser_state.search_buffer);
 
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        let new_name = browser_state.rename_buffer.trim().to_string();
-                        if !new_name.is_empty() {
-                            actions.push(BrowserAction::CommitRename(map_id.clone(), new_name));
-                        } else {
-                            actions.push(BrowserAction::CancelRename);
-                        }
-                    } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                        actions.push(BrowserAction::CancelRename);
-                    }
-                } else {
-                    let response = ui.selectable_label(is_active, map_name);
+            if filtered.is_empty() {
+                ui.label("No results");
+            } else {
+                for (id, label) in filtered {
+                    let response = ui.selectable_label(false, label);
 
                     if response.clicked() {
-                        actions.push(BrowserAction::Open(map_id.clone()));
+                        actions.push(BrowserAction::Open(id.clone()));
                     }
 
+                    // Right-click context menu with Open, Rename, Delete
                     response.context_menu(|ui| {
                         if ui.button("Open").clicked() {
-                            actions.push(BrowserAction::Open(map_id.clone()));
+                            actions.push(BrowserAction::Open(id.clone()));
                             ui.close();
                         }
                         if ui.button("Rename").clicked() {
-                            actions
-                                .push(BrowserAction::StartRename(map_id.clone(), map_name.clone()));
+                            actions.push(BrowserAction::StartRename(id.clone(), label.clone()));
                             ui.close();
                         }
                         if ui.button("Delete").clicked() {
-                            actions.push(BrowserAction::RequestDelete(map_id.clone()));
+                            actions.push(BrowserAction::RequestDelete(id.clone()));
                             ui.close();
                         }
                     });
                 }
             }
         });
+
+    // Inline rename editing (triggered from context menu)
+    if let Some(ref renaming_id) = browser_state.renaming.clone() {
+        let response = ui.text_edit_singleline(&mut browser_state.rename_buffer);
+
+        if response.gained_focus() || !response.has_focus() {
+            response.request_focus();
+        }
+
+        if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            let new_name = browser_state.rename_buffer.trim().to_string();
+            if !new_name.is_empty() {
+                actions.push(BrowserAction::CommitRename(renaming_id.clone(), new_name));
+            } else {
+                actions.push(BrowserAction::CancelRename);
+            }
+        } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            actions.push(BrowserAction::CancelRename);
+        }
+    }
 }

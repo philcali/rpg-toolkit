@@ -5,12 +5,16 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::data::map::TileRef;
 use crate::data::project::Project;
-use crate::data::{EditorState, StampBrushSelection};
+use crate::data::{AnimationEditorState, EditorState, StampBrushSelection, clamp_palette_scale};
 use crate::plugins::app_shell::ErrorDialog;
+use crate::plugins::searchable_combobox::searchable_combobox;
 use crate::plugins::spritesheet::{
     RemoveSpritesheetDialog, process_spritesheet_remove, spritesheet_section_ui,
 };
-use rpg_toolkit_common::SpritesheetId;
+use rpg_toolkit_common::{
+    AnimationFrame, SpritesheetId, TileAnimation, compute_animation_frame_index,
+    validate_tile_animation,
+};
 
 /// Tracks the drag start tile position in egui memory for stamp brush selection.
 #[derive(Clone, Default)]
@@ -31,10 +35,12 @@ pub struct TilePalettePlugin;
 
 impl Plugin for TilePalettePlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SpritesheetTextures>().add_systems(
-            EguiPrimaryContextPass,
-            (sync_spritesheet_textures, tile_palette_ui).chain(),
-        );
+        app.init_resource::<SpritesheetTextures>()
+            .init_resource::<AnimationEditorState>()
+            .add_systems(
+                EguiPrimaryContextPass,
+                (sync_spritesheet_textures, tile_palette_ui).chain(),
+            );
     }
 }
 
@@ -67,6 +73,7 @@ fn tile_palette_ui(
     mut error_dialog: ResMut<ErrorDialog>,
     mut remove_dialog: ResMut<RemoveSpritesheetDialog>,
     ss_textures: Res<SpritesheetTextures>,
+    mut anim_state: ResMut<AnimationEditorState>,
 ) -> Result {
     // If project has no tilesets, show placeholder + spritesheet section
     let has_tilesets = !project.tilesets.is_empty();
@@ -114,6 +121,13 @@ fn tile_palette_ui(
 
     if !active_tab_valid {
         editor_state.active_tileset_tab = sorted_ids.first().map(|(id, _)| id.clone());
+        // Set default palette scale based on the tileset's tile width
+        if let Some((id, _)) = sorted_ids.first()
+            && let Some(entry) = project.tilesets.get(id)
+        {
+            let default_scale = (entry.meta.tile_width as f32).max(24.0);
+            editor_state.palette_tile_scale = clamp_palette_scale(default_scale);
+        }
     }
 
     let active_tileset_id = editor_state.active_tileset_tab.clone();
@@ -145,16 +159,22 @@ fn tile_palette_ui(
             ui.heading("Tile Palette");
             ui.separator();
 
-            // Tileset Tab Bar
-            ui.horizontal_wrapped(|ui| {
-                for (id, path) in &sorted_ids {
-                    let label = tileset_tab_label(path);
-                    let is_active = active_tileset_id.as_deref() == Some(id.as_str());
-                    if ui.selectable_label(is_active, &label).clicked() {
-                        editor_state.active_tileset_tab = Some(id.clone());
-                    }
-                }
-            });
+            // Tileset Selector (searchable combobox)
+            let current_label = active_tileset_id
+                .as_ref()
+                .and_then(|id| sorted_ids.iter().find(|(sid, _)| sid == id))
+                .map(|(_, path)| tileset_tab_label(path))
+                .unwrap_or_else(|| "Select tileset…".to_string());
+
+            if let Some(selected_id) = searchable_combobox(
+                ui,
+                "tileset_selector",
+                &current_label,
+                &sorted_ids,
+                &mut editor_state.tileset_search_buffer,
+            ) {
+                editor_state.active_tileset_tab = Some(selected_id);
+            }
             ui.separator();
 
             // Find the active tileset entry and its egui texture
@@ -199,6 +219,16 @@ fn tile_palette_ui(
                 rows,
                 columns * rows
             ));
+
+            // Zoom slider for palette tile scale
+            ui.horizontal(|ui| {
+                ui.label("Zoom:");
+                let slider = egui::Slider::new(&mut editor_state.palette_tile_scale, 16.0..=128.0)
+                    .clamping(egui::SliderClamping::Always);
+                ui.add(slider);
+            });
+            editor_state.palette_tile_scale = clamp_palette_scale(editor_state.palette_tile_scale);
+
             ui.separator();
 
             // Active brush / stamp indicator
@@ -232,13 +262,8 @@ fn tile_palette_ui(
             let img_w = (columns * tile_w) as f32;
             let img_h = (rows * tile_h) as f32;
 
-            // Compute display tile size to fit the panel width
-            let available_width = ui.available_width();
-            // Account for grid spacing (1px between tiles)
-            let spacing_total = (columns.saturating_sub(1)) as f32;
-            let display_tile_size = ((available_width - spacing_total) / columns as f32)
-                .floor()
-                .max(8.0);
+            // Use the user-controlled palette tile scale as display tile size
+            let display_tile_size = editor_state.palette_tile_scale;
 
             // Read drag state from egui memory
             let drag_id = egui::Id::new("palette_drag_state");
@@ -248,7 +273,7 @@ fn tile_palette_ui(
 
             egui::ScrollArea::both()
                 .id_salt("tile_grid_scroll")
-                .max_height(ui.available_height() - 120.0) // Reserve space for spritesheet section
+                .max_height(300.0) // Fixed height so the grid doesn't push animation editor out of view
                 .show(ui, |ui| {
                     // Collect tile responses so we can process drag logic after the grid
                     let mut tile_responses: Vec<(u32, u32, egui::Response)> = Vec::new();
@@ -398,7 +423,16 @@ fn tile_palette_ui(
                             let w = max_col - min_col + 1;
                             let h = max_row - min_row + 1;
 
-                            if w == 1 && h == 1 {
+                            if anim_state.active {
+                                // In animation editor mode, add clicked tile as a frame
+                                if w == 1 && h == 1 {
+                                    anim_state.frames.push(AnimationFrame {
+                                        col: min_col,
+                                        row: min_row,
+                                    });
+                                    anim_state.error_message = None;
+                                }
+                            } else if w == 1 && h == 1 {
                                 // Single-click: set active_brush, clear stamp
                                 editor_state.active_brush = Some(TileRef {
                                     tileset_id: active_id.clone(),
@@ -425,19 +459,204 @@ fn tile_palette_ui(
                         }
                         drag_state.start = None;
                     } else if let Some((col, row)) = clicked_tile {
-                        // Simple click with no drag — select single tile
-                        editor_state.active_brush = Some(TileRef {
-                            tileset_id: active_id.clone(),
-                            col,
-                            row,
-                        });
-                        editor_state.stamp_brush = None;
+                        if anim_state.active {
+                            // In animation editor mode, add clicked tile as a frame
+                            anim_state.frames.push(AnimationFrame { col, row });
+                            anim_state.error_message = None;
+                        } else {
+                            // Simple click with no drag — select single tile
+                            editor_state.active_brush = Some(TileRef {
+                                tileset_id: active_id.clone(),
+                                col,
+                                row,
+                            });
+                            editor_state.stamp_brush = None;
+                        }
                         drag_state.start = None;
                     }
                 });
 
             // Persist drag state back to egui memory
             ui.memory_mut(|mem| mem.data.insert_temp(drag_id, drag_state));
+
+            // ── Animation Editor section ──
+            ui.add_space(8.0);
+            ui.separator();
+
+            let toggle_label = if anim_state.active {
+                "⏹ Animation Editor (Active)"
+            } else {
+                "▶ Animation Editor"
+            };
+            if ui.button(toggle_label).clicked() {
+                anim_state.active = !anim_state.active;
+                if !anim_state.active {
+                    // Reset state when toggling off
+                    anim_state.frames.clear();
+                    anim_state.frame_duration_ms = 200;
+                    anim_state.error_message = None;
+                }
+            }
+
+            if anim_state.active {
+                ui.add_space(4.0);
+                ui.label("Click tiles above to add frames.");
+                ui.add_space(4.0);
+
+                // Frame duration input
+                ui.horizontal(|ui| {
+                    ui.label("Frame duration (ms):");
+                    let mut duration = anim_state.frame_duration_ms as f64;
+                    let drag_value = egui::DragValue::new(&mut duration)
+                        .range(1.0..=10000.0)
+                        .speed(1.0);
+                    if ui.add(drag_value).changed() {
+                        anim_state.frame_duration_ms = duration as u32;
+                        anim_state.error_message = None;
+                    }
+                });
+
+                ui.add_space(4.0);
+                ui.label(format!("Frames: {}", anim_state.frames.len()));
+
+                // Animation sequence list
+                let mut remove_idx: Option<usize> = None;
+                let mut swap_pair: Option<(usize, usize)> = None;
+
+                egui::ScrollArea::vertical()
+                    .id_salt("anim_frames_scroll")
+                    .max_height(150.0)
+                    .show(ui, |ui| {
+                        for (i, frame) in anim_state.frames.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                // Frame number and coordinates
+                                ui.label(format!("{}. ({}, {})", i + 1, frame.col, frame.row));
+
+                                // Small tile preview
+                                let uv_min = egui::pos2(
+                                    (frame.col * tile_w) as f32 / img_w,
+                                    (frame.row * tile_h) as f32 / img_h,
+                                );
+                                let uv_max = egui::pos2(
+                                    ((frame.col + 1) * tile_w) as f32 / img_w,
+                                    ((frame.row + 1) * tile_h) as f32 / img_h,
+                                );
+                                let uv = egui::Rect::from_min_max(uv_min, uv_max);
+                                let preview = egui::Image::new(egui::load::SizedTexture::new(
+                                    egui_texture_id,
+                                    [20.0, 20.0],
+                                ))
+                                .uv(uv);
+                                ui.add(preview);
+
+                                // Move up button
+                                if ui
+                                    .add_enabled(i > 0, egui::Button::new("↑").small())
+                                    .clicked()
+                                {
+                                    swap_pair = Some((i, i - 1));
+                                }
+
+                                // Move down button
+                                let last_idx = anim_state.frames.len().saturating_sub(1);
+                                if ui
+                                    .add_enabled(i < last_idx, egui::Button::new("↓").small())
+                                    .clicked()
+                                {
+                                    swap_pair = Some((i, i + 1));
+                                }
+
+                                // Remove button
+                                if ui.button("×").clicked() {
+                                    remove_idx = Some(i);
+                                }
+                            });
+                        }
+                    });
+
+                // Apply reorder/remove after iteration
+                if let Some((a, b)) = swap_pair {
+                    anim_state.frames.swap(a, b);
+                    anim_state.error_message = None;
+                }
+                if let Some(idx) = remove_idx {
+                    anim_state.frames.remove(idx);
+                    anim_state.error_message = None;
+                }
+
+                // Live animation preview
+                if anim_state.frames.len() >= 2 {
+                    ui.add_space(4.0);
+                    ui.separator();
+                    ui.label("Preview:");
+
+                    let elapsed_secs = ui.ctx().input(|i| i.time);
+                    let elapsed_ms = (elapsed_secs * 1000.0) as u64;
+                    let frame_idx = compute_animation_frame_index(
+                        elapsed_ms,
+                        anim_state.frame_duration_ms,
+                        anim_state.frames.len(),
+                    );
+                    let preview_frame = &anim_state.frames[frame_idx];
+
+                    let uv_min = egui::pos2(
+                        (preview_frame.col * tile_w) as f32 / img_w,
+                        (preview_frame.row * tile_h) as f32 / img_h,
+                    );
+                    let uv_max = egui::pos2(
+                        ((preview_frame.col + 1) * tile_w) as f32 / img_w,
+                        ((preview_frame.row + 1) * tile_h) as f32 / img_h,
+                    );
+                    let uv = egui::Rect::from_min_max(uv_min, uv_max);
+                    let preview_image = egui::Image::new(egui::load::SizedTexture::new(
+                        egui_texture_id,
+                        [48.0, 48.0],
+                    ))
+                    .uv(uv);
+                    ui.add(preview_image);
+
+                    // Request repaint so the animation keeps updating
+                    ui.ctx().request_repaint();
+                }
+
+                ui.add_space(4.0);
+
+                // Confirm and Cancel buttons
+                ui.horizontal(|ui| {
+                    if ui.button("Confirm").clicked() {
+                        let animation = TileAnimation {
+                            frames: anim_state.frames.clone(),
+                            frame_duration_ms: anim_state.frame_duration_ms,
+                        };
+                        match validate_tile_animation(&animation, columns, rows) {
+                            Ok(()) => {
+                                if let Some(tileset_entry) = project.tilesets.get_mut(&active_id) {
+                                    tileset_entry.meta.animations.push(animation);
+                                }
+                                // Reset animation editor state
+                                anim_state.frames.clear();
+                                anim_state.frame_duration_ms = 200;
+                                anim_state.active = false;
+                                anim_state.error_message = None;
+                            }
+                            Err(e) => {
+                                anim_state.error_message = Some(e.to_string());
+                            }
+                        }
+                    }
+                    if ui.button("Cancel").clicked() {
+                        anim_state.frames.clear();
+                        anim_state.frame_duration_ms = 200;
+                        anim_state.active = false;
+                        anim_state.error_message = None;
+                    }
+                });
+
+                // Show inline error message if validation failed
+                if let Some(ref err_msg) = anim_state.error_message {
+                    ui.colored_label(egui::Color32::RED, err_msg);
+                }
+            }
 
             // ── Spritesheet section (below tile grid) ──
             ui.add_space(8.0);

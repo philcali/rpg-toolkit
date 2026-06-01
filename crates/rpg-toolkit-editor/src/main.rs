@@ -48,12 +48,16 @@ fn main() {
         .init_resource::<data::Project>()
         .init_resource::<TextIdIndex>()
         .init_resource::<systems::input::CursorWorldState>()
+        .init_resource::<systems::render::EditorAnimationTick>()
         .add_systems(
             Update,
             (
                 systems::input::update_cursor_state,
+                systems::render::tick_editor_animation,
                 systems::render::sync_tile_sprites,
-            ),
+                systems::render::animate_editor_tiles,
+            )
+                .chain(),
         )
         .run();
 }

@@ -24,7 +24,20 @@ path = "preservation.rs"
 name = "markup_style_classification"
 path = "markup_style_classification.rs"
 
+[[test]]
+name = "tile_animation"
+path = "tile_animation.rs"
+
+[[test]]
+name = "searchable_filter"
+path = "searchable_filter.rs"
+
+[[test]]
+name = "palette_scale"
+path = "palette_scale.rs"
+
 [dev-dependencies]
 proptest = { workspace = true }
+serde_json = { workspace = true }
 rpg-toolkit-common = { path = "../../crates/rpg-toolkit-common" }
 rpg-toolkit-renderer = { path = "../../crates/rpg-toolkit-renderer" }
