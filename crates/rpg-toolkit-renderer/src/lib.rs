@@ -24,8 +24,9 @@ pub use resources::{
 pub use systems::camera::{apply_pixel_scale, compute_zoom_to_fit, spawn_camera, update_camera};
 pub use systems::collision::is_tile_blocked;
 pub use systems::map_render::{
-    compute_tile_z, init_npc_positions, resort_tile_z_on_elevation_change, spawn_npc_sprites,
-    sync_map_sprites,
+    RendererAnimatedTile, RendererAnimationTick, animate_renderer_tiles, compute_tile_z,
+    init_npc_positions, resort_tile_z_on_elevation_change, spawn_npc_sprites, sync_map_sprites,
+    tick_renderer_animation,
 };
 pub use systems::npc::{
     npc_patrol_animation, npc_patrol_movement, npc_trigger_system, read_interaction_input,
@@ -73,6 +74,7 @@ impl Plugin for ProjectRendererPlugin {
             .init_resource::<InteractionIntent>()
             .init_resource::<NpcCollisionEvent>()
             .init_resource::<GameState>()
+            .init_resource::<RendererAnimationTick>()
             // Events
             .add_message::<MapChanged>()
             .add_message::<PlayerMoved>()
@@ -93,6 +95,7 @@ impl Plugin for ProjectRendererPlugin {
                 Update,
                 (
                     read_input,
+                    tick_renderer_animation,
                     read_interaction_input.after(read_input),
                     player_movement.after(read_input),
                     npc_patrol_movement.after(player_movement),
@@ -104,7 +107,8 @@ impl Plugin for ProjectRendererPlugin {
                     advance_action_queue.after(npc_trigger_system),
                     handle_map_change.after(advance_action_queue),
                     sync_map_sprites.after(handle_map_change),
-                    spawn_npc_sprites.after(sync_map_sprites),
+                    animate_renderer_tiles.after(sync_map_sprites),
+                    spawn_npc_sprites.after(animate_renderer_tiles),
                     init_npc_positions
                         .after(spawn_npc_sprites)
                         .before(npc_patrol_movement),

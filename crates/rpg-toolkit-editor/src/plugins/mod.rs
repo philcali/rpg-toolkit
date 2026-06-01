@@ -4,6 +4,7 @@ pub mod canvas;
 pub mod dialog_text_panel;
 pub mod layer_panel;
 pub mod painting;
+pub mod searchable_combobox;
 pub mod serialization;
 pub mod spritesheet;
 pub mod tile_palette;

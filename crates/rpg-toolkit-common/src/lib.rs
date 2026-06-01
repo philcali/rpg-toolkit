@@ -1,3 +1,4 @@
+pub mod animation;
 pub mod error;
 pub mod manifest;
 pub mod map;
@@ -5,6 +6,9 @@ pub mod project;
 pub mod spritesheet;
 pub mod tileset;
 
+pub use animation::{
+    AnimationFrame, TileAnimation, compute_animation_frame_index, validate_tile_animation,
+};
 pub use error::CommonError;
 pub use manifest::ProjectManifest;
 pub use map::{

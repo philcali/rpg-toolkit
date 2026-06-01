@@ -12,4 +12,10 @@ pub enum CommonError {
     ProjectDirectoryError(String),
     #[error("Failed to process ZIP archive: {0}")]
     ZipError(String),
+    #[error("animation must have at least 2 frames")]
+    AnimationTooFewFrames,
+    #[error("frame duration must be greater than zero")]
+    AnimationInvalidDuration,
+    #[error("frame ({col}, {row}) out of tileset bounds")]
+    AnimationFrameOutOfBounds { col: u32, row: u32 },
 }

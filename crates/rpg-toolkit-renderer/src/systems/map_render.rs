@@ -6,7 +6,27 @@ use crate::components::{
 use crate::events::MapChanged;
 use crate::resources::{GameState, NpcPositions, RendererProjectData, RendererState};
 use crate::systems::player::grid_to_world;
-use rpg_toolkit_common::sprite_atlas_index;
+use rpg_toolkit_common::{TilesetId, compute_animation_frame_index, sprite_atlas_index};
+
+/// Global animation clock for the game renderer.
+/// Accumulates elapsed time each frame for animation cycling.
+#[derive(Resource, Default)]
+pub struct RendererAnimationTick {
+    pub elapsed_ms: u64,
+}
+
+/// System that increments the renderer animation clock by delta time each frame.
+pub fn tick_renderer_animation(time: Res<Time>, mut tick: ResMut<RendererAnimationTick>) {
+    tick.elapsed_ms += time.delta().as_millis() as u64;
+}
+
+/// Marker component for tiles that participate in an animation in the renderer.
+/// Stored on the sprite entity so the animation system can update its atlas index.
+#[derive(Component)]
+pub struct RendererAnimatedTile {
+    pub tileset_id: TilesetId,
+    pub animation_index: usize,
+}
 
 /// Computes the Z value for a tile sprite based on its elevation relative to the player.
 ///
@@ -121,7 +141,19 @@ pub fn sync_map_sprites(
 
                 let z = compute_tile_z(tile_elevation, player_elevation, layer_index, num_layers);
 
-                commands.spawn((
+                // Check if this tile is the first frame of any animation in its tileset
+                let animation_match =
+                    tileset_meta
+                        .animations
+                        .iter()
+                        .enumerate()
+                        .find(|(_, anim)| {
+                            anim.frames
+                                .first()
+                                .is_some_and(|f| f.col == tile_ref.col && f.row == tile_ref.row)
+                        });
+
+                let mut entity_commands = commands.spawn((
                     RendererTileSprite {
                         layer_index,
                         x: x as u32,
@@ -137,6 +169,13 @@ pub fn sync_map_sprites(
                     },
                     Transform::from_xyz(world_pos.x, world_pos.y, z),
                 ));
+
+                if let Some((idx, _)) = animation_match {
+                    entity_commands.insert(RendererAnimatedTile {
+                        tileset_id: tile_ref.tileset_id.clone(),
+                        animation_index: idx,
+                    });
+                }
             }
         }
     }
@@ -362,4 +401,39 @@ pub fn init_npc_positions(
             Some((npc.x, npc.y, npc.elevation))
         })
         .collect();
+}
+
+/// System that animates tiles with the RendererAnimatedTile component.
+/// Runs each frame to update atlas indices based on the global animation clock.
+pub fn animate_renderer_tiles(
+    tick: Res<RendererAnimationTick>,
+    project_data: Res<RendererProjectData>,
+    mut query: Query<(&RendererAnimatedTile, &mut Sprite)>,
+) {
+    for (anim_tile, mut sprite) in query.iter_mut() {
+        let Some(tileset_meta) = project_data
+            .project_file
+            .tilesets
+            .get(&anim_tile.tileset_id)
+        else {
+            continue;
+        };
+        let Some(animation) = tileset_meta.animations.get(anim_tile.animation_index) else {
+            continue;
+        };
+
+        let frame_idx = compute_animation_frame_index(
+            tick.elapsed_ms,
+            animation.frame_duration_ms,
+            animation.frames.len(),
+        );
+
+        let frame = &animation.frames[frame_idx];
+        let atlas_index = (frame.row * tileset_meta.columns + frame.col) as usize;
+
+        // Update the sprite's texture atlas index
+        if let Some(ref mut atlas) = sprite.texture_atlas {
+            atlas.index = atlas_index;
+        }
+    }
 }

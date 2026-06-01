@@ -5487,6 +5487,7 @@ dependencies = [
  "proptest",
  "rpg-toolkit-common",
  "rpg-toolkit-renderer",
+ "serde_json",
 ]
 
 [[package]]

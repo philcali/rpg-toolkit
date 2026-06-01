@@ -9,6 +9,7 @@ pub use commands::EditCommand;
 pub use map::MapDataEditorExt;
 pub use project::{Project, ProjectFile};
 pub use state::{
-    AnyDialogOpen, AttributeTool, EditorMode, EditorState, EditorTool, StampBrushSelection,
+    AnimationEditorState, AnyDialogOpen, AttributeTool, EditorMode, EditorState, EditorTool,
+    StampBrushSelection, clamp_palette_scale,
 };
 pub use tileset::TilesetMeta;
