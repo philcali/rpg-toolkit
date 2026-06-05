@@ -188,6 +188,14 @@ pub fn attribute_click_system(mut params: AttributeClickParams) {
                 .map(|a| a.event_trigger.clone())
                 .unwrap_or_default();
 
+            let existing_conditional = map
+                .layers
+                .get(layer_index)
+                .and_then(|l| l.attributes.cells.get(row as usize))
+                .and_then(|r| r.get(col as usize))
+                .map(|a| a.conditional_triggers.clone())
+                .unwrap_or_default();
+
             // Open the event trigger dialog populated with existing data
             let dialog = &mut *params.event_trigger_dialog;
             dialog.open = true;
@@ -196,6 +204,9 @@ pub fn attribute_click_system(mut params: AttributeClickParams) {
             dialog.tile_y = row;
             dialog.actions = existing.clone();
             dialog.original_actions = existing;
+            dialog.conditional_triggers = existing_conditional.clone();
+            dialog.original_conditional_triggers = existing_conditional;
+            dialog.conditional_trigger_editors = Vec::new();
             dialog.action_editor.reset();
         }
 

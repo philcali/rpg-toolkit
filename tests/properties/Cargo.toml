@@ -36,6 +36,10 @@ path = "searchable_filter.rs"
 name = "palette_scale"
 path = "palette_scale.rs"
 
+[[test]]
+name = "event_branching"
+path = "event_branching.rs"
+
 [dev-dependencies]
 proptest = { workspace = true }
 serde_json = { workspace = true }

@@ -5,11 +5,13 @@ use bevy_egui::{EguiContexts, egui};
 
 use super::action_editor::ActionEditorState;
 use super::action_editor_ui::render_action_editor;
+use super::event_trigger_dialog::render_conditional_triggers_panel;
 use crate::data::Project;
 use crate::data::commands::{EditCommand, EditCommandKind};
 use crate::data::map::EventAction;
 use rpg_toolkit_common::{
-    FacingDirection, NpcInstance, PatrolConfig, PatrolMode, SpritesheetId, TriggerMode,
+    ConditionalTrigger, FacingDirection, NpcInstance, PatrolConfig, PatrolMode, SpritesheetId,
+    TriggerMode,
 };
 
 /// Resource for the NPC placement/editing dialog.
@@ -33,6 +35,9 @@ pub struct NpcPlacementDialog {
     pub event_triggers: Vec<EventAction>,
     // Shared action editor state
     pub action_editor: ActionEditorState,
+    // Conditional triggers
+    pub conditional_triggers: Vec<ConditionalTrigger>,
+    pub conditional_trigger_editors: Vec<ActionEditorState>,
     // Conditional visibility
     pub required_state_key: String,
     pub required_state_value: String,
@@ -57,6 +62,8 @@ impl Default for NpcPlacementDialog {
             trigger_mode: TriggerMode::Interaction,
             event_triggers: Vec::new(),
             action_editor: ActionEditorState::default(),
+            conditional_triggers: Vec::new(),
+            conditional_trigger_editors: Vec::new(),
             required_state_key: String::new(),
             required_state_value: String::new(),
             has_required_state: false,
@@ -104,6 +111,9 @@ impl NpcPlacementDialog {
         // Pre-populate event trigger config
         self.trigger_mode = npc.trigger_mode;
         self.event_triggers = npc.event_triggers.clone();
+        // Pre-populate conditional triggers
+        self.conditional_triggers = npc.conditional_triggers.clone();
+        self.conditional_trigger_editors = Vec::new();
         // Pre-populate required_state
         if let Some(ref rs) = npc.required_state {
             self.has_required_state = true;
@@ -281,6 +291,22 @@ pub fn npc_placement_dialog_ui(
             });
 
             let dialog = &mut *dialog;
+
+            // Conditional Triggers section
+            ui.separator();
+            render_conditional_triggers_panel(
+                ui,
+                &mut dialog.conditional_triggers,
+                &mut dialog.conditional_trigger_editors,
+                "npc_cond_trig",
+                &map_entries,
+                &project.face_portraits,
+            );
+
+            ui.separator();
+            ui.label(egui::RichText::new("Default Actions").strong());
+            ui.label("Used when no conditional trigger matches:");
+
             render_action_editor(
                 ui,
                 &mut dialog.event_triggers,
@@ -288,6 +314,7 @@ pub fn npc_placement_dialog_ui(
                 "npc_event_trigger",
                 &map_entries,
                 &project.face_portraits,
+                0,
             );
 
             ui.separator();
@@ -343,6 +370,7 @@ pub fn npc_placement_dialog_ui(
                 } else {
                     None
                 },
+                conditional_triggers: dialog.conditional_triggers.clone(),
             };
 
             if let Some(map) = project.active_map_mut() {

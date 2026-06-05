@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::condition::ConditionalTrigger;
 use crate::error::CommonError;
 
 /// Type alias for spritesheet identifiers (UUID v4 strings).
@@ -93,6 +94,10 @@ pub struct NpcInstance {
     /// When the condition fails, the NPC sprite is not spawned and collision is ignored.
     #[serde(default)]
     pub required_state: Option<(String, String)>,
+    /// Condition-gated trigger overrides evaluated before the default `event_triggers`.
+    /// First matching condition wins; falls through to `event_triggers` if none match.
+    #[serde(default)]
+    pub conditional_triggers: Vec<ConditionalTrigger>,
 }
 
 /// Validates that spritesheet image dimensions are exactly 72×128 pixels.

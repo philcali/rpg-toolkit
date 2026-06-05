@@ -23,6 +23,7 @@ pub fn check_triggers(
     mut player_moved: MessageReader<PlayerMoved>,
     project_data: Res<RendererProjectData>,
     renderer_state: Res<RendererState>,
+    game_state: Res<GameState>,
     action_queue: Option<Res<ActionQueue>>,
     mut commands: Commands,
     mut player_query: Query<&mut PlayerCharacter>,
@@ -65,7 +66,9 @@ pub fn check_triggers(
 
         let (x, y) = event.to;
 
-        // Collect EventAction entries from all layers at the destination tile
+        // Collect EventAction entries from all layers at the destination tile.
+        // For each layer, evaluate conditional_triggers first (first match wins),
+        // falling through to the default event_trigger if no condition matches.
         let mut actions = VecDeque::new();
         for layer in &map.layers {
             let Some(row) = layer.attributes.cells.get(y as usize) else {
@@ -75,8 +78,23 @@ pub fn check_triggers(
                 continue;
             };
 
-            for action in &attrs.event_trigger {
-                actions.push_back(action.clone());
+            // Evaluate conditional_triggers in order — first match wins
+            let mut matched_conditional = false;
+            for ct in &attrs.conditional_triggers {
+                if ct.condition.evaluate(&game_state.flags) {
+                    for action in &ct.actions {
+                        actions.push_back(action.clone());
+                    }
+                    matched_conditional = true;
+                    break;
+                }
+            }
+
+            // Fall through to default event_trigger if no conditional trigger matched
+            if !matched_conditional {
+                for action in &attrs.event_trigger {
+                    actions.push_back(action.clone());
+                }
             }
         }
 
@@ -352,6 +370,25 @@ pub fn advance_action_queue(
                 };
 
                 // Pop the StateCheck action
+                queue.actions.pop_front();
+
+                // Push the matching branch to the front so it executes next
+                let branch = if matched { on_true } else { on_false };
+                for action in branch.into_iter().rev() {
+                    queue.actions.push_front(action);
+                }
+                continue;
+            }
+            EventAction::Branch {
+                condition,
+                on_true,
+                on_false,
+            } => {
+                let empty = std::collections::HashMap::new();
+                let flags = game_state.as_ref().map(|gs| &gs.flags).unwrap_or(&empty);
+                let matched = condition.evaluate(flags);
+
+                // Pop the Branch action
                 queue.actions.pop_front();
 
                 // Push the matching branch to the front so it executes next

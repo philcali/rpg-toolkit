@@ -4,8 +4,8 @@
 
 use crate::data::map::EventAction;
 use rpg_toolkit_common::{
-    DialogConfigData, DialogPositionData, DialogTextData, FadeType, PlayerAppearance,
-    ScreenShakeMode,
+    BranchCondition, ConditionCheck, ConditionLogic, DialogConfigData, DialogPositionData,
+    DialogTextData, FadeType, PlayerAppearance, ScreenShakeMode,
 };
 
 /// The type of action being added in the Event Trigger Editor.
@@ -20,6 +20,7 @@ pub enum ActionType {
     SetState,
     SetPlayerAppearance,
     StateCheck,
+    Branch,
 }
 
 /// The text source mode for a ShowDialog action.
@@ -78,6 +79,11 @@ pub struct ActionEditorState {
     pub state_check_value: String,
     pub state_check_on_true_idx: usize,
     pub state_check_on_false_idx: usize,
+    // Branch fields
+    pub branch_logic: ConditionLogic,
+    pub branch_checks: Vec<ConditionCheck>,
+    pub branch_on_true: Vec<EventAction>,
+    pub branch_on_false: Vec<EventAction>,
 }
 
 impl Default for ActionEditorState {
@@ -110,6 +116,10 @@ impl Default for ActionEditorState {
             state_check_value: String::new(),
             state_check_on_true_idx: 0,
             state_check_on_false_idx: 0,
+            branch_logic: ConditionLogic::All,
+            branch_checks: Vec::new(),
+            branch_on_true: Vec::new(),
+            branch_on_false: Vec::new(),
         }
     }
 }
@@ -203,6 +213,17 @@ impl ActionEditorState {
                 self.state_check_value = value.clone().unwrap_or_default();
                 self.state_check_on_true_idx = on_true.len();
                 self.state_check_on_false_idx = on_false.len();
+            }
+            EventAction::Branch {
+                condition,
+                on_true,
+                on_false,
+            } => {
+                self.action_type = ActionType::Branch;
+                self.branch_logic = condition.logic;
+                self.branch_checks = condition.checks.clone();
+                self.branch_on_true = on_true.clone();
+                self.branch_on_false = on_false.clone();
             }
         }
         self.editing_index = Some(index);
@@ -318,6 +339,24 @@ impl ActionEditorState {
                     value,
                     on_true: Vec::new(),
                     on_false: Vec::new(),
+                })
+            }
+            ActionType::Branch => {
+                // Validate: at least one check with a non-empty key
+                if self.branch_checks.is_empty() {
+                    return None;
+                }
+                if self.branch_checks.iter().any(|c| c.key.is_empty()) {
+                    return None;
+                }
+                let condition = BranchCondition {
+                    logic: self.branch_logic,
+                    checks: self.branch_checks.clone(),
+                };
+                Some(EventAction::Branch {
+                    condition,
+                    on_true: self.branch_on_true.clone(),
+                    on_false: self.branch_on_false.clone(),
                 })
             }
         }
