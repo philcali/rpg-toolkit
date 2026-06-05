@@ -375,7 +375,6 @@ pub fn npc_trigger_system(
     if let Some(npc_index) = collision_event.npc_index
         && let Some(npc_instance) = map.npcs.get(npc_index)
         && npc_instance.trigger_mode == TriggerMode::Collision
-        && !npc_instance.event_triggers.is_empty()
     {
         // Check required_state condition
         let state_ok = if let Some(ref required_state) = npc_instance.required_state {
@@ -387,15 +386,29 @@ pub fn npc_trigger_system(
             true
         };
         if state_ok {
-            let actions: VecDeque<_> = npc_instance.event_triggers.iter().cloned().collect();
-            commands.insert_resource(ActionQueue {
-                actions,
-                waiting_for: WaitingFor::Nothing,
-            });
-            return;
+            // Evaluate conditional_triggers first — first match wins
+            let mut matched_actions: Option<VecDeque<_>> = None;
+            for ct in &npc_instance.conditional_triggers {
+                if ct.condition.evaluate(&game_state.flags) {
+                    matched_actions = Some(ct.actions.iter().cloned().collect());
+                    break;
+                }
+            }
+
+            // Fall through to default event_triggers if no conditional trigger matched
+            let actions = matched_actions
+                .unwrap_or_else(|| npc_instance.event_triggers.iter().cloned().collect());
+
+            if !actions.is_empty() {
+                commands.insert_resource(ActionQueue {
+                    actions,
+                    waiting_for: WaitingFor::Nothing,
+                });
+                return;
+            }
         }
     }
-    // If event_triggers is empty, default block behavior applies (no-op)
+    // If no actions produced, default block behavior applies (no-op)
 
     // --- Interaction triggers ---
     if !intent.pressed {
@@ -448,7 +461,20 @@ pub fn npc_trigger_system(
             continue;
         }
 
-        if npc_instance.event_triggers.is_empty() {
+        // Evaluate conditional_triggers first — first match wins
+        let mut matched_actions: Option<VecDeque<_>> = None;
+        for ct in &npc_instance.conditional_triggers {
+            if ct.condition.evaluate(&game_state.flags) {
+                matched_actions = Some(ct.actions.iter().cloned().collect());
+                break;
+            }
+        }
+
+        // Fall through to default event_triggers if no conditional trigger matched
+        let actions: VecDeque<_> = matched_actions
+            .unwrap_or_else(|| npc_instance.event_triggers.iter().cloned().collect());
+
+        if actions.is_empty() {
             continue;
         }
 
@@ -462,8 +488,7 @@ pub fn npc_trigger_system(
             }
         }
 
-        // Populate ActionQueue with the NPC's event triggers
-        let actions: VecDeque<_> = npc_instance.event_triggers.iter().cloned().collect();
+        // Populate ActionQueue with the resolved actions
         commands.insert_resource(ActionQueue {
             actions,
             waiting_for: WaitingFor::Nothing,

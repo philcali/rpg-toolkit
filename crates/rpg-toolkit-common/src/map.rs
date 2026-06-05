@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::condition::{BranchCondition, ConditionalTrigger};
 use crate::error::CommonError;
 use crate::spritesheet::NpcInstance;
 
@@ -139,6 +140,12 @@ pub enum EventAction {
         on_true: Vec<EventAction>,
         on_false: Vec<EventAction>,
     },
+    /// Evaluate a compound condition and execute one of two branches.
+    Branch {
+        condition: BranchCondition,
+        on_true: Vec<EventAction>,
+        on_false: Vec<EventAction>,
+    },
 }
 
 /// Per-tile attribute data: opacity flag, event trigger list, and elevation.
@@ -157,6 +164,10 @@ pub struct TileAttributes {
     /// When the condition fails, the tile cell renders as `None` (invisible).
     #[serde(default)]
     pub required_state: Option<(String, String)>,
+    /// Condition-gated trigger overrides evaluated before the default `event_trigger`.
+    /// First matching condition wins; falls through to `event_trigger` if none match.
+    #[serde(default)]
+    pub conditional_triggers: Vec<ConditionalTrigger>,
 }
 
 /// A parallel grid of `TileAttributes` matching a layer's tile dimensions.

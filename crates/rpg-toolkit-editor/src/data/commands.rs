@@ -5,7 +5,8 @@
 //! itself forward (do) and backward (undo) against a `MapData`.
 
 use rpg_toolkit_common::{
-    EventAction, Layer, MapData, NpcInstance, SpawnPoint, TileAttributeLayer, TileRef,
+    ConditionalTrigger, EventAction, Layer, MapData, NpcInstance, SpawnPoint, TileAttributeLayer,
+    TileRef,
 };
 
 /// A reversible editing command for undo/redo support.
@@ -50,6 +51,13 @@ pub enum EditCommandKind {
         y: u32,
         old_trigger: Vec<EventAction>,
         new_trigger: Vec<EventAction>,
+    },
+    SetConditionalTriggers {
+        layer_index: usize,
+        x: u32,
+        y: u32,
+        old_triggers: Vec<ConditionalTrigger>,
+        new_triggers: Vec<ConditionalTrigger>,
     },
     SetSpawnPoint {
         old_spawn: Option<SpawnPoint>,
@@ -180,6 +188,20 @@ impl EditCommand {
                     && let Some(cell) = row.get_mut(*x as usize)
                 {
                     cell.event_trigger = new_trigger.clone();
+                }
+            }
+            EditCommandKind::SetConditionalTriggers {
+                layer_index,
+                x,
+                y,
+                new_triggers,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.attributes.cells.get_mut(*y as usize)
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    cell.conditional_triggers = new_triggers.clone();
                 }
             }
             EditCommandKind::SetSpawnPoint { .. } => {
@@ -314,6 +336,20 @@ impl EditCommand {
                     && let Some(cell) = row.get_mut(*x as usize)
                 {
                     cell.event_trigger = old_trigger.clone();
+                }
+            }
+            EditCommandKind::SetConditionalTriggers {
+                layer_index,
+                x,
+                y,
+                old_triggers,
+                ..
+            } => {
+                if let Some(layer) = map.layers.get_mut(*layer_index)
+                    && let Some(row) = layer.attributes.cells.get_mut(*y as usize)
+                    && let Some(cell) = row.get_mut(*x as usize)
+                {
+                    cell.conditional_triggers = old_triggers.clone();
                 }
             }
             EditCommandKind::SetSpawnPoint { .. } => {

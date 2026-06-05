@@ -12,6 +12,8 @@ use super::action_editor_forms;
 
 /// Renders the action editor UI into the given egui Ui.
 /// Operates on the provided action list and editor state.
+/// `depth` controls nesting: at depth >= 1, Branch and StateCheck are excluded
+/// from the action type dropdown to prevent deep nesting in the editor.
 pub fn render_action_editor(
     ui: &mut egui::Ui,
     actions: &mut Vec<EventAction>,
@@ -19,6 +21,7 @@ pub fn render_action_editor(
     id_salt: &str,
     map_entries: &[(String, String)],
     face_portraits: &std::collections::HashMap<String, String>,
+    depth: usize,
 ) {
     // Display existing actions with remove/reorder/edit controls
     let mut remove_idx: Option<usize> = None;
@@ -103,6 +106,24 @@ pub fn render_action_editor(
                         on_false.len()
                     )
                 }
+                EventAction::Branch {
+                    condition,
+                    on_true,
+                    on_false,
+                } => {
+                    let logic = match condition.logic {
+                        rpg_toolkit_common::ConditionLogic::All => "All",
+                        rpg_toolkit_common::ConditionLogic::Any => "Any",
+                    };
+                    format!(
+                        "{}. Branch — {} [{} checks] | true:{} false:{}",
+                        i + 1,
+                        logic,
+                        condition.checks.len(),
+                        on_true.len(),
+                        on_false.len()
+                    )
+                }
             };
             if is_being_edited {
                 ui.label(
@@ -131,6 +152,11 @@ pub fn render_action_editor(
                 remove_idx = Some(i);
             }
         });
+    }
+
+    // Render collapsible nested action editors for Branch and StateCheck items
+    if depth == 0 {
+        render_nested_branch_editors(ui, actions, id_salt, map_entries, face_portraits);
     }
 
     if let Some(idx) = remove_idx {
@@ -179,6 +205,7 @@ pub fn render_action_editor(
             ActionType::SetState => "SetState",
             ActionType::SetPlayerAppearance => "SetPlayerAppearance",
             ActionType::StateCheck => "StateCheck",
+            ActionType::Branch => "Branch",
         };
         egui::ComboBox::from_id_salt(format!("{}_action_type", id_salt))
             .selected_text(action_type_text)
@@ -214,11 +241,19 @@ pub fn render_action_editor(
                     ActionType::SetPlayerAppearance,
                     "SetPlayerAppearance",
                 );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::StateCheck,
-                    "StateCheck",
-                );
+                // Only show StateCheck and Branch at depth 0
+                if depth == 0 {
+                    ui.selectable_value(
+                        &mut editor_state.action_type,
+                        ActionType::StateCheck,
+                        "StateCheck",
+                    );
+                    ui.selectable_value(
+                        &mut editor_state.action_type,
+                        ActionType::Branch,
+                        "Branch",
+                    );
+                }
             });
     });
 
@@ -266,6 +301,124 @@ pub fn render_action_editor(
         }
         ActionType::StateCheck => {
             action_editor_forms::render_state_check_form(ui, actions, editor_state, id_salt);
+        }
+        ActionType::Branch => {
+            action_editor_forms::render_branch_form(ui, actions, editor_state, id_salt);
+        }
+    }
+}
+
+/// Renders collapsible nested action editors for Branch and StateCheck items in the action list.
+/// This allows visual editing of on_true/on_false branches inline.
+fn render_nested_branch_editors(
+    ui: &mut egui::Ui,
+    actions: &mut [EventAction],
+    id_salt: &str,
+    map_entries: &[(String, String)],
+    face_portraits: &std::collections::HashMap<String, String>,
+) {
+    // We need indexed mutable access. Use a simple index loop.
+    let len = actions.len();
+    for (i, action) in actions.iter_mut().enumerate().take(len) {
+        match action {
+            EventAction::Branch {
+                on_true, on_false, ..
+            } => {
+                let on_true_count = on_true.len();
+                let on_false_count = on_false.len();
+                let nested_salt_true = format!("{}_branch_{}_true", id_salt, i);
+                let nested_salt_false = format!("{}_branch_{}_false", id_salt, i);
+
+                ui.indent(format!("branch_indent_{}", i), |ui| {
+                    // on_true collapsible
+                    egui::CollapsingHeader::new(format!("  ↳ on_true ({} actions)", on_true_count))
+                        .id_salt(&nested_salt_true)
+                        .show(ui, |ui| {
+                            // Extract on_true for mutable editing
+                            if let EventAction::Branch { on_true, .. } = action {
+                                let mut nested_editor = ActionEditorState::default();
+                                render_action_editor(
+                                    ui,
+                                    on_true,
+                                    &mut nested_editor,
+                                    &nested_salt_true,
+                                    map_entries,
+                                    face_portraits,
+                                    1,
+                                );
+                            }
+                        });
+
+                    // on_false collapsible
+                    egui::CollapsingHeader::new(format!(
+                        "  ↳ on_false ({} actions)",
+                        on_false_count
+                    ))
+                    .id_salt(&nested_salt_false)
+                    .show(ui, |ui| {
+                        if let EventAction::Branch { on_false, .. } = action {
+                            let mut nested_editor = ActionEditorState::default();
+                            render_action_editor(
+                                ui,
+                                on_false,
+                                &mut nested_editor,
+                                &nested_salt_false,
+                                map_entries,
+                                face_portraits,
+                                1,
+                            );
+                        }
+                    });
+                });
+            }
+            EventAction::StateCheck {
+                on_true, on_false, ..
+            } => {
+                let on_true_count = on_true.len();
+                let on_false_count = on_false.len();
+                let nested_salt_true = format!("{}_statecheck_{}_true", id_salt, i);
+                let nested_salt_false = format!("{}_statecheck_{}_false", id_salt, i);
+
+                ui.indent(format!("statecheck_indent_{}", i), |ui| {
+                    egui::CollapsingHeader::new(format!("  ↳ on_true ({} actions)", on_true_count))
+                        .id_salt(&nested_salt_true)
+                        .show(ui, |ui| {
+                            if let EventAction::StateCheck { on_true, .. } = action {
+                                let mut nested_editor = ActionEditorState::default();
+                                render_action_editor(
+                                    ui,
+                                    on_true,
+                                    &mut nested_editor,
+                                    &nested_salt_true,
+                                    map_entries,
+                                    face_portraits,
+                                    1,
+                                );
+                            }
+                        });
+
+                    egui::CollapsingHeader::new(format!(
+                        "  ↳ on_false ({} actions)",
+                        on_false_count
+                    ))
+                    .id_salt(&nested_salt_false)
+                    .show(ui, |ui| {
+                        if let EventAction::StateCheck { on_false, .. } = action {
+                            let mut nested_editor = ActionEditorState::default();
+                            render_action_editor(
+                                ui,
+                                on_false,
+                                &mut nested_editor,
+                                &nested_salt_false,
+                                map_entries,
+                                face_portraits,
+                                1,
+                            );
+                        }
+                    });
+                });
+            }
+            _ => {}
         }
     }
 }

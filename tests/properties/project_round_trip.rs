@@ -148,6 +148,7 @@ fn arb_npc_instance(ss_count: usize, map_w: u32, map_h: u32) -> impl Strategy<Va
                     trigger_mode,
                     elevation: 0,
                     required_state: None,
+                    conditional_triggers: Vec::new(),
                 }
             },
         )

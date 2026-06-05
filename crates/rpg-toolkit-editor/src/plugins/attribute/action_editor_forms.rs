@@ -4,7 +4,10 @@
 
 use bevy_egui::egui;
 
-use rpg_toolkit_common::{DialogPositionData, FadeType, PlayerAppearance, ScreenShakeMode};
+use rpg_toolkit_common::{
+    ConditionCheck, ConditionLogic, ConditionOperator, DialogPositionData, FadeType,
+    PlayerAppearance, ScreenShakeMode,
+};
 
 use crate::data::map::EventAction;
 
@@ -543,5 +546,174 @@ pub fn render_state_check_form(
         editor_state.editing_index = None;
         editor_state.state_check_key = String::new();
         editor_state.state_check_value = String::new();
+    }
+}
+
+pub fn render_branch_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit Branch Action:"
+    } else {
+        "Add Branch Action:"
+    };
+    ui.label(form_label);
+
+    // Logic selector (All / Any)
+    ui.horizontal(|ui| {
+        ui.label("Logic:");
+        egui::ComboBox::from_id_salt(format!("{}_branch_logic", id_salt))
+            .selected_text(match editor_state.branch_logic {
+                ConditionLogic::All => "All (AND)",
+                ConditionLogic::Any => "Any (OR)",
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    &mut editor_state.branch_logic,
+                    ConditionLogic::All,
+                    "All (AND)",
+                );
+                ui.selectable_value(
+                    &mut editor_state.branch_logic,
+                    ConditionLogic::Any,
+                    "Any (OR)",
+                );
+            });
+    });
+
+    // Condition checks list
+    ui.label("Conditions:");
+
+    let mut remove_check_idx: Option<usize> = None;
+    for (i, check) in editor_state.branch_checks.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            ui.label(format!("{}.", i + 1));
+            ui.add(
+                egui::TextEdit::singleline(&mut check.key)
+                    .desired_width(80.0)
+                    .hint_text("key"),
+            );
+
+            let operator_text = match check.operator {
+                ConditionOperator::Equals => "Equals",
+                ConditionOperator::NotEquals => "Not Equals",
+                ConditionOperator::Exists => "Exists",
+                ConditionOperator::NotExists => "Not Exists",
+            };
+            egui::ComboBox::from_id_salt(format!("{}_check_op_{}", id_salt, i))
+                .selected_text(operator_text)
+                .width(90.0)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut check.operator, ConditionOperator::Equals, "Equals");
+                    ui.selectable_value(
+                        &mut check.operator,
+                        ConditionOperator::NotEquals,
+                        "Not Equals",
+                    );
+                    ui.selectable_value(&mut check.operator, ConditionOperator::Exists, "Exists");
+                    ui.selectable_value(
+                        &mut check.operator,
+                        ConditionOperator::NotExists,
+                        "Not Exists",
+                    );
+                });
+
+            // Value field — disabled for Exists/NotExists
+            let needs_value = matches!(
+                check.operator,
+                ConditionOperator::Equals | ConditionOperator::NotEquals
+            );
+            if needs_value {
+                let mut value_str = check.value.clone().unwrap_or_default();
+                if ui
+                    .add(
+                        egui::TextEdit::singleline(&mut value_str)
+                            .desired_width(80.0)
+                            .hint_text("value"),
+                    )
+                    .changed()
+                {
+                    check.value = if value_str.is_empty() {
+                        None
+                    } else {
+                        Some(value_str)
+                    };
+                }
+            } else {
+                ui.add_enabled(
+                    false,
+                    egui::TextEdit::singleline(&mut String::from("—")).desired_width(80.0),
+                );
+                // Clear value when operator doesn't use it
+                check.value = None;
+            }
+
+            if ui.small_button("✕").clicked() {
+                remove_check_idx = Some(i);
+            }
+        });
+    }
+
+    if let Some(idx) = remove_check_idx {
+        editor_state.branch_checks.remove(idx);
+    }
+
+    if ui.button("Add Condition").clicked() {
+        editor_state.branch_checks.push(ConditionCheck {
+            key: String::new(),
+            operator: ConditionOperator::Equals,
+            value: None,
+        });
+    }
+
+    // Validation hints
+    let has_checks = !editor_state.branch_checks.is_empty();
+    let all_keys_filled = editor_state.branch_checks.iter().all(|c| !c.key.is_empty());
+    if !has_checks {
+        ui.label(
+            egui::RichText::new("Add at least one condition.")
+                .color(egui::Color32::from_rgb(200, 150, 50)),
+        );
+    } else if !all_keys_filled {
+        ui.label(
+            egui::RichText::new("All condition keys must be non-empty.")
+                .color(egui::Color32::from_rgb(200, 150, 50)),
+        );
+    }
+
+    let can_save = has_checks && all_keys_filled;
+
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update Branch"
+    } else {
+        "Add Branch"
+    };
+    if ui
+        .add_enabled(can_save, egui::Button::new(btn_label))
+        .clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        editor_state.branch_logic = ConditionLogic::All;
+        editor_state.branch_checks.clear();
+        editor_state.branch_on_true.clear();
+        editor_state.branch_on_false.clear();
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.branch_logic = ConditionLogic::All;
+        editor_state.branch_checks.clear();
+        editor_state.branch_on_true.clear();
+        editor_state.branch_on_false.clear();
     }
 }
