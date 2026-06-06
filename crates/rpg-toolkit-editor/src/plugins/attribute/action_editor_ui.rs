@@ -124,6 +124,9 @@ pub fn render_action_editor(
                         on_false.len()
                     )
                 }
+                EventAction::ShowSelection { choices, .. } => {
+                    format!("{}. ShowSelection — {} choices", i + 1, choices.len())
+                }
             };
             if is_being_edited {
                 ui.label(
@@ -199,6 +202,7 @@ pub fn render_action_editor(
         let action_type_text = match editor_state.action_type {
             ActionType::JumpTo => "JumpTo",
             ActionType::ShowDialog => "ShowDialog",
+            ActionType::ShowSelection => "ShowSelection",
             ActionType::ScreenShake => "ScreenShake",
             ActionType::StopScreenShake => "StopScreenShake",
             ActionType::FadeTransition => "FadeTransition",
@@ -215,6 +219,11 @@ pub fn render_action_editor(
                     &mut editor_state.action_type,
                     ActionType::ShowDialog,
                     "ShowDialog",
+                );
+                ui.selectable_value(
+                    &mut editor_state.action_type,
+                    ActionType::ShowSelection,
+                    "ShowSelection",
                 );
                 ui.selectable_value(
                     &mut editor_state.action_type,
@@ -304,6 +313,16 @@ pub fn render_action_editor(
         }
         ActionType::Branch => {
             action_editor_forms::render_branch_form(ui, actions, editor_state, id_salt);
+        }
+        ActionType::ShowSelection => {
+            action_editor_forms::render_show_selection_form(
+                ui,
+                actions,
+                editor_state,
+                id_salt,
+                map_entries,
+                face_portraits,
+            );
         }
     }
 }
@@ -416,6 +435,34 @@ fn render_nested_branch_editors(
                             );
                         }
                     });
+                });
+            }
+            EventAction::ShowSelection { choices, .. } => {
+                ui.indent(format!("selection_indent_{}", i), |ui| {
+                    for (ci, choice) in choices.iter_mut().enumerate() {
+                        let choice_action_count = choice.actions.len();
+                        let nested_salt_choice =
+                            format!("{}_selection_{}_choice_{}", id_salt, i, ci);
+
+                        egui::CollapsingHeader::new(format!(
+                            "  ↳ Choice {} ({} actions)",
+                            ci + 1,
+                            choice_action_count
+                        ))
+                        .id_salt(&nested_salt_choice)
+                        .show(ui, |ui| {
+                            let mut nested_editor = ActionEditorState::default();
+                            render_action_editor(
+                                ui,
+                                &mut choice.actions,
+                                &mut nested_editor,
+                                &nested_salt_choice,
+                                map_entries,
+                                face_portraits,
+                                1,
+                            );
+                        });
+                    }
                 });
             }
             _ => {}

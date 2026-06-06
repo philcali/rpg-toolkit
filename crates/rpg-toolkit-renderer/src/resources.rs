@@ -84,6 +84,7 @@ pub enum WaitingFor {
     #[default]
     Nothing,
     Dialog,
+    Selection,
     ScreenShake,
     Fade,
 }

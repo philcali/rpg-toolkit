@@ -40,6 +40,10 @@ path = "palette_scale.rs"
 name = "event_branching"
 path = "event_branching.rs"
 
+[[test]]
+name = "dialog_selection_round_trip"
+path = "dialog_selection_round_trip.rs"
+
 [dev-dependencies]
 proptest = { workspace = true }
 serde_json = { workspace = true }

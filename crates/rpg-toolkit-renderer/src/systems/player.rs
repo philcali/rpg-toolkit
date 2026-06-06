@@ -9,6 +9,7 @@ use crate::resources::{
     RendererState,
 };
 use crate::systems::collision::is_tile_blocked;
+use crate::systems::selection::SelectionState;
 use rpg_toolkit_common::{FacingDirection, TriggerMode, sprite_atlas_index};
 
 /// Converts grid coordinates to world-space position using the map's tile dimensions.
@@ -48,7 +49,7 @@ pub fn spawn_player(
     renderer_state.active_map_id = Some(spawn.map_id.clone());
 
     let world_pos = grid_to_world(grid_x, grid_y, map.tile_width, map.tile_height);
-    let z = map.layers.len() as f32 + 1.0;
+    let z = map.layers.len() as f32 + 1.0 - world_pos.y * 0.001;
 
     let player = PlayerCharacter {
         grid_x,
@@ -133,6 +134,7 @@ pub fn spawn_player(
 pub fn player_movement(
     intent: Res<MovementIntent>,
     dialog_state: Option<Res<DialogState>>,
+    selection_state: Option<Res<SelectionState>>,
     project_data: Res<RendererProjectData>,
     renderer_state: Res<RendererState>,
     movement_config: Res<MovementConfig>,
@@ -142,6 +144,11 @@ pub fn player_movement(
 ) {
     // Reset collision event each frame
     collision_event.npc_index = None;
+
+    // Block movement if a selection prompt is active
+    if selection_state.is_some() {
+        return;
+    }
 
     // Block movement if dialog is active with movement_block
     if let Some(ref state) = dialog_state

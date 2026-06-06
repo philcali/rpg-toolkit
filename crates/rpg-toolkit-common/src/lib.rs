@@ -16,9 +16,9 @@ pub use condition::{
 pub use error::CommonError;
 pub use manifest::ProjectManifest;
 pub use map::{
-    DialogConfigData, DialogPositionData, DialogTextData, EventAction, FadeType, Layer, MapData,
-    MapId, PlayerAppearance, ScreenShakeMode, SpawnPoint, TileAttributeLayer, TileAttributes,
-    TileRef, TilesetId,
+    ChoiceData, DialogConfigData, DialogPositionData, DialogTextData, EventAction, FadeType, Layer,
+    MapData, MapId, PlayerAppearance, ScreenShakeMode, SpawnPoint, TileAttributeLayer,
+    TileAttributes, TileRef, TilesetId,
 };
 pub use project::{ProjectFile, SpritesheetReferences};
 pub use spritesheet::{
