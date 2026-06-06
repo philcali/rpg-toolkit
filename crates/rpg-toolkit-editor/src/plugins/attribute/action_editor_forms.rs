@@ -11,7 +11,7 @@ use rpg_toolkit_common::{
 
 use crate::data::map::EventAction;
 
-use super::action_editor::{ActionEditorState, DialogTextMode};
+use super::action_editor::{ActionEditorState, DialogTextMode, EditorChoice};
 
 pub fn render_jumpto_form(
     ui: &mut egui::Ui,
@@ -715,5 +715,262 @@ pub fn render_branch_form(
         editor_state.branch_checks.clear();
         editor_state.branch_on_true.clear();
         editor_state.branch_on_false.clear();
+    }
+}
+
+pub fn render_show_selection_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+    map_entries: &[(String, String)],
+    face_portraits: &std::collections::HashMap<String, String>,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit ShowSelection Action:"
+    } else {
+        "Add ShowSelection Action:"
+    };
+    ui.label(form_label);
+
+    // --- Prompt text section ---
+    ui.horizontal(|ui| {
+        ui.label("Prompt Source:");
+        ui.radio_value(
+            &mut editor_state.selection_prompt_mode,
+            DialogTextMode::Inline,
+            "Inline",
+        );
+        ui.radio_value(
+            &mut editor_state.selection_prompt_mode,
+            DialogTextMode::TextId,
+            "Text ID",
+        );
+    });
+
+    match editor_state.selection_prompt_mode {
+        DialogTextMode::Inline => {
+            ui.label("Prompt Text:");
+            ui.text_edit_multiline(&mut editor_state.selection_prompt_text);
+        }
+        DialogTextMode::TextId => {
+            ui.horizontal(|ui| {
+                ui.label("Prompt Text ID:");
+                ui.text_edit_singleline(&mut editor_state.selection_prompt_id);
+            });
+        }
+    }
+
+    // --- Position combo box ---
+    ui.horizontal(|ui| {
+        ui.label("Position:");
+        egui::ComboBox::from_id_salt(format!("{}_selection_position_select", id_salt))
+            .selected_text(match editor_state.selection_position {
+                DialogPositionData::Top => "Top",
+                DialogPositionData::Center => "Center",
+                DialogPositionData::Bottom => "Bottom",
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    &mut editor_state.selection_position,
+                    DialogPositionData::Top,
+                    "Top",
+                );
+                ui.selectable_value(
+                    &mut editor_state.selection_position,
+                    DialogPositionData::Center,
+                    "Center",
+                );
+                ui.selectable_value(
+                    &mut editor_state.selection_position,
+                    DialogPositionData::Bottom,
+                    "Bottom",
+                );
+            });
+    });
+
+    // --- Face portrait selector ---
+    ui.horizontal(|ui| {
+        ui.label("Face Portrait:");
+        let selected_text = match &editor_state.selection_face_portrait {
+            Some(id) => id.clone(),
+            None => "None".to_string(),
+        };
+        egui::ComboBox::from_id_salt(format!("{}_selection_face_portrait_select", id_salt))
+            .selected_text(&selected_text)
+            .show_ui(ui, |ui| {
+                if ui
+                    .selectable_label(editor_state.selection_face_portrait.is_none(), "None")
+                    .clicked()
+                {
+                    editor_state.selection_face_portrait = None;
+                }
+                let mut portrait_ids: Vec<&String> = face_portraits.keys().collect();
+                portrait_ids.sort();
+                for portrait_id in portrait_ids {
+                    let is_selected =
+                        editor_state.selection_face_portrait.as_ref() == Some(portrait_id);
+                    if ui.selectable_label(is_selected, portrait_id).clicked() {
+                        editor_state.selection_face_portrait = Some(portrait_id.clone());
+                    }
+                }
+            });
+    });
+
+    ui.separator();
+
+    // --- Choice list ---
+    ui.label(egui::RichText::new("Choices:").strong());
+
+    // Validation: at least 2 choices
+    let choice_count = editor_state.selection_choices.len();
+    if choice_count < 2 {
+        ui.label(
+            egui::RichText::new("Add at least 2 choices")
+                .color(egui::Color32::from_rgb(220, 50, 50)),
+        );
+    }
+
+    let mut remove_choice_idx: Option<usize> = None;
+
+    for i in 0..editor_state.selection_choices.len() {
+        let choice_salt = format!("{}_choice_{}", id_salt, i);
+
+        egui::CollapsingHeader::new(format!("Choice {}", i + 1))
+            .id_salt(&choice_salt)
+            .default_open(true)
+            .show(ui, |ui| {
+                // Label mode toggle
+                ui.horizontal(|ui| {
+                    ui.label("Label Source:");
+                    ui.radio_value(
+                        &mut editor_state.selection_choices[i].label_mode,
+                        DialogTextMode::Inline,
+                        "Inline",
+                    );
+                    ui.radio_value(
+                        &mut editor_state.selection_choices[i].label_mode,
+                        DialogTextMode::TextId,
+                        "Text ID",
+                    );
+                });
+
+                match editor_state.selection_choices[i].label_mode {
+                    DialogTextMode::Inline => {
+                        ui.horizontal(|ui| {
+                            ui.label("Label:");
+                            ui.text_edit_singleline(
+                                &mut editor_state.selection_choices[i].label_text,
+                            );
+                        });
+                        // Inline validation for empty label
+                        if editor_state.selection_choices[i].label_text.is_empty() {
+                            ui.label(
+                                egui::RichText::new("Label must not be empty")
+                                    .color(egui::Color32::from_rgb(220, 50, 50)),
+                            );
+                        }
+                    }
+                    DialogTextMode::TextId => {
+                        ui.horizontal(|ui| {
+                            ui.label("Label Text ID:");
+                            ui.text_edit_singleline(
+                                &mut editor_state.selection_choices[i].label_id,
+                            );
+                        });
+                    }
+                }
+
+                // Nested action editor for this choice (uses persistent editor state)
+                let nested_salt = format!("{}_actions", choice_salt);
+                ui.indent(format!("choice_actions_indent_{}", i), |ui| {
+                    ui.label(egui::RichText::new(format!("Choice {} Actions:", i + 1)).italics());
+                    let choice = &mut editor_state.selection_choices[i];
+                    super::action_editor_ui::render_action_editor(
+                        ui,
+                        &mut choice.actions,
+                        &mut choice.action_editor,
+                        &nested_salt,
+                        map_entries,
+                        face_portraits,
+                        1,
+                    );
+                });
+
+                // Remove choice button (disabled when only 2 remain)
+                let can_remove = editor_state.selection_choices.len() > 2;
+                if ui
+                    .add_enabled(can_remove, egui::Button::new("Remove Choice"))
+                    .clicked()
+                {
+                    remove_choice_idx = Some(i);
+                }
+            });
+    }
+
+    if let Some(idx) = remove_choice_idx {
+        editor_state.selection_choices.remove(idx);
+    }
+
+    // Add Choice button (disabled at 6)
+    let can_add = editor_state.selection_choices.len() < 6;
+    if ui
+        .add_enabled(can_add, egui::Button::new("Add Choice"))
+        .clicked()
+    {
+        editor_state.selection_choices.push(EditorChoice::default());
+    }
+
+    ui.separator();
+
+    // --- Add/Update and Cancel buttons ---
+    let has_valid_choices = editor_state.selection_choices.len() >= 2
+        && editor_state
+            .selection_choices
+            .iter()
+            .all(|c| match c.label_mode {
+                DialogTextMode::Inline => !c.label_text.is_empty(),
+                DialogTextMode::TextId => !c.label_id.is_empty(),
+            });
+    let has_valid_prompt = match editor_state.selection_prompt_mode {
+        DialogTextMode::Inline => !editor_state.selection_prompt_text.is_empty(),
+        DialogTextMode::TextId => !editor_state.selection_prompt_id.is_empty(),
+    };
+    let can_save = has_valid_choices && has_valid_prompt;
+
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update ShowSelection"
+    } else {
+        "Add ShowSelection"
+    };
+    if ui
+        .add_enabled(can_save, egui::Button::new(btn_label))
+        .clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        // Reset ShowSelection fields
+        editor_state.selection_prompt_mode = DialogTextMode::Inline;
+        editor_state.selection_prompt_text = String::new();
+        editor_state.selection_prompt_id = String::new();
+        editor_state.selection_position = DialogPositionData::Bottom;
+        editor_state.selection_face_portrait = None;
+        editor_state.selection_choices = vec![EditorChoice::default(), EditorChoice::default()];
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.selection_prompt_mode = DialogTextMode::Inline;
+        editor_state.selection_prompt_text = String::new();
+        editor_state.selection_prompt_id = String::new();
+        editor_state.selection_position = DialogPositionData::Bottom;
+        editor_state.selection_face_portrait = None;
+        editor_state.selection_choices = vec![EditorChoice::default(), EditorChoice::default()];
     }
 }

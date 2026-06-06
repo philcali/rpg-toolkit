@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use rpg_toolkit_common::{EventAction, FadeType, PlayerAppearance, ScreenShakeMode};
+use rpg_toolkit_common::{
+    DialogTextData, EventAction, FadeType, PlayerAppearance, ScreenShakeMode,
+};
 use std::collections::VecDeque;
 
 use crate::components::{FadeOverlay, GameCamera, PlayerCharacter};
@@ -15,6 +17,7 @@ use crate::resources::{
     WaitingFor,
 };
 use crate::systems::player::grid_to_world;
+use crate::systems::selection::{ResolvedChoice, SelectionState};
 
 /// Reacts to `PlayerMoved` events: collects event triggers from all layers at the
 /// destination tile and populates the `ActionQueue` for sequential processing.
@@ -115,11 +118,14 @@ pub fn advance_action_queue(
     mut commands: Commands,
     action_queue: Option<ResMut<ActionQueue>>,
     dialog_state: Option<Res<DialogState>>,
+    selection_state: Option<Res<SelectionState>>,
     registry: Option<Res<DialogTextRegistry>>,
     shake_state: Option<Res<ScreenShakeState>>,
     fade_state: Option<Res<FadeState>>,
     mut game_state: Option<ResMut<GameState>>,
     mut renderer_state: ResMut<RendererState>,
+    project_data: Option<Res<RendererProjectData>>,
+    asset_server: Res<AssetServer>,
     mut show_dialog: MessageWriter<ShowDialog>,
     mut camera_query: Query<&mut Transform, With<GameCamera>>,
     mut player_query: Query<&mut Visibility, With<PlayerCharacter>>,
@@ -152,11 +158,19 @@ pub fn advance_action_queue(
             queue.waiting_for = WaitingFor::Nothing;
             queue.actions.pop_front();
         }
+        WaitingFor::Selection => {
+            // Selection prompt is active; block until SelectionState is removed.
+            if selection_state.is_some() {
+                return;
+            }
+            queue.waiting_for = WaitingFor::Nothing;
+            queue.actions.pop_front();
+        }
         WaitingFor::Nothing => {}
     }
 
     // Process actions in a loop to handle non-blocking actions consecutively
-    loop {
+    'action_loop: loop {
         if queue.actions.is_empty() {
             commands.remove_resource::<ActionQueue>();
             return;
@@ -398,8 +412,251 @@ pub fn advance_action_queue(
                 }
                 continue;
             }
+            EventAction::ShowSelection {
+                prompt,
+                config: selection_config,
+                choices,
+            } => {
+                // If a selection is already active, don't spawn another
+                if selection_state.is_some() {
+                    return;
+                }
+
+                // Resolve prompt text
+                let resolved_prompt = match &prompt {
+                    DialogTextData::Inline(text) => text.clone(),
+                    DialogTextData::Id(id) => {
+                        let resolved = registry.as_ref().and_then(|reg| reg.get(id));
+                        match resolved {
+                            Some(text) => text.to_string(),
+                            None => {
+                                warn!(
+                                    "ShowSelection prompt ID '{}' not found in DialogTextRegistry; skipping action",
+                                    id
+                                );
+                                queue.actions.pop_front();
+                                continue;
+                            }
+                        }
+                    }
+                };
+
+                // Resolve all choice labels
+                let mut resolved_choices = Vec::with_capacity(choices.len());
+                for choice in &choices {
+                    let label = match &choice.label {
+                        DialogTextData::Inline(text) => text.clone(),
+                        DialogTextData::Id(id) => {
+                            let resolved = registry.as_ref().and_then(|reg| reg.get(id));
+                            match resolved {
+                                Some(text) => text.to_string(),
+                                None => {
+                                    warn!(
+                                        "ShowSelection choice label ID '{}' not found in DialogTextRegistry; skipping action",
+                                        id
+                                    );
+                                    queue.actions.pop_front();
+                                    continue 'action_loop;
+                                }
+                            }
+                        }
+                    };
+                    resolved_choices.push(ResolvedChoice {
+                        label,
+                        actions: choice.actions.clone(),
+                    });
+                }
+
+                let choice_count = resolved_choices.len();
+
+                // Resolve face portrait path from project data
+                let resolved_portrait_path = selection_config.face_portrait.as_ref().and_then(|portrait_id| {
+                    let resolved = project_data
+                        .as_ref()
+                        .and_then(|pd| pd.project_file.face_portraits.get(portrait_id))
+                        .cloned();
+                    if resolved.is_none() && !portrait_id.is_empty() {
+                        warn!(
+                            "Face portrait ID '{}' not found in project face_portraits registry; skipping portrait",
+                            portrait_id
+                        );
+                    }
+                    resolved
+                });
+
+                // Spawn selection UI
+                spawn_selection_ui(
+                    &mut commands,
+                    &resolved_prompt,
+                    &resolved_choices,
+                    &selection_config,
+                    resolved_portrait_path.as_deref(),
+                    &asset_server,
+                );
+
+                // Insert SelectionState resource
+                commands.insert_resource(SelectionState {
+                    cursor_index: 0,
+                    choice_count,
+                    choices: resolved_choices,
+                });
+
+                queue.waiting_for = WaitingFor::Selection;
+                return;
+            }
         }
     }
+}
+
+/// Spawns the selection UI entities.
+/// Creates a styled UI root with the prompt text, choice labels, cursor indicator,
+/// and optional face portrait — consistent with the standard dialog box styling.
+fn spawn_selection_ui(
+    commands: &mut Commands,
+    prompt: &str,
+    choices: &[ResolvedChoice],
+    config: &rpg_toolkit_common::map::DialogConfigData,
+    portrait_path: Option<&str>,
+    asset_server: &AssetServer,
+) {
+    use crate::systems::selection::{SelectionBox, SelectionCursor, SelectionLabel};
+    use rpg_toolkit_common::map::DialogPositionData;
+
+    let (justify_content, align_items) = match config.position {
+        DialogPositionData::Top => (JustifyContent::FlexStart, AlignItems::Center),
+        DialogPositionData::Center => (JustifyContent::Center, AlignItems::Center),
+        DialogPositionData::Bottom => (JustifyContent::FlexEnd, AlignItems::Center),
+    };
+
+    let padding = match config.position {
+        DialogPositionData::Top => UiRect::top(Val::Px(20.0)),
+        DialogPositionData::Center => UiRect::DEFAULT,
+        DialogPositionData::Bottom => UiRect::bottom(Val::Px(20.0)),
+    };
+
+    // Spawn root selection container with SelectionBox marker
+    commands
+        .spawn((
+            SelectionBox,
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                justify_content,
+                align_items,
+                padding,
+                ..default()
+            },
+            GlobalZIndex(100),
+        ))
+        .with_children(|parent| {
+            // Inner panel: auto height, semi-transparent background, border, overflow clip
+            parent
+                .spawn((
+                    Node {
+                        width: Val::Percent(80.0),
+                        height: Val::Auto,
+                        padding: UiRect::all(Val::Px(16.0)),
+                        border_radius: BorderRadius::all(Val::Px(8.0)),
+                        border: UiRect::all(Val::Px(2.0)),
+                        overflow: Overflow::clip(),
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::FlexStart,
+                        column_gap: Val::Px(12.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.75)),
+                    BorderColor::all(Color::srgba(0.85, 0.85, 0.85, 1.0)),
+                ))
+                .with_children(|panel| {
+                    // Face portrait (if configured)
+                    if let Some(path) = portrait_path {
+                        let portrait_handle: Handle<Image> = asset_server.load(path.to_string());
+                        panel.spawn((
+                            ImageNode {
+                                image: portrait_handle,
+                                ..default()
+                            },
+                            Node {
+                                width: Val::Px(64.0),
+                                height: Val::Px(64.0),
+                                flex_shrink: 0.0,
+                                ..default()
+                            },
+                        ));
+                    }
+
+                    // Content container (prompt text + choice list)
+                    panel
+                        .spawn(Node {
+                            flex_grow: 1.0,
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Val::Px(8.0),
+                            ..default()
+                        })
+                        .with_children(|content| {
+                            // Prompt text
+                            content.spawn((
+                                Text::new(prompt.to_string()),
+                                TextColor(Color::WHITE),
+                                TextFont {
+                                    font_size: 20.0,
+                                    ..default()
+                                },
+                            ));
+
+                            // Vertical choice list
+                            content
+                                .spawn(Node {
+                                    flex_direction: FlexDirection::Column,
+                                    row_gap: Val::Px(4.0),
+                                    ..default()
+                                })
+                                .with_children(|choice_list| {
+                                    for (i, choice) in choices.iter().enumerate() {
+                                        // Each choice row: cursor + label
+                                        choice_list
+                                            .spawn(Node {
+                                                flex_direction: FlexDirection::Row,
+                                                align_items: AlignItems::Center,
+                                                column_gap: Val::Px(8.0),
+                                                ..default()
+                                            })
+                                            .with_children(|row| {
+                                                // Cursor indicator "▶"
+                                                let cursor_visibility = if i == 0 {
+                                                    Visibility::Inherited
+                                                } else {
+                                                    Visibility::Hidden
+                                                };
+                                                row.spawn((
+                                                    SelectionCursor,
+                                                    SelectionLabel { index: i },
+                                                    Text::new("▶".to_string()),
+                                                    TextColor(Color::WHITE),
+                                                    TextFont {
+                                                        font_size: 20.0,
+                                                        ..default()
+                                                    },
+                                                    cursor_visibility,
+                                                ));
+
+                                                // Choice label text
+                                                row.spawn((
+                                                    Text::new(choice.label.clone()),
+                                                    TextColor(Color::WHITE),
+                                                    TextFont {
+                                                        font_size: 20.0,
+                                                        ..default()
+                                                    },
+                                                ));
+                                            });
+                                    }
+                                });
+                        });
+                });
+        });
 }
 
 /// Handles a pending map change: fires `MapChanged`, updates active map,

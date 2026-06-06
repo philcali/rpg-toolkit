@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::condition::{BranchCondition, ConditionalTrigger};
 use crate::error::CommonError;
@@ -64,6 +64,91 @@ impl Default for DialogConfigData {
             face_portrait: None,
         }
     }
+}
+
+/// A single choice in a selection prompt.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(try_from = "RawChoiceData")]
+pub struct ChoiceData {
+    /// Display label for this choice (inline text or registry ID).
+    pub label: DialogTextData,
+    /// Actions to execute when this choice is selected.
+    pub actions: Vec<EventAction>,
+}
+
+/// Raw helper struct for deserializing `ChoiceData` with validation.
+#[derive(Deserialize)]
+struct RawChoiceData {
+    label: DialogTextData,
+    #[serde(default)]
+    actions: Vec<EventAction>,
+}
+
+impl TryFrom<RawChoiceData> for ChoiceData {
+    type Error = String;
+
+    fn try_from(raw: RawChoiceData) -> Result<Self, Self::Error> {
+        // Validate inline label length: must be 1–80 characters
+        if let DialogTextData::Inline(ref text) = raw.label {
+            if text.is_empty() {
+                return Err("choice label must not be empty".to_string());
+            }
+            if text.len() > 80 {
+                return Err(format!(
+                    "choice label must be at most 80 characters, got {}",
+                    text.len()
+                ));
+            }
+        }
+        // Validate actions count: must be ≤ 20
+        if raw.actions.len() > 20 {
+            return Err(format!(
+                "choice actions list must have at most 20 items, got {}",
+                raw.actions.len()
+            ));
+        }
+        Ok(ChoiceData {
+            label: raw.label,
+            actions: raw.actions,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for ChoiceData {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawChoiceData::deserialize(deserializer)?;
+        ChoiceData::try_from(raw).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Validated wrapper for `Vec<ChoiceData>` ensuring 2–6 choices.
+/// Used internally for deserialization validation of ShowSelection.
+fn validate_choices(choices: Vec<ChoiceData>) -> Result<Vec<ChoiceData>, String> {
+    if choices.len() < 2 {
+        return Err(format!(
+            "ShowSelection must have at least 2 choices, got {}",
+            choices.len()
+        ));
+    }
+    if choices.len() > 6 {
+        return Err(format!(
+            "ShowSelection must have at most 6 choices, got {}",
+            choices.len()
+        ));
+    }
+    Ok(choices)
+}
+
+/// Custom deserializer for the `choices` field that enforces 2–6 count validation.
+fn deserialize_validated_choices<'de, D>(deserializer: D) -> Result<Vec<ChoiceData>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let choices = Vec::<ChoiceData>::deserialize(deserializer)?;
+    validate_choices(choices).map_err(serde::de::Error::custom)
 }
 
 /// Mode for screen shake effect.
@@ -145,6 +230,16 @@ pub enum EventAction {
         condition: BranchCondition,
         on_true: Vec<EventAction>,
         on_false: Vec<EventAction>,
+    },
+    /// Present a selection prompt with multiple choices.
+    ShowSelection {
+        /// Prompt text displayed above the choices.
+        prompt: DialogTextData,
+        /// Dialog box configuration (position, portrait, etc.).
+        config: DialogConfigData,
+        /// Ordered list of choices (2–6 inclusive).
+        #[serde(deserialize_with = "deserialize_validated_choices")]
+        choices: Vec<ChoiceData>,
     },
 }
 
@@ -332,5 +427,263 @@ impl MapData {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper to build a valid ShowSelection JSON with the given number of choices.
+    fn show_selection_json(choice_count: usize) -> String {
+        let choices: Vec<String> = (0..choice_count)
+            .map(|i| {
+                format!(
+                    r#"{{"label": {{"type": "Inline", "value": "Choice {}"}}, "actions": []}}"#,
+                    i + 1
+                )
+            })
+            .collect();
+        format!(
+            r#"{{
+                "type": "ShowSelection",
+                "prompt": {{"type": "Inline", "value": "Pick one"}},
+                "config": {{"text_speed": 30.0, "position": "Bottom", "movement_block": true, "attribute_dialog": false, "face_portrait": null}},
+                "choices": [{}]
+            }}"#,
+            choices.join(", ")
+        )
+    }
+
+    #[test]
+    fn show_selection_valid_2_choices() {
+        let json = show_selection_json(2);
+        let result: Result<EventAction, _> = serde_json::from_str(&json);
+        assert!(
+            result.is_ok(),
+            "2 choices should be valid: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn show_selection_valid_6_choices() {
+        let json = show_selection_json(6);
+        let result: Result<EventAction, _> = serde_json::from_str(&json);
+        assert!(
+            result.is_ok(),
+            "6 choices should be valid: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn show_selection_rejects_1_choice() {
+        let json = show_selection_json(1);
+        let result: Result<EventAction, _> = serde_json::from_str(&json);
+        assert!(result.is_err(), "1 choice should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("at least 2"),
+            "Error should mention minimum: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn show_selection_rejects_7_choices() {
+        let json = show_selection_json(7);
+        let result: Result<EventAction, _> = serde_json::from_str(&json);
+        assert!(result.is_err(), "7 choices should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("at most 6"),
+            "Error should mention maximum: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn show_selection_rejects_0_choices() {
+        let json = show_selection_json(0);
+        let result: Result<EventAction, _> = serde_json::from_str(&json);
+        assert!(result.is_err(), "0 choices should be rejected");
+    }
+
+    #[test]
+    fn choice_data_rejects_empty_inline_label() {
+        let json = r#"{"label": {"type": "Inline", "value": ""}, "actions": []}"#;
+        let result: Result<ChoiceData, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Empty label should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must not be empty"),
+            "Error should mention empty: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn choice_data_rejects_label_over_80_chars() {
+        let long_label = "a".repeat(81);
+        let json = format!(
+            r#"{{"label": {{"type": "Inline", "value": "{}"}}, "actions": []}}"#,
+            long_label
+        );
+        let result: Result<ChoiceData, _> = serde_json::from_str(&json);
+        assert!(result.is_err(), "81-char label should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("at most 80"),
+            "Error should mention max: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn choice_data_accepts_80_char_label() {
+        let label = "a".repeat(80);
+        let json = format!(
+            r#"{{"label": {{"type": "Inline", "value": "{}"}}, "actions": []}}"#,
+            label
+        );
+        let result: Result<ChoiceData, _> = serde_json::from_str(&json);
+        assert!(
+            result.is_ok(),
+            "80-char label should be valid: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn choice_data_accepts_id_label_without_length_check() {
+        // ID labels defer validation to runtime — any length string is accepted
+        let json = r#"{"label": {"type": "Id", "value": ""}, "actions": []}"#;
+        let result: Result<ChoiceData, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "Id labels should not be length-checked: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn choice_data_rejects_over_20_actions() {
+        let actions: Vec<String> = (0..21)
+            .map(|i| format!(r#"{{"type": "SetState", "key": "k{}", "value": "v"}}"#, i))
+            .collect();
+        let json = format!(
+            r#"{{"label": {{"type": "Inline", "value": "Go"}}, "actions": [{}]}}"#,
+            actions.join(", ")
+        );
+        let result: Result<ChoiceData, _> = serde_json::from_str(&json);
+        assert!(result.is_err(), "21 actions should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("at most 20"),
+            "Error should mention max actions: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn choice_data_accepts_20_actions() {
+        let actions: Vec<String> = (0..20)
+            .map(|i| format!(r#"{{"type": "SetState", "key": "k{}", "value": "v"}}"#, i))
+            .collect();
+        let json = format!(
+            r#"{{"label": {{"type": "Inline", "value": "Go"}}, "actions": [{}]}}"#,
+            actions.join(", ")
+        );
+        let result: Result<ChoiceData, _> = serde_json::from_str(&json);
+        assert!(
+            result.is_ok(),
+            "20 actions should be valid: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn show_selection_round_trip() {
+        let original = EventAction::ShowSelection {
+            prompt: DialogTextData::Inline("What will you do?".to_string()),
+            config: DialogConfigData::default(),
+            choices: vec![
+                ChoiceData {
+                    label: DialogTextData::Inline("Fight".to_string()),
+                    actions: vec![EventAction::SetState {
+                        key: "choice".to_string(),
+                        value: "fight".to_string(),
+                    }],
+                },
+                ChoiceData {
+                    label: DialogTextData::Id("flee_label".to_string()),
+                    actions: vec![],
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: EventAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn show_selection_type_tag_present() {
+        let action = EventAction::ShowSelection {
+            prompt: DialogTextData::Inline("Choose".to_string()),
+            config: DialogConfigData::default(),
+            choices: vec![
+                ChoiceData {
+                    label: DialogTextData::Inline("A".to_string()),
+                    actions: vec![],
+                },
+                ChoiceData {
+                    label: DialogTextData::Inline("B".to_string()),
+                    actions: vec![],
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&action).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["type"], "ShowSelection");
+    }
+
+    #[test]
+    fn show_selection_missing_prompt_field_errors() {
+        let json = r#"{
+            "type": "ShowSelection",
+            "config": {"text_speed": 30.0, "position": "Bottom", "movement_block": true, "attribute_dialog": false, "face_portrait": null},
+            "choices": [
+                {"label": {"type": "Inline", "value": "A"}, "actions": []},
+                {"label": {"type": "Inline", "value": "B"}, "actions": []}
+            ]
+        }"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Missing prompt should cause error");
+    }
+
+    #[test]
+    fn show_selection_missing_choices_field_errors() {
+        let json = r#"{
+            "type": "ShowSelection",
+            "prompt": {"type": "Inline", "value": "Pick"},
+            "config": {"text_speed": 30.0, "position": "Bottom", "movement_block": true, "attribute_dialog": false, "face_portrait": null}
+        }"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Missing choices should cause error");
+    }
+
+    #[test]
+    fn choice_data_actions_default_to_empty() {
+        let json = r#"{"label": {"type": "Inline", "value": "Go"}}"#;
+        let result: Result<ChoiceData, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "actions should default to empty: {:?}",
+            result.err()
+        );
+        assert_eq!(result.unwrap().actions, vec![]);
     }
 }

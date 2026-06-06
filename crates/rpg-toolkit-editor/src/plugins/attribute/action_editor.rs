@@ -4,8 +4,8 @@
 
 use crate::data::map::EventAction;
 use rpg_toolkit_common::{
-    BranchCondition, ConditionCheck, ConditionLogic, DialogConfigData, DialogPositionData,
-    DialogTextData, FadeType, PlayerAppearance, ScreenShakeMode,
+    BranchCondition, ChoiceData, ConditionCheck, ConditionLogic, DialogConfigData,
+    DialogPositionData, DialogTextData, FadeType, PlayerAppearance, ScreenShakeMode,
 };
 
 /// The type of action being added in the Event Trigger Editor.
@@ -14,6 +14,7 @@ pub enum ActionType {
     #[default]
     JumpTo,
     ShowDialog,
+    ShowSelection,
     ScreenShake,
     StopScreenShake,
     FadeTransition,
@@ -29,6 +30,29 @@ pub enum DialogTextMode {
     #[default]
     Inline,
     TextId,
+}
+
+/// A single choice in the editor for a ShowSelection action.
+pub struct EditorChoice {
+    pub label_mode: DialogTextMode,
+    pub label_text: String,
+    pub label_id: String,
+    pub actions: Vec<EventAction>,
+    /// Persistent action editor state for this choice's nested action list.
+    pub action_editor: ActionEditorState,
+}
+
+impl Default for EditorChoice {
+    fn default() -> Self {
+        Self {
+            label_mode: DialogTextMode::Inline,
+            label_text: String::new(),
+            label_id: String::new(),
+            actions: Vec::new(),
+            // Use new_nested() to avoid recursion (no selection_choices inside)
+            action_editor: ActionEditorState::new_nested(),
+        }
+    }
 }
 
 /// Truncates a string to at most `max_len` characters, appending "…" if truncated.
@@ -84,6 +108,13 @@ pub struct ActionEditorState {
     pub branch_checks: Vec<ConditionCheck>,
     pub branch_on_true: Vec<EventAction>,
     pub branch_on_false: Vec<EventAction>,
+    // ShowSelection fields
+    pub selection_prompt_mode: DialogTextMode,
+    pub selection_prompt_text: String,
+    pub selection_prompt_id: String,
+    pub selection_position: DialogPositionData,
+    pub selection_face_portrait: Option<String>,
+    pub selection_choices: Vec<EditorChoice>,
 }
 
 impl Default for ActionEditorState {
@@ -120,6 +151,12 @@ impl Default for ActionEditorState {
             branch_checks: Vec::new(),
             branch_on_true: Vec::new(),
             branch_on_false: Vec::new(),
+            selection_prompt_mode: DialogTextMode::Inline,
+            selection_prompt_text: String::new(),
+            selection_prompt_id: String::new(),
+            selection_position: DialogPositionData::Bottom,
+            selection_face_portrait: None,
+            selection_choices: vec![EditorChoice::default(), EditorChoice::default()],
         }
     }
 }
@@ -128,6 +165,50 @@ impl ActionEditorState {
     /// Resets all fields to their defaults.
     pub fn reset(&mut self) {
         *self = Self::default();
+    }
+
+    /// Creates a nested ActionEditorState without default selection choices.
+    /// Used by EditorChoice to avoid infinite recursion in defaults.
+    pub fn new_nested() -> Self {
+        Self {
+            action_type: ActionType::JumpTo,
+            editing_index: None,
+            target_map_id: String::new(),
+            target_x: "0".to_string(),
+            target_y: "0".to_string(),
+            target_elevation: String::new(),
+            dialog_text_mode: DialogTextMode::Inline,
+            dialog_inline_text: String::new(),
+            dialog_text_id: String::new(),
+            dialog_text_speed: "30".to_string(),
+            dialog_position: DialogPositionData::Bottom,
+            dialog_movement_block: true,
+            dialog_face_portrait: None,
+            shake_mode: ScreenShakeMode::Timed,
+            shake_intensity: "5.0".to_string(),
+            shake_duration: "0.5".to_string(),
+            fade_type: FadeType::FadeOut,
+            fade_duration: "1.0".to_string(),
+            fade_color: [0.0, 0.0, 0.0, 1.0],
+            state_key: String::new(),
+            state_value: String::new(),
+            appearance: PlayerAppearance::Hidden,
+            appearance_path: String::new(),
+            state_check_key: String::new(),
+            state_check_value: String::new(),
+            state_check_on_true_idx: 0,
+            state_check_on_false_idx: 0,
+            branch_logic: ConditionLogic::All,
+            branch_checks: Vec::new(),
+            branch_on_true: Vec::new(),
+            branch_on_false: Vec::new(),
+            selection_prompt_mode: DialogTextMode::Inline,
+            selection_prompt_text: String::new(),
+            selection_prompt_id: String::new(),
+            selection_position: DialogPositionData::Bottom,
+            selection_face_portrait: None,
+            selection_choices: Vec::new(), // Empty — no recursion
+        }
     }
 
     /// Populates fields from an existing EventAction for editing.
@@ -224,6 +305,47 @@ impl ActionEditorState {
                 self.branch_checks = condition.checks.clone();
                 self.branch_on_true = on_true.clone();
                 self.branch_on_false = on_false.clone();
+            }
+            EventAction::ShowSelection {
+                prompt,
+                config,
+                choices,
+            } => {
+                self.action_type = ActionType::ShowSelection;
+                match prompt {
+                    DialogTextData::Inline(s) => {
+                        self.selection_prompt_mode = DialogTextMode::Inline;
+                        self.selection_prompt_text = s.clone();
+                        self.selection_prompt_id.clear();
+                    }
+                    DialogTextData::Id(id) => {
+                        self.selection_prompt_mode = DialogTextMode::TextId;
+                        self.selection_prompt_id = id.clone();
+                        self.selection_prompt_text.clear();
+                    }
+                }
+                self.selection_position = config.position.clone();
+                self.selection_face_portrait = config.face_portrait.clone();
+                self.selection_choices = choices
+                    .iter()
+                    .map(|choice| {
+                        let (label_mode, label_text, label_id) = match &choice.label {
+                            DialogTextData::Inline(s) => {
+                                (DialogTextMode::Inline, s.clone(), String::new())
+                            }
+                            DialogTextData::Id(id) => {
+                                (DialogTextMode::TextId, String::new(), id.clone())
+                            }
+                        };
+                        EditorChoice {
+                            label_mode,
+                            label_text,
+                            label_id,
+                            actions: choice.actions.clone(),
+                            action_editor: ActionEditorState::new_nested(),
+                        }
+                    })
+                    .collect();
             }
         }
         self.editing_index = Some(index);
@@ -357,6 +479,70 @@ impl ActionEditorState {
                     condition,
                     on_true: self.branch_on_true.clone(),
                     on_false: self.branch_on_false.clone(),
+                })
+            }
+            ActionType::ShowSelection => {
+                // Validate: at least 2 choices
+                if self.selection_choices.len() < 2 {
+                    return None;
+                }
+                // Validate: each choice must have a non-empty label
+                for choice in &self.selection_choices {
+                    match choice.label_mode {
+                        DialogTextMode::Inline => {
+                            if choice.label_text.is_empty() {
+                                return None;
+                            }
+                        }
+                        DialogTextMode::TextId => {
+                            if choice.label_id.is_empty() {
+                                return None;
+                            }
+                        }
+                    }
+                }
+                // Build prompt
+                let prompt = match self.selection_prompt_mode {
+                    DialogTextMode::Inline => {
+                        if self.selection_prompt_text.is_empty() {
+                            return None;
+                        }
+                        DialogTextData::Inline(self.selection_prompt_text.clone())
+                    }
+                    DialogTextMode::TextId => {
+                        if self.selection_prompt_id.is_empty() {
+                            return None;
+                        }
+                        DialogTextData::Id(self.selection_prompt_id.clone())
+                    }
+                };
+                // Build config
+                let config = DialogConfigData {
+                    text_speed: 30.0,
+                    position: self.selection_position.clone(),
+                    movement_block: true,
+                    attribute_dialog: false,
+                    face_portrait: self.selection_face_portrait.clone(),
+                };
+                // Build choices
+                let choices: Vec<ChoiceData> = self
+                    .selection_choices
+                    .iter()
+                    .map(|ec| {
+                        let label = match ec.label_mode {
+                            DialogTextMode::Inline => DialogTextData::Inline(ec.label_text.clone()),
+                            DialogTextMode::TextId => DialogTextData::Id(ec.label_id.clone()),
+                        };
+                        ChoiceData {
+                            label,
+                            actions: ec.actions.clone(),
+                        }
+                    })
+                    .collect();
+                Some(EventAction::ShowSelection {
+                    prompt,
+                    config,
+                    choices,
                 })
             }
         }

@@ -26,7 +26,7 @@ pub use systems::collision::is_tile_blocked;
 pub use systems::map_render::{
     RendererAnimatedTile, RendererAnimationTick, animate_renderer_tiles, compute_tile_z,
     init_npc_positions, resort_tile_z_on_elevation_change, spawn_npc_sprites, sync_map_sprites,
-    tick_renderer_animation,
+    tick_renderer_animation, update_character_depth_sort,
 };
 pub use systems::npc::{
     npc_patrol_animation, npc_patrol_movement, npc_trigger_system, read_interaction_input,
@@ -51,6 +51,10 @@ pub use dialog::{
 };
 pub use systems::dialog::{
     detect_overflow, handle_dialog_event, handle_dialog_input, update_dialog_typewriter,
+};
+pub use systems::selection::{
+    ResolvedChoice, SelectionBox, SelectionCursor, SelectionLabel, SelectionState,
+    handle_selection_input,
 };
 
 pub use resources::SavePath;
@@ -113,7 +117,8 @@ impl Plugin for ProjectRendererPlugin {
                         .after(spawn_npc_sprites)
                         .before(npc_patrol_movement),
                     resort_tile_z_on_elevation_change.after(init_npc_positions),
-                    apply_pixel_scale.after(resort_tile_z_on_elevation_change),
+                    update_character_depth_sort.after(resort_tile_z_on_elevation_change),
+                    apply_pixel_scale.after(update_character_depth_sort),
                     update_camera.after(apply_pixel_scale),
                 ),
             )
@@ -127,6 +132,9 @@ impl Plugin for ProjectRendererPlugin {
                     detect_overflow.after(handle_dialog_event),
                     update_dialog_typewriter.after(handle_dialog_event),
                     handle_dialog_input.after(update_dialog_typewriter),
+                    handle_selection_input
+                        .after(read_input)
+                        .before(player_movement),
                 ),
             )
             .add_systems(Last, save_shutdown);
@@ -147,8 +155,12 @@ fn fire_initial_map_changed(
     }
 }
 
-/// Last system that persists `GameState` to disk.
+/// Persists `GameState` to disk only when the state has actually changed.
 fn save_shutdown(save_path: Res<SavePath>, game_state: Res<GameState>) {
+    if !game_state.is_changed() {
+        return;
+    }
+
     let save_file = SaveFile {
         state: game_state
             .flags

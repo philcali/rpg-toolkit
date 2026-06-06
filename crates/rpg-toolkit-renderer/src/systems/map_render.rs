@@ -265,15 +265,14 @@ pub fn spawn_npc_sprites(
             paused: true,
         });
 
-        // Compute NPC Z using the same elevation-aware rules as tiles.
-        // NPCs above the player's elevation render above the player sprite;
-        // NPCs at or below render below the player but above tile layers.
+        // Compute NPC Z using elevation-aware rules with Y-based depth sorting.
+        // NPCs at the same elevation as the player use Y position for front/back ordering.
         let npc_z = if npc.elevation > player_elevation {
-            // Above player: render above player Z (num_layers + 1.0)
-            num_layers as f32 + 2.0 + num_layers as f32 + 0.5
+            // Above player: render above player Z
+            num_layers as f32 + 2.0 + num_layers as f32 + 0.5 - world_pos.y * 0.001
         } else {
-            // Below or equal to player: render between tiles and player
-            num_layers as f32 + 0.5
+            // Same or below player elevation: use same base as player with Y-based sorting
+            num_layers as f32 + 1.0 - world_pos.y * 0.001
         };
 
         commands.spawn((
@@ -351,17 +350,18 @@ pub fn resort_tile_z_on_elevation_change(
         transform.translation.z = z;
     }
 
-    // Update all NPC sprite Z values
+    // Update all NPC sprite Z values (with Y-based depth sorting)
     for (npc_sprite, mut transform) in npc_query.iter_mut() {
         let npc_elevation = map
             .npcs
             .get(npc_sprite.npc_index)
             .map_or(0, |npc| npc.elevation);
 
+        let world_y = transform.translation.y;
         let npc_z = if npc_elevation > player_elevation {
-            num_layers as f32 + 2.0 + num_layers as f32 + 0.5
+            num_layers as f32 + 2.0 + num_layers as f32 + 0.5 - world_y * 0.001
         } else {
-            num_layers as f32 + 0.5
+            num_layers as f32 + 1.0 - world_y * 0.001
         };
         transform.translation.z = npc_z;
     }
@@ -435,5 +435,56 @@ pub fn animate_renderer_tiles(
         if let Some(ref mut atlas) = sprite.texture_atlas {
             atlas.index = atlas_index;
         }
+    }
+}
+
+/// Updates the Z position of the player and NPC sprites every frame based on their
+/// current world Y position. This provides Y-based depth sorting — entities further
+/// south on screen (more negative world Y) render on top of entities further north,
+/// creating the classic JRPG "walking behind" effect.
+#[allow(clippy::type_complexity)]
+pub fn update_character_depth_sort(
+    renderer_state: Res<RendererState>,
+    project_data: Res<RendererProjectData>,
+    mut player_query: Query<(&PlayerCharacter, &mut Transform), Without<NpcSprite>>,
+    mut npc_query: Query<
+        (&NpcSprite, &mut Transform),
+        (Without<PlayerCharacter>, Without<RendererTileSprite>),
+    >,
+) {
+    let Some(map_id) = &renderer_state.active_map_id else {
+        return;
+    };
+    let Some(map) = project_data.project_file.maps.get(map_id) else {
+        return;
+    };
+
+    let num_layers = map.layers.len();
+
+    // Update player Z based on current Y
+    for (player, mut transform) in player_query.iter_mut() {
+        let world_y = transform.translation.y;
+        let base_z = num_layers as f32 + 1.0;
+        // Negate world_y so entities further south (more negative Y) get higher Z
+        transform.translation.z = base_z - world_y * 0.001;
+        let _ = player; // used for query filter
+    }
+
+    // Update NPC Z based on current Y
+    for (npc_sprite, mut transform) in npc_query.iter_mut() {
+        let npc_elevation = map
+            .npcs
+            .get(npc_sprite.npc_index)
+            .map_or(0, |npc| npc.elevation);
+
+        let player_elevation = player_query.iter().next().map_or(0, |(pc, _)| pc.elevation);
+
+        let world_y = transform.translation.y;
+        let npc_z = if npc_elevation > player_elevation {
+            num_layers as f32 + 2.0 + num_layers as f32 + 0.5 - world_y * 0.001
+        } else {
+            num_layers as f32 + 1.0 - world_y * 0.001
+        };
+        transform.translation.z = npc_z;
     }
 }
