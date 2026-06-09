@@ -1,4 +1,5 @@
 pub mod animation;
+pub mod character;
 pub mod condition;
 pub mod error;
 pub mod manifest;
@@ -9,6 +10,9 @@ pub mod tileset;
 
 pub use animation::{
     AnimationFrame, TileAnimation, compute_animation_frame_index, validate_tile_animation,
+};
+pub use character::{
+    Character, CharacterId, CharacterRegistry, OPTIONAL_STATS, REQUIRED_STATS, Stat,
 };
 pub use condition::{
     BranchCondition, ConditionCheck, ConditionLogic, ConditionOperator, ConditionalTrigger,

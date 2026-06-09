@@ -2,14 +2,13 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::data::project::Project;
-use crate::data::{AnyDialogOpen, EditorState, TilesetMeta};
+use crate::data::{AnyDialogOpen, AppEditorMode, EditorState, EditorUiSet, TilesetMeta};
 use crate::plugins::attribute::{
     ElevationDialog, ElevationTransitionDialog, EventTriggerDialog, NpcPlacementDialog,
     SpawnPointConfirmDialog,
 };
 use crate::plugins::serialization::{SerializationAction, SerializationRequest};
 use crate::plugins::spritesheet::RemoveSpritesheetDialog;
-use crate::plugins::toolbar::CanvasRect;
 
 /// Plugin that provides the application shell: menu bar, canvas area, and side panel.
 pub struct AppShellPlugin;
@@ -22,9 +21,12 @@ impl Plugin for AppShellPlugin {
             .init_resource::<UnsavedChangesDialog>()
             .init_resource::<EditorState>()
             .init_resource::<AnyDialogOpen>()
+            .init_resource::<AppEditorMode>()
             .add_systems(
                 EguiPrimaryContextPass,
-                (app_shell_ui, update_any_dialog_open).chain(),
+                (app_shell_ui, update_any_dialog_open)
+                    .chain()
+                    .in_set(EditorUiSet::Shell),
             );
     }
 }
@@ -112,7 +114,7 @@ fn app_shell_ui(
     asset_server: Res<AssetServer>,
     mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut project: ResMut<Project>,
-    mut canvas_rect: ResMut<CanvasRect>,
+    mut app_editor_mode: ResMut<AppEditorMode>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -170,6 +172,25 @@ fn app_shell_ui(
                     ui.close();
                 }
                 if ui.button("Redo").clicked() {
+                    ui.close();
+                }
+            });
+            ui.menu_button("Mode", |ui| {
+                if ui
+                    .selectable_label(*app_editor_mode == AppEditorMode::MapEditor, "🗺 Map Editor")
+                    .clicked()
+                {
+                    *app_editor_mode = AppEditorMode::MapEditor;
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(
+                        *app_editor_mode == AppEditorMode::CharacterEditor,
+                        "👤 Character Editor",
+                    )
+                    .clicked()
+                {
+                    *app_editor_mode = AppEditorMode::CharacterEditor;
                     ui.close();
                 }
             });
@@ -474,8 +495,8 @@ fn app_shell_ui(
         }
     }
 
-    // Map Tab Bar — horizontal tab strip above the canvas
-    if !project.open_tabs.is_empty() {
+    // Map Tab Bar — horizontal tab strip above the canvas (only in MapEditor mode)
+    if *app_editor_mode == AppEditorMode::MapEditor && !project.open_tabs.is_empty() {
         let mut tab_action: Option<MapTabAction> = None;
 
         egui::TopBottomPanel::top("map_tab_bar").show(ctx, |ui| {
@@ -524,28 +545,28 @@ fn app_shell_ui(
 
     // Update canvas rect for toolbar positioning (available_rect reflects
     // the area remaining after side panels and top bars have been laid out).
-    let avail = ctx.available_rect();
-    canvas_rect.left = avail.left();
-    canvas_rect.top = avail.top();
-    canvas_rect.right = avail.right();
-    canvas_rect.bottom = avail.bottom();
+    // NOTE: At this point only the top panel(s) have been rendered in this system.
+    // Side panels render in separate systems. The canvas_rect is refined by
+    // consumers (toolbar) who read available_rect after all panels are drawn.
 
-    // Central panel — transparent when a map is loaded so Bevy's 2D
-    // camera (gizmo grid, sprites) shows through.
-    let has_active_map = project.active_map().is_some();
-    if has_active_map {
-        let frame = egui::Frame::new()
-            .fill(egui::Color32::TRANSPARENT)
-            .inner_margin(0.0);
-        egui::CentralPanel::default().frame(frame).show(ctx, |_ui| {
-            // Bevy renders the grid and tiles behind this transparent panel.
-        });
-    } else {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.centered_and_justified(|ui| {
-                ui.label("No map open");
+    // Central panel — only rendered in MapEditor mode.
+    // In CharacterEditor mode, the CharacterPanelPlugin owns the central panel.
+    if *app_editor_mode == AppEditorMode::MapEditor {
+        let has_active_map = project.active_map().is_some();
+        if has_active_map {
+            let frame = egui::Frame::new()
+                .fill(egui::Color32::TRANSPARENT)
+                .inner_margin(0.0);
+            egui::CentralPanel::default().frame(frame).show(ctx, |_ui| {
+                // Bevy renders the grid and tiles behind this transparent panel.
             });
-        });
+        } else {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.centered_and_justified(|ui| {
+                    ui.label("No map open");
+                });
+            });
+        }
     }
 
     Ok(())

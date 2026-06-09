@@ -6,7 +6,7 @@ use bevy::prelude::*;
 pub use rpg_toolkit_common::ProjectFile;
 
 use rpg_toolkit_common::{
-    CharacterSpritesheet, MapData, MapId, SpawnPoint, SpritesheetId, TilesetId,
+    CharacterRegistry, CharacterSpritesheet, MapData, MapId, SpawnPoint, SpritesheetId, TilesetId,
 };
 
 use super::state::EditorError;
@@ -29,6 +29,10 @@ pub struct Project {
     pub dialog_texts: HashMap<String, String>,
     /// Face portrait entries: portrait ID → asset path.
     pub face_portraits: HashMap<String, String>,
+    /// Character registry: all playable characters defined in this project.
+    pub characters: CharacterRegistry,
+    /// Whether character data has been modified since the last save.
+    pub has_unsaved_character_changes: bool,
 }
 
 impl Project {

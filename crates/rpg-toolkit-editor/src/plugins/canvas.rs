@@ -3,7 +3,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::algorithms::line_engine::bresenham_line;
 use crate::data::map::MapId;
-use crate::data::{EditorState, EditorTool, Project};
+use crate::data::{AppEditorMode, EditorState, EditorTool, EditorUiSet, Project};
 use crate::systems::camera::{self, PanState};
 use crate::systems::input::CursorWorldState;
 
@@ -39,9 +39,15 @@ impl Plugin for CanvasPlugin {
                     draw_grid.after(camera::apply_camera_transform),
                     draw_preview_gizmos.after(draw_grid),
                 )
-                    .before(crate::systems::input::update_cursor_state),
+                    .before(crate::systems::input::update_cursor_state)
+                    .run_if(resource_equals(AppEditorMode::MapEditor)),
             )
-            .add_systems(EguiPrimaryContextPass, coordinate_tooltip_ui);
+            .add_systems(
+                EguiPrimaryContextPass,
+                coordinate_tooltip_ui
+                    .in_set(EditorUiSet::Overlay)
+                    .run_if(resource_equals(AppEditorMode::MapEditor)),
+            );
     }
 }
 

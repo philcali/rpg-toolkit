@@ -4,6 +4,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::character::CharacterRegistry;
 use crate::error::CommonError;
 use crate::map::{MapData, MapId, SpawnPoint, TilesetId};
 use crate::spritesheet::{CharacterSpritesheet, SpritesheetId};
@@ -26,6 +27,9 @@ pub struct ProjectManifest {
     pub dialog_texts: HashMap<String, String>,
     #[serde(default)]
     pub face_portraits: HashMap<String, String>,
+    /// Character registry: all playable characters defined in this project.
+    #[serde(default)]
+    pub characters: CharacterRegistry,
 }
 
 impl ProjectManifest {
@@ -165,6 +169,7 @@ impl ProjectManifest {
             self.player_spritesheet,
             self.dialog_texts,
             self.face_portraits,
+            self.characters,
         ))
     }
 
@@ -237,6 +242,7 @@ impl ProjectManifest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::character::CharacterRegistry;
     use std::fs;
 
     #[test]
@@ -278,6 +284,7 @@ mod tests {
             player_spritesheet: Some("ss-1".to_string()),
             dialog_texts: HashMap::new(),
             face_portraits: HashMap::new(),
+            characters: CharacterRegistry::default(),
         };
 
         let bytes = manifest.to_bytes().unwrap();
@@ -302,6 +309,7 @@ mod tests {
             None,
             HashMap::new(),
             HashMap::new(),
+            CharacterRegistry::default(),
         );
 
         project_file.serialize_to_dir(&tmp).unwrap();
@@ -348,6 +356,7 @@ mod tests {
             player_spritesheet: None,
             dialog_texts: HashMap::new(),
             face_portraits: HashMap::new(),
+            characters: CharacterRegistry::default(),
         };
 
         let errors = manifest.validate_refs(&tmp);

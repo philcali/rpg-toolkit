@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::data::commands::EditCommandKind;
-use crate::data::{EditCommand, Project};
+use crate::data::{AppEditorMode, EditCommand, Project};
 use crate::plugins::dialog_text_panel::{TextIdIndex, update_text_id_index_for_tile};
 
 /// Plugin that manages undo/redo history and keyboard shortcuts.
@@ -9,7 +9,11 @@ pub struct UndoRedoPlugin;
 
 impl Plugin for UndoRedoPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (consume_edit_commands, undo_redo_keyboard));
+        app.add_systems(
+            Update,
+            (consume_edit_commands, undo_redo_keyboard)
+                .run_if(resource_equals(AppEditorMode::MapEditor)),
+        );
     }
 }
 

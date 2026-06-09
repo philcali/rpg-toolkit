@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::character::CharacterRegistry;
 use crate::error::CommonError;
 use crate::map::{DialogTextData, EventAction, MapData, MapId, SpawnPoint, TilesetId};
 use crate::spritesheet::{CharacterSpritesheet, SpritesheetId};
@@ -33,8 +34,12 @@ pub struct ProjectFile {
     /// Face portrait entries: portrait ID → asset path.
     #[serde(default)]
     pub face_portraits: HashMap<String, String>,
+    /// Character registry: all playable characters defined in this project.
+    #[serde(default)]
+    pub characters: CharacterRegistry,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl ProjectFile {
     /// Creates a new `ProjectFile`.
     pub fn new(
@@ -45,6 +50,7 @@ impl ProjectFile {
         player_spritesheet: Option<SpritesheetId>,
         dialog_texts: HashMap<String, String>,
         face_portraits: HashMap<String, String>,
+        characters: CharacterRegistry,
     ) -> Self {
         Self {
             maps,
@@ -54,6 +60,7 @@ impl ProjectFile {
             player_spritesheet,
             dialog_texts,
             face_portraits,
+            characters,
         }
     }
 
@@ -66,9 +73,24 @@ impl ProjectFile {
     /// Deserializes a project from a JSON string, validates each map,
     /// and checks that all `TileRef` tileset IDs and NPC spritesheet IDs
     /// reference entries present in the project.
+    ///
+    /// Note on duplicate character IDs: Since `CharacterRegistry` uses a `HashMap<CharacterId, Character>`,
+    /// serde's default deserialization applies last-wins semantics for duplicate keys. This means
+    /// duplicate character IDs in hand-edited JSON will not produce an error but will silently
+    /// keep the last entry. This aligns with HashMap's natural deduplication behavior.
     pub fn deserialize(json: &str) -> Result<Self, CommonError> {
         let project: Self = serde_json::from_str(json)
             .map_err(|e| CommonError::ProjectParseError(e.to_string()))?;
+
+        // Validate character IDs match their keys in the registry
+        for (id, character) in &project.characters.characters {
+            if id != &character.id {
+                return Err(CommonError::ProjectValidationError(format!(
+                    "character registry key '{}' does not match character id '{}'",
+                    id, character.id
+                )));
+            }
+        }
 
         // Validate each map
         for (map_id, map) in &project.maps {
@@ -230,6 +252,7 @@ impl ProjectFile {
             player_spritesheet: self.player_spritesheet.clone(),
             dialog_texts: self.dialog_texts.clone(),
             face_portraits: self.face_portraits.clone(),
+            characters: self.characters.clone(),
         }
     }
 }

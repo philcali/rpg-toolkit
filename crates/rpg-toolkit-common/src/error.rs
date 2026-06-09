@@ -18,4 +18,6 @@ pub enum CommonError {
     AnimationInvalidDuration,
     #[error("frame ({col}, {row}) out of tileset bounds")]
     AnimationFrameOutOfBounds { col: u32, row: u32 },
+    #[error("Character validation error: {0}")]
+    CharacterValidationError(String),
 }

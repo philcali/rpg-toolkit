@@ -5,11 +5,11 @@ mod systems;
 
 use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
-use bevy_egui::EguiPlugin;
+use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use plugins::{
-    AppShellPlugin, AttributePlugin, CanvasPlugin, DialogTextPanelPlugin, LayerPanelPlugin,
-    PaintingPlugin, SerializationPlugin, SpritesheetPlugin, TextIdIndex, TilePalettePlugin,
-    ToolbarPlugin, UndoRedoPlugin,
+    AppShellPlugin, AttributePlugin, CanvasPlugin, CharacterPanelPlugin, DialogTextPanelPlugin,
+    LayerPanelPlugin, PaintingPlugin, SerializationPlugin, SpritesheetPlugin, TextIdIndex,
+    TilePalettePlugin, ToolbarPlugin, UndoRedoPlugin,
 };
 
 fn main() {
@@ -34,6 +34,16 @@ fn main() {
                 }),
         )
         .add_plugins(EguiPlugin::default())
+        // Configure UI system set ordering: Shell → Panels → Overlay
+        .configure_sets(
+            EguiPrimaryContextPass,
+            (
+                data::EditorUiSet::Shell,
+                data::EditorUiSet::Panels,
+                data::EditorUiSet::Overlay,
+            )
+                .chain(),
+        )
         .add_plugins(AppShellPlugin)
         .add_plugins(CanvasPlugin)
         .add_plugins(TilePalettePlugin)
@@ -45,6 +55,7 @@ fn main() {
         .add_plugins(AttributePlugin)
         .add_plugins(SpritesheetPlugin)
         .add_plugins(DialogTextPanelPlugin)
+        .add_plugins(CharacterPanelPlugin)
         .init_resource::<data::Project>()
         .init_resource::<TextIdIndex>()
         .init_resource::<systems::input::CursorWorldState>()

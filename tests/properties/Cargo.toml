@@ -44,6 +44,14 @@ path = "event_branching.rs"
 name = "dialog_selection_round_trip"
 path = "dialog_selection_round_trip.rs"
 
+[[test]]
+name = "character_round_trip"
+path = "character_round_trip.rs"
+
+[[test]]
+name = "character_invariants"
+path = "character_invariants.rs"
+
 [dev-dependencies]
 proptest = { workspace = true }
 serde_json = { workspace = true }

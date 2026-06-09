@@ -9,6 +9,18 @@ use std::path::PathBuf;
 
 use rpg_toolkit_common::{AnimationFrame, CommonError, TileRef, TilesetId};
 
+/// System sets for ordering egui panel rendering.
+/// Panels must render in order: Shell (top bar) → Panels (side panels) → Overlay (toolbar, tooltips).
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum EditorUiSet {
+    /// Top-level shell: menu bar, tab bar, central panel.
+    Shell,
+    /// Side panels: layer panel, tile palette, character panel.
+    Panels,
+    /// Floating overlays: toolbar, coordinate tooltip.
+    Overlay,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Resource)]
 pub enum EditorTool {
     #[default]
@@ -67,6 +79,18 @@ pub enum EditorError {
     ProjectValidationError(String),
     #[error(transparent)]
     Common(#[from] CommonError),
+}
+
+/// Top-level application editor mode. Controls which set of plugins
+/// renders in the viewport.
+///
+/// This is separate from the existing `EditorMode` enum which toggles
+/// Paint/Attribute within the map editor.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Resource)]
+pub enum AppEditorMode {
+    #[default]
+    MapEditor,
+    CharacterEditor,
 }
 
 /// Resource that is `true` whenever any modal dialog window is open.

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-use crate::data::{AttributeTool, EditorMode, EditorState, EditorTool};
+use crate::data::{AppEditorMode, AttributeTool, EditorMode, EditorState, EditorTool, EditorUiSet};
 
 /// Resource storing the canvas area bounds for toolbar positioning and input gating.
 /// Written by the app shell after panels are laid out.
@@ -19,8 +19,16 @@ impl Plugin for ToolbarPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EditorTool>()
             .init_resource::<CanvasRect>()
-            .add_systems(EguiPrimaryContextPass, toolbar_ui)
-            .add_systems(Update, tool_hotkeys);
+            .add_systems(
+                EguiPrimaryContextPass,
+                toolbar_ui
+                    .in_set(EditorUiSet::Overlay)
+                    .run_if(resource_equals(AppEditorMode::MapEditor)),
+            )
+            .add_systems(
+                Update,
+                tool_hotkeys.run_if(resource_equals(AppEditorMode::MapEditor)),
+            );
     }
 }
 
@@ -37,9 +45,16 @@ fn toolbar_ui(
     mut contexts: EguiContexts,
     mut active_tool: ResMut<EditorTool>,
     mut editor_state: ResMut<EditorState>,
-    canvas_rect: Res<CanvasRect>,
+    mut canvas_rect: ResMut<CanvasRect>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
+
+    // Compute canvas rect now that all panels (top, left, right) have been laid out.
+    let avail = ctx.available_rect();
+    canvas_rect.left = avail.left();
+    canvas_rect.top = avail.top();
+    canvas_rect.right = avail.right();
+    canvas_rect.bottom = avail.bottom();
 
     let offset = [canvas_rect.left, canvas_rect.top];
 

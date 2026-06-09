@@ -3,7 +3,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::data::map::MapId;
 use crate::data::project::Project;
-use crate::data::{EditCommand, MapDataEditorExt};
+use crate::data::{AppEditorMode, EditCommand, EditorUiSet, MapDataEditorExt};
 use crate::plugins::dialog_text_panel::{
     DialogTextPanelState, TextIdIndex, render_dialog_text_modal, render_dialog_text_panel,
     render_face_portrait_modal,
@@ -19,7 +19,12 @@ impl Plugin for LayerPanelPlugin {
         app.init_resource::<LayerCounter>()
             .init_resource::<MapBrowserState>()
             .init_resource::<MapDeleteDialogOpen>()
-            .add_systems(EguiPrimaryContextPass, layer_panel_ui);
+            .add_systems(
+                EguiPrimaryContextPass,
+                layer_panel_ui
+                    .in_set(EditorUiSet::Panels)
+                    .run_if(resource_equals(AppEditorMode::MapEditor)),
+            );
     }
 }
 
