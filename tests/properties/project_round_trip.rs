@@ -231,6 +231,7 @@ fn arb_project_file() -> impl Strategy<Value = ProjectFile> {
                     player_spritesheet,
                     HashMap::new(), // no dialog texts needed for this property
                     HashMap::new(), // no face portraits needed for this property
+                    rpg_toolkit_common::CharacterRegistry::default(),
                 )
             },
         )

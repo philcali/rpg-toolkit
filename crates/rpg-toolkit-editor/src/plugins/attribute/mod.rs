@@ -21,6 +21,9 @@ pub use spawn_point_dialog::SpawnPointConfirmDialog;
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
+use crate::data::AppEditorMode;
+use crate::data::EditorUiSet;
+
 pub struct AttributePlugin;
 
 impl Plugin for AttributePlugin {
@@ -38,14 +41,17 @@ impl Plugin for AttributePlugin {
                     npc_dialog::npc_placement_dialog_ui,
                     elevation_dialog::elevation_dialog_ui,
                     elevation_dialog::elevation_transition_dialog_ui,
-                ),
+                )
+                    .in_set(EditorUiSet::Panels)
+                    .run_if(resource_equals(AppEditorMode::MapEditor)),
             )
             .add_systems(
                 Update,
                 (
                     overlay::attribute_overlay_system.after(crate::plugins::canvas::draw_grid),
                     click::attribute_click_system.after(crate::systems::input::update_cursor_state),
-                ),
+                )
+                    .run_if(resource_equals(AppEditorMode::MapEditor)),
             );
     }
 }

@@ -5,7 +5,10 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::data::map::TileRef;
 use crate::data::project::Project;
-use crate::data::{AnimationEditorState, EditorState, StampBrushSelection, clamp_palette_scale};
+use crate::data::{
+    AnimationEditorState, AppEditorMode, EditorState, EditorUiSet, StampBrushSelection,
+    clamp_palette_scale,
+};
 use crate::plugins::app_shell::ErrorDialog;
 use crate::plugins::searchable_combobox::searchable_combobox;
 use crate::plugins::spritesheet::{
@@ -39,7 +42,10 @@ impl Plugin for TilePalettePlugin {
             .init_resource::<AnimationEditorState>()
             .add_systems(
                 EguiPrimaryContextPass,
-                (sync_spritesheet_textures, tile_palette_ui).chain(),
+                (sync_spritesheet_textures, tile_palette_ui)
+                    .chain()
+                    .in_set(EditorUiSet::Panels)
+                    .run_if(resource_equals(AppEditorMode::MapEditor)),
             );
     }
 }

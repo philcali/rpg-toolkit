@@ -5,7 +5,8 @@ use crate::algorithms::flood_fill::flood_fill;
 use crate::algorithms::line_engine::bresenham_line;
 use crate::data::map::TileRef;
 use crate::data::{
-    AnyDialogOpen, EditCommand, EditorMode, EditorState, EditorTool, MapDataEditorExt, Project,
+    AnyDialogOpen, AppEditorMode, EditCommand, EditorMode, EditorState, EditorTool,
+    MapDataEditorExt, Project,
 };
 use crate::systems::input::CursorWorldState;
 
@@ -16,7 +17,9 @@ impl Plugin for PaintingPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<EditCommand>().add_systems(
             Update,
-            painting_system.after(crate::systems::input::update_cursor_state),
+            painting_system
+                .after(crate::systems::input::update_cursor_state)
+                .run_if(resource_equals(AppEditorMode::MapEditor)),
         );
     }
 }
