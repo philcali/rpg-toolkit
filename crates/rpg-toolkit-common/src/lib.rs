@@ -2,6 +2,7 @@ pub mod animation;
 pub mod character;
 pub mod condition;
 pub mod error;
+pub mod item;
 pub mod manifest;
 pub mod map;
 pub mod project;
@@ -18,6 +19,11 @@ pub use condition::{
     BranchCondition, ConditionCheck, ConditionLogic, ConditionOperator, ConditionalTrigger,
 };
 pub use error::CommonError;
+pub use item::{
+    BuffTargetStat, ConsumableEffect, ConsumableEffectType, CureTargetStatus, EquipmentSlot, Item,
+    ItemCategory, ItemCategoryData, ItemId, ItemRegistry, Rarity, StatModifier,
+    format_modifier_value,
+};
 pub use manifest::ProjectManifest;
 pub use map::{
     ChoiceData, DialogConfigData, DialogPositionData, DialogTextData, EventAction, FadeType, Layer,

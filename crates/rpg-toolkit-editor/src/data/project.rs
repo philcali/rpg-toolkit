@@ -6,7 +6,8 @@ use bevy::prelude::*;
 pub use rpg_toolkit_common::ProjectFile;
 
 use rpg_toolkit_common::{
-    CharacterRegistry, CharacterSpritesheet, MapData, MapId, SpawnPoint, SpritesheetId, TilesetId,
+    CharacterRegistry, CharacterSpritesheet, ItemRegistry, MapData, MapId, SpawnPoint,
+    SpritesheetId, TilesetId,
 };
 
 use super::state::EditorError;
@@ -33,6 +34,10 @@ pub struct Project {
     pub characters: CharacterRegistry,
     /// Whether character data has been modified since the last save.
     pub has_unsaved_character_changes: bool,
+    /// Item registry: all items defined in this project.
+    pub items: ItemRegistry,
+    /// Whether item data has been modified since the last save.
+    pub has_unsaved_item_changes: bool,
 }
 
 impl Project {

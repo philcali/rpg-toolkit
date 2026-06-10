@@ -43,7 +43,7 @@ impl Plugin for AttributePlugin {
                     elevation_dialog::elevation_transition_dialog_ui,
                 )
                     .in_set(EditorUiSet::Panels)
-                    .run_if(resource_equals(AppEditorMode::MapEditor)),
+                    .run_if(resource_equals(AppEditorMode::Map)),
             )
             .add_systems(
                 Update,
@@ -51,7 +51,7 @@ impl Plugin for AttributePlugin {
                     overlay::attribute_overlay_system.after(crate::plugins::canvas::draw_grid),
                     click::attribute_click_system.after(crate::systems::input::update_cursor_state),
                 )
-                    .run_if(resource_equals(AppEditorMode::MapEditor)),
+                    .run_if(resource_equals(AppEditorMode::Map)),
             );
     }
 }

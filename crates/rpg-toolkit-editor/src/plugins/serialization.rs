@@ -117,6 +117,7 @@ fn to_project_file(project: &Project) -> ProjectFile {
         project.dialog_texts.clone(),
         project.face_portraits.clone(),
         project.characters.clone(),
+        project.items.clone(),
     )
 }
 
@@ -204,6 +205,8 @@ fn load_project_from_dir(
         face_portraits: project_file.face_portraits,
         characters: project_file.characters,
         has_unsaved_character_changes: false,
+        items: project_file.items,
+        has_unsaved_item_changes: false,
     };
 
     editor_state.current_save_path = Some(dir.to_path_buf());
@@ -288,6 +291,8 @@ fn load_project_from_zip(
         face_portraits: project_file.face_portraits,
         characters: project_file.characters,
         has_unsaved_character_changes: false,
+        items: project_file.items,
+        has_unsaved_item_changes: false,
     };
 
     editor_state.current_save_path = Some(temp_dir.path().to_path_buf());
@@ -355,6 +360,8 @@ fn load_project_from_json(
         face_portraits: project_file.face_portraits,
         characters: project_file.characters,
         has_unsaved_character_changes: false,
+        items: project_file.items,
+        has_unsaved_item_changes: false,
     };
 
     editor_state.current_save_path = Some(json_path.to_path_buf());
@@ -479,6 +486,7 @@ fn save_project_to_path(
                 *has_changes = false;
             }
             project.has_unsaved_character_changes = false;
+            project.has_unsaved_item_changes = false;
             editor_state.current_save_path = Some(path.to_path_buf());
             editor_state.original_zip_path = None;
             info!("Project saved to directory {}", path.display());
@@ -491,6 +499,7 @@ fn save_project_to_path(
                 *has_changes = false;
             }
             project.has_unsaved_character_changes = false;
+            project.has_unsaved_item_changes = false;
             editor_state.current_save_path = Some(path.to_path_buf());
             editor_state.original_zip_path = Some(path.to_path_buf());
             info!("Project saved as ZIP to {}", path.display());
@@ -613,6 +622,7 @@ fn save_to_json(
         project.dialog_texts.clone(),
         project.face_portraits.clone(),
         project.characters.clone(),
+        project.items.clone(),
     );
 
     match project_file.serialize() {
@@ -622,6 +632,7 @@ fn save_to_json(
                     *has_changes = false;
                 }
                 project.has_unsaved_character_changes = false;
+                project.has_unsaved_item_changes = false;
                 editor_state.current_save_path = Some(path.to_path_buf());
                 info!("Project saved to {}", path.display());
             }

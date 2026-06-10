@@ -23,7 +23,7 @@ impl Plugin for LayerPanelPlugin {
                 EguiPrimaryContextPass,
                 layer_panel_ui
                     .in_set(EditorUiSet::Panels)
-                    .run_if(resource_equals(AppEditorMode::MapEditor)),
+                    .run_if(resource_equals(AppEditorMode::Map)),
             );
     }
 }

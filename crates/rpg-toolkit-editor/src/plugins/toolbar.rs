@@ -23,11 +23,11 @@ impl Plugin for ToolbarPlugin {
                 EguiPrimaryContextPass,
                 toolbar_ui
                     .in_set(EditorUiSet::Overlay)
-                    .run_if(resource_equals(AppEditorMode::MapEditor)),
+                    .run_if(resource_equals(AppEditorMode::Map)),
             )
             .add_systems(
                 Update,
-                tool_hotkeys.run_if(resource_equals(AppEditorMode::MapEditor)),
+                tool_hotkeys.run_if(resource_equals(AppEditorMode::Map)),
             );
     }
 }

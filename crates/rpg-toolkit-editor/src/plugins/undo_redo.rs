@@ -11,8 +11,7 @@ impl Plugin for UndoRedoPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (consume_edit_commands, undo_redo_keyboard)
-                .run_if(resource_equals(AppEditorMode::MapEditor)),
+            (consume_edit_commands, undo_redo_keyboard).run_if(resource_equals(AppEditorMode::Map)),
         );
     }
 }

@@ -89,8 +89,9 @@ pub enum EditorError {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Resource)]
 pub enum AppEditorMode {
     #[default]
-    MapEditor,
-    CharacterEditor,
+    Map,
+    Character,
+    Item,
 }
 
 /// Resource that is `true` whenever any modal dialog window is open.

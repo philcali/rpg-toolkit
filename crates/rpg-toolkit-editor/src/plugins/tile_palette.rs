@@ -45,7 +45,7 @@ impl Plugin for TilePalettePlugin {
                 (sync_spritesheet_textures, tile_palette_ui)
                     .chain()
                     .in_set(EditorUiSet::Panels)
-                    .run_if(resource_equals(AppEditorMode::MapEditor)),
+                    .run_if(resource_equals(AppEditorMode::Map)),
             );
     }
 }

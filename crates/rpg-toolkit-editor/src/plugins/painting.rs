@@ -19,7 +19,7 @@ impl Plugin for PaintingPlugin {
             Update,
             painting_system
                 .after(crate::systems::input::update_cursor_state)
-                .run_if(resource_equals(AppEditorMode::MapEditor)),
+                .run_if(resource_equals(AppEditorMode::Map)),
         );
     }
 }
