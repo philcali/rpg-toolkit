@@ -177,20 +177,27 @@ fn app_shell_ui(
             });
             ui.menu_button("Mode", |ui| {
                 if ui
-                    .selectable_label(*app_editor_mode == AppEditorMode::MapEditor, "🗺 Map Editor")
+                    .selectable_label(*app_editor_mode == AppEditorMode::Map, "🗺 Map Editor")
                     .clicked()
                 {
-                    *app_editor_mode = AppEditorMode::MapEditor;
+                    *app_editor_mode = AppEditorMode::Map;
                     ui.close();
                 }
                 if ui
                     .selectable_label(
-                        *app_editor_mode == AppEditorMode::CharacterEditor,
+                        *app_editor_mode == AppEditorMode::Character,
                         "👤 Character Editor",
                     )
                     .clicked()
                 {
-                    *app_editor_mode = AppEditorMode::CharacterEditor;
+                    *app_editor_mode = AppEditorMode::Character;
+                    ui.close();
+                }
+                if ui
+                    .selectable_label(*app_editor_mode == AppEditorMode::Item, "⚔ Item Editor")
+                    .clicked()
+                {
+                    *app_editor_mode = AppEditorMode::Item;
                     ui.close();
                 }
             });
@@ -495,8 +502,8 @@ fn app_shell_ui(
         }
     }
 
-    // Map Tab Bar — horizontal tab strip above the canvas (only in MapEditor mode)
-    if *app_editor_mode == AppEditorMode::MapEditor && !project.open_tabs.is_empty() {
+    // Map Tab Bar — horizontal tab strip above the canvas (only in Map mode)
+    if *app_editor_mode == AppEditorMode::Map && !project.open_tabs.is_empty() {
         let mut tab_action: Option<MapTabAction> = None;
 
         egui::TopBottomPanel::top("map_tab_bar").show(ctx, |ui| {
@@ -549,9 +556,9 @@ fn app_shell_ui(
     // Side panels render in separate systems. The canvas_rect is refined by
     // consumers (toolbar) who read available_rect after all panels are drawn.
 
-    // Central panel — only rendered in MapEditor mode.
+    // Central panel — only rendered in Map mode.
     // In CharacterEditor mode, the CharacterPanelPlugin owns the central panel.
-    if *app_editor_mode == AppEditorMode::MapEditor {
+    if *app_editor_mode == AppEditorMode::Map {
         let has_active_map = project.active_map().is_some();
         if has_active_map {
             let frame = egui::Frame::new()

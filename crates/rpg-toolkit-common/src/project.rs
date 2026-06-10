@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::character::CharacterRegistry;
 use crate::error::CommonError;
+use crate::item::ItemRegistry;
 use crate::map::{DialogTextData, EventAction, MapData, MapId, SpawnPoint, TilesetId};
 use crate::spritesheet::{CharacterSpritesheet, SpritesheetId};
 use crate::tileset::TilesetMeta;
@@ -37,6 +38,9 @@ pub struct ProjectFile {
     /// Character registry: all playable characters defined in this project.
     #[serde(default)]
     pub characters: CharacterRegistry,
+    /// Item registry: all items defined in this project.
+    #[serde(default)]
+    pub items: ItemRegistry,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -51,6 +55,7 @@ impl ProjectFile {
         dialog_texts: HashMap<String, String>,
         face_portraits: HashMap<String, String>,
         characters: CharacterRegistry,
+        items: ItemRegistry,
     ) -> Self {
         Self {
             maps,
@@ -61,6 +66,7 @@ impl ProjectFile {
             dialog_texts,
             face_portraits,
             characters,
+            items,
         }
     }
 
@@ -88,6 +94,16 @@ impl ProjectFile {
                 return Err(CommonError::ProjectValidationError(format!(
                     "character registry key '{}' does not match character id '{}'",
                     id, character.id
+                )));
+            }
+        }
+
+        // Validate item IDs match their keys in the registry
+        for (id, item) in &project.items.items {
+            if id != &item.id {
+                return Err(CommonError::ProjectValidationError(format!(
+                    "item registry key '{}' does not match item id '{}'",
+                    id, item.id
                 )));
             }
         }
@@ -253,6 +269,7 @@ impl ProjectFile {
             dialog_texts: self.dialog_texts.clone(),
             face_portraits: self.face_portraits.clone(),
             characters: self.characters.clone(),
+            items: self.items.clone(),
         }
     }
 }

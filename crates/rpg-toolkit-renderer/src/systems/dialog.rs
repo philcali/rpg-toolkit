@@ -680,6 +680,7 @@ mod tests {
             std::collections::HashMap::new(),
             face_portraits,
             rpg_toolkit_common::CharacterRegistry::default(),
+            rpg_toolkit_common::ItemRegistry::default(),
         );
         app.insert_resource(crate::resources::RendererProjectData {
             project_file,

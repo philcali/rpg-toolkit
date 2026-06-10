@@ -232,6 +232,7 @@ fn arb_project_file() -> impl Strategy<Value = ProjectFile> {
                     HashMap::new(), // no dialog texts needed for this property
                     HashMap::new(), // no face portraits needed for this property
                     rpg_toolkit_common::CharacterRegistry::default(),
+                    rpg_toolkit_common::ItemRegistry::default(),
                 )
             },
         )

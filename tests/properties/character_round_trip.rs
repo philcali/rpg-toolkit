@@ -109,6 +109,7 @@ proptest! {
             HashMap::new(), // no dialog texts
             HashMap::new(), // no face portraits
             registry.clone(),
+            rpg_toolkit_common::ItemRegistry::default(),
         );
 
         // Serialize to JSON

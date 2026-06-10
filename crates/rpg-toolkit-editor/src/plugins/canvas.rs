@@ -40,13 +40,13 @@ impl Plugin for CanvasPlugin {
                     draw_preview_gizmos.after(draw_grid),
                 )
                     .before(crate::systems::input::update_cursor_state)
-                    .run_if(resource_equals(AppEditorMode::MapEditor)),
+                    .run_if(resource_equals(AppEditorMode::Map)),
             )
             .add_systems(
                 EguiPrimaryContextPass,
                 coordinate_tooltip_ui
                     .in_set(EditorUiSet::Overlay)
-                    .run_if(resource_equals(AppEditorMode::MapEditor)),
+                    .run_if(resource_equals(AppEditorMode::Map)),
             );
     }
 }

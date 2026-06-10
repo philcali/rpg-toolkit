@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::character::CharacterRegistry;
 use crate::error::CommonError;
+use crate::item::ItemRegistry;
 use crate::map::{MapData, MapId, SpawnPoint, TilesetId};
 use crate::spritesheet::{CharacterSpritesheet, SpritesheetId};
 use crate::tileset::TilesetMeta;
@@ -30,6 +31,9 @@ pub struct ProjectManifest {
     /// Character registry: all playable characters defined in this project.
     #[serde(default)]
     pub characters: CharacterRegistry,
+    /// Item registry: all items defined in this project.
+    #[serde(default)]
+    pub items: ItemRegistry,
 }
 
 impl ProjectManifest {
@@ -170,6 +174,7 @@ impl ProjectManifest {
             self.dialog_texts,
             self.face_portraits,
             self.characters,
+            self.items,
         ))
     }
 
@@ -243,6 +248,7 @@ impl ProjectManifest {
 mod tests {
     use super::*;
     use crate::character::CharacterRegistry;
+    use crate::item::ItemRegistry;
     use std::fs;
 
     #[test]
@@ -285,6 +291,7 @@ mod tests {
             dialog_texts: HashMap::new(),
             face_portraits: HashMap::new(),
             characters: CharacterRegistry::default(),
+            items: ItemRegistry::default(),
         };
 
         let bytes = manifest.to_bytes().unwrap();
@@ -310,6 +317,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             CharacterRegistry::default(),
+            ItemRegistry::default(),
         );
 
         project_file.serialize_to_dir(&tmp).unwrap();
@@ -357,6 +365,7 @@ mod tests {
             dialog_texts: HashMap::new(),
             face_portraits: HashMap::new(),
             characters: CharacterRegistry::default(),
+            items: ItemRegistry::default(),
         };
 
         let errors = manifest.validate_refs(&tmp);

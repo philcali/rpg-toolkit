@@ -15,7 +15,7 @@ impl Plugin for CharacterPanelPlugin {
             EguiPrimaryContextPass,
             character_panel_ui
                 .in_set(EditorUiSet::Panels)
-                .run_if(resource_equals(AppEditorMode::CharacterEditor)),
+                .run_if(resource_equals(AppEditorMode::Character)),
         );
     }
 }

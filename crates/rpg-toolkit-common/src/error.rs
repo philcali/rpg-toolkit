@@ -20,4 +20,6 @@ pub enum CommonError {
     AnimationFrameOutOfBounds { col: u32, row: u32 },
     #[error("Character validation error: {0}")]
     CharacterValidationError(String),
+    #[error("Item validation error: {0}")]
+    ItemValidationError(String),
 }
