@@ -200,6 +200,16 @@ fn app_shell_ui(
                     *app_editor_mode = AppEditorMode::Item;
                     ui.close();
                 }
+                if ui
+                    .selectable_label(
+                        *app_editor_mode == AppEditorMode::Ability,
+                        "✨ Ability Editor",
+                    )
+                    .clicked()
+                {
+                    *app_editor_mode = AppEditorMode::Ability;
+                    ui.close();
+                }
             });
         });
     });

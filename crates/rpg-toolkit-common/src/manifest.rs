@@ -4,6 +4,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ability::AbilityRegistry;
 use crate::character::CharacterRegistry;
 use crate::error::CommonError;
 use crate::item::ItemRegistry;
@@ -34,6 +35,9 @@ pub struct ProjectManifest {
     /// Item registry: all items defined in this project.
     #[serde(default)]
     pub items: ItemRegistry,
+    /// Ability registry: all abilities defined in this project.
+    #[serde(default)]
+    pub abilities: AbilityRegistry,
 }
 
 impl ProjectManifest {
@@ -175,6 +179,7 @@ impl ProjectManifest {
             self.face_portraits,
             self.characters,
             self.items,
+            self.abilities,
         ))
     }
 
@@ -292,6 +297,7 @@ mod tests {
             face_portraits: HashMap::new(),
             characters: CharacterRegistry::default(),
             items: ItemRegistry::default(),
+            abilities: AbilityRegistry::default(),
         };
 
         let bytes = manifest.to_bytes().unwrap();
@@ -318,6 +324,7 @@ mod tests {
             HashMap::new(),
             CharacterRegistry::default(),
             ItemRegistry::default(),
+            AbilityRegistry::default(),
         );
 
         project_file.serialize_to_dir(&tmp).unwrap();
@@ -366,6 +373,7 @@ mod tests {
             face_portraits: HashMap::new(),
             characters: CharacterRegistry::default(),
             items: ItemRegistry::default(),
+            abilities: AbilityRegistry::default(),
         };
 
         let errors = manifest.validate_refs(&tmp);

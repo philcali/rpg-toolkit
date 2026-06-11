@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ability::AbilityRegistry;
 use crate::character::CharacterRegistry;
 use crate::error::CommonError;
 use crate::item::ItemRegistry;
@@ -41,6 +42,9 @@ pub struct ProjectFile {
     /// Item registry: all items defined in this project.
     #[serde(default)]
     pub items: ItemRegistry,
+    /// Ability registry: all abilities defined in this project.
+    #[serde(default)]
+    pub abilities: AbilityRegistry,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -56,6 +60,7 @@ impl ProjectFile {
         face_portraits: HashMap<String, String>,
         characters: CharacterRegistry,
         items: ItemRegistry,
+        abilities: AbilityRegistry,
     ) -> Self {
         Self {
             maps,
@@ -67,6 +72,7 @@ impl ProjectFile {
             face_portraits,
             characters,
             items,
+            abilities,
         }
     }
 
@@ -104,6 +110,16 @@ impl ProjectFile {
                 return Err(CommonError::ProjectValidationError(format!(
                     "item registry key '{}' does not match item id '{}'",
                     id, item.id
+                )));
+            }
+        }
+
+        // Validate ability IDs match their keys in the registry
+        for (id, ability) in &project.abilities.abilities {
+            if id != &ability.id {
+                return Err(CommonError::ProjectValidationError(format!(
+                    "ability registry key '{}' does not match ability id '{}'",
+                    id, ability.id
                 )));
             }
         }
@@ -270,6 +286,7 @@ impl ProjectFile {
             face_portraits: self.face_portraits.clone(),
             characters: self.characters.clone(),
             items: self.items.clone(),
+            abilities: self.abilities.clone(),
         }
     }
 }

@@ -1,3 +1,4 @@
+pub mod ability_panel;
 pub mod app_shell;
 pub mod attribute;
 pub mod canvas;
@@ -13,6 +14,7 @@ pub mod tile_palette;
 pub mod toolbar;
 pub mod undo_redo;
 
+pub use ability_panel::AbilityPanelPlugin;
 pub use app_shell::AppShellPlugin;
 pub use attribute::AttributePlugin;
 pub use canvas::CanvasPlugin;
