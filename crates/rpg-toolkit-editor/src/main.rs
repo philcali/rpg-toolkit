@@ -7,9 +7,9 @@ use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use plugins::{
-    AppShellPlugin, AttributePlugin, CanvasPlugin, CharacterPanelPlugin, DialogTextPanelPlugin,
-    ItemPanelPlugin, LayerPanelPlugin, PaintingPlugin, SerializationPlugin, SpritesheetPlugin,
-    TextIdIndex, TilePalettePlugin, ToolbarPlugin, UndoRedoPlugin,
+    AbilityPanelPlugin, AppShellPlugin, AttributePlugin, CanvasPlugin, CharacterPanelPlugin,
+    DialogTextPanelPlugin, ItemPanelPlugin, LayerPanelPlugin, PaintingPlugin, SerializationPlugin,
+    SpritesheetPlugin, TextIdIndex, TilePalettePlugin, ToolbarPlugin, UndoRedoPlugin,
 };
 
 fn main() {
@@ -57,6 +57,7 @@ fn main() {
         .add_plugins(DialogTextPanelPlugin)
         .add_plugins(CharacterPanelPlugin)
         .add_plugins(ItemPanelPlugin)
+        .add_plugins(AbilityPanelPlugin)
         .init_resource::<data::Project>()
         .init_resource::<TextIdIndex>()
         .init_resource::<systems::input::CursorWorldState>()

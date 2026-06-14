@@ -228,6 +228,7 @@ pub fn process_spritesheet_remove(
             HashMap::new(),
             project.characters.clone(),
             project.items.clone(),
+            rpg_toolkit_common::AbilityRegistry::default(),
         );
         let refs = temp_project_file.compute_spritesheet_references(&remove_id);
 

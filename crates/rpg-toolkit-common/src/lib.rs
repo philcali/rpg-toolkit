@@ -1,3 +1,4 @@
+pub mod ability;
 pub mod animation;
 pub mod character;
 pub mod condition;
@@ -9,6 +10,9 @@ pub mod project;
 pub mod spritesheet;
 pub mod tileset;
 
+pub use ability::{
+    Ability, AbilityCategory, AbilityId, AbilityRegistry, AbilitySource, CostType, TargetType,
+};
 pub use animation::{
     AnimationFrame, TileAnimation, compute_animation_frame_index, validate_tile_animation,
 };

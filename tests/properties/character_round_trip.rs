@@ -110,6 +110,7 @@ proptest! {
             HashMap::new(), // no face portraits
             registry.clone(),
             rpg_toolkit_common::ItemRegistry::default(),
+            rpg_toolkit_common::AbilityRegistry::default(),
         );
 
         // Serialize to JSON

@@ -22,4 +22,6 @@ pub enum CommonError {
     CharacterValidationError(String),
     #[error("Item validation error: {0}")]
     ItemValidationError(String),
+    #[error("Ability validation error: {0}")]
+    AbilityValidationError(String),
 }

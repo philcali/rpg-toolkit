@@ -233,6 +233,7 @@ fn arb_project_file() -> impl Strategy<Value = ProjectFile> {
                     HashMap::new(), // no face portraits needed for this property
                     rpg_toolkit_common::CharacterRegistry::default(),
                     rpg_toolkit_common::ItemRegistry::default(),
+                    rpg_toolkit_common::AbilityRegistry::default(),
                 )
             },
         )

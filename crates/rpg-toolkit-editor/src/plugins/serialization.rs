@@ -118,6 +118,7 @@ fn to_project_file(project: &Project) -> ProjectFile {
         project.face_portraits.clone(),
         project.characters.clone(),
         project.items.clone(),
+        rpg_toolkit_common::AbilityRegistry::default(),
     )
 }
 
@@ -207,6 +208,8 @@ fn load_project_from_dir(
         has_unsaved_character_changes: false,
         items: project_file.items,
         has_unsaved_item_changes: false,
+        abilities: project_file.abilities,
+        has_unsaved_ability_changes: false,
     };
 
     editor_state.current_save_path = Some(dir.to_path_buf());
@@ -293,6 +296,8 @@ fn load_project_from_zip(
         has_unsaved_character_changes: false,
         items: project_file.items,
         has_unsaved_item_changes: false,
+        abilities: project_file.abilities,
+        has_unsaved_ability_changes: false,
     };
 
     editor_state.current_save_path = Some(temp_dir.path().to_path_buf());
@@ -362,6 +367,8 @@ fn load_project_from_json(
         has_unsaved_character_changes: false,
         items: project_file.items,
         has_unsaved_item_changes: false,
+        abilities: project_file.abilities,
+        has_unsaved_ability_changes: false,
     };
 
     editor_state.current_save_path = Some(json_path.to_path_buf());
@@ -623,6 +630,7 @@ fn save_to_json(
         project.face_portraits.clone(),
         project.characters.clone(),
         project.items.clone(),
+        rpg_toolkit_common::AbilityRegistry::default(),
     );
 
     match project_file.serialize() {
