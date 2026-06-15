@@ -111,6 +111,7 @@ proptest! {
             registry.clone(),
             rpg_toolkit_common::ItemRegistry::default(),
             rpg_toolkit_common::AbilityRegistry::default(),
+            rpg_toolkit_common::EnemyRegistry::default(),
         );
 
         // Serialize to JSON

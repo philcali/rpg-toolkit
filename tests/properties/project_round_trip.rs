@@ -234,6 +234,7 @@ fn arb_project_file() -> impl Strategy<Value = ProjectFile> {
                     rpg_toolkit_common::CharacterRegistry::default(),
                     rpg_toolkit_common::ItemRegistry::default(),
                     rpg_toolkit_common::AbilityRegistry::default(),
+                    rpg_toolkit_common::EnemyRegistry::default(),
                 )
             },
         )

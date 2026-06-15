@@ -8,8 +8,9 @@ use bevy::prelude::*;
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use plugins::{
     AbilityPanelPlugin, AppShellPlugin, AttributePlugin, CanvasPlugin, CharacterPanelPlugin,
-    DialogTextPanelPlugin, ItemPanelPlugin, LayerPanelPlugin, PaintingPlugin, SerializationPlugin,
-    SpritesheetPlugin, TextIdIndex, TilePalettePlugin, ToolbarPlugin, UndoRedoPlugin,
+    DialogTextPanelPlugin, EnemyPanelPlugin, ItemPanelPlugin, LayerPanelPlugin, PaintingPlugin,
+    SerializationPlugin, SpritesheetPlugin, TextIdIndex, TilePalettePlugin, ToolbarPlugin,
+    UndoRedoPlugin,
 };
 
 fn main() {
@@ -58,6 +59,7 @@ fn main() {
         .add_plugins(CharacterPanelPlugin)
         .add_plugins(ItemPanelPlugin)
         .add_plugins(AbilityPanelPlugin)
+        .add_plugins(EnemyPanelPlugin)
         .init_resource::<data::Project>()
         .init_resource::<TextIdIndex>()
         .init_resource::<systems::input::CursorWorldState>()

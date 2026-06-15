@@ -2,6 +2,8 @@ pub mod ability;
 pub mod animation;
 pub mod character;
 pub mod condition;
+pub mod element;
+pub mod enemy;
 pub mod error;
 pub mod item;
 pub mod manifest;
@@ -21,6 +23,11 @@ pub use character::{
 };
 pub use condition::{
     BranchCondition, ConditionCheck, ConditionLogic, ConditionOperator, ConditionalTrigger,
+};
+pub use element::Element;
+pub use enemy::{
+    CarriedItem, DefeatReward, ElementalModifier, Enemy, EnemyId, EnemyRegistry, EnemyStat,
+    ItemDrop,
 };
 pub use error::CommonError;
 pub use item::{
