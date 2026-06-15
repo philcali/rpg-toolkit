@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ability::AbilityRegistry;
 use crate::character::CharacterRegistry;
+use crate::enemy::EnemyRegistry;
 use crate::error::CommonError;
 use crate::item::ItemRegistry;
 use crate::map::{DialogTextData, EventAction, MapData, MapId, SpawnPoint, TilesetId};
@@ -45,6 +46,9 @@ pub struct ProjectFile {
     /// Ability registry: all abilities defined in this project.
     #[serde(default)]
     pub abilities: AbilityRegistry,
+    /// Enemy registry: all enemies defined in this project.
+    #[serde(default)]
+    pub enemies: EnemyRegistry,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -61,6 +65,7 @@ impl ProjectFile {
         characters: CharacterRegistry,
         items: ItemRegistry,
         abilities: AbilityRegistry,
+        enemies: EnemyRegistry,
     ) -> Self {
         Self {
             maps,
@@ -73,6 +78,7 @@ impl ProjectFile {
             characters,
             items,
             abilities,
+            enemies,
         }
     }
 
@@ -120,6 +126,16 @@ impl ProjectFile {
                 return Err(CommonError::ProjectValidationError(format!(
                     "ability registry key '{}' does not match ability id '{}'",
                     id, ability.id
+                )));
+            }
+        }
+
+        // Validate enemy IDs match their keys in the registry
+        for (id, enemy) in &project.enemies.enemies {
+            if id != &enemy.id {
+                return Err(CommonError::ProjectValidationError(format!(
+                    "enemy registry key '{}' does not match enemy id '{}'",
+                    id, enemy.id
                 )));
             }
         }
@@ -287,6 +303,7 @@ impl ProjectFile {
             characters: self.characters.clone(),
             items: self.items.clone(),
             abilities: self.abilities.clone(),
+            enemies: self.enemies.clone(),
         }
     }
 }

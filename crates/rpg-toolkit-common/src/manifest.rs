@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ability::AbilityRegistry;
 use crate::character::CharacterRegistry;
+use crate::enemy::EnemyRegistry;
 use crate::error::CommonError;
 use crate::item::ItemRegistry;
 use crate::map::{MapData, MapId, SpawnPoint, TilesetId};
@@ -14,7 +15,7 @@ use crate::tileset::TilesetMeta;
 
 /// On-disk manifest: lightweight summary of project contents.
 /// Maps are stored as IDs only; full map data is loaded lazily from `maps/<id>.json`.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ProjectManifest {
     /// Map IDs in loading order.
     pub maps: Vec<String>,
@@ -38,6 +39,9 @@ pub struct ProjectManifest {
     /// Ability registry: all abilities defined in this project.
     #[serde(default)]
     pub abilities: AbilityRegistry,
+    /// Enemy registry: all enemies defined in this project.
+    #[serde(default)]
+    pub enemies: EnemyRegistry,
 }
 
 impl ProjectManifest {
@@ -180,6 +184,7 @@ impl ProjectManifest {
             self.characters,
             self.items,
             self.abilities,
+            self.enemies,
         ))
     }
 
@@ -253,6 +258,7 @@ impl ProjectManifest {
 mod tests {
     use super::*;
     use crate::character::CharacterRegistry;
+    use crate::enemy::EnemyRegistry;
     use crate::item::ItemRegistry;
     use std::fs;
 
@@ -298,6 +304,7 @@ mod tests {
             characters: CharacterRegistry::default(),
             items: ItemRegistry::default(),
             abilities: AbilityRegistry::default(),
+            enemies: EnemyRegistry::default(),
         };
 
         let bytes = manifest.to_bytes().unwrap();
@@ -325,6 +332,7 @@ mod tests {
             CharacterRegistry::default(),
             ItemRegistry::default(),
             AbilityRegistry::default(),
+            EnemyRegistry::default(),
         );
 
         project_file.serialize_to_dir(&tmp).unwrap();
@@ -374,6 +382,7 @@ mod tests {
             characters: CharacterRegistry::default(),
             items: ItemRegistry::default(),
             abilities: AbilityRegistry::default(),
+            enemies: EnemyRegistry::default(),
         };
 
         let errors = manifest.validate_refs(&tmp);

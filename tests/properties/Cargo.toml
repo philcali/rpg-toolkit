@@ -60,6 +60,14 @@ path = "item_invariants.rs"
 name = "item_round_trip"
 path = "item_round_trip.rs"
 
+[[test]]
+name = "enemy_invariants"
+path = "enemy_invariants.rs"
+
+[[test]]
+name = "enemy_round_trip"
+path = "enemy_round_trip.rs"
+
 [dev-dependencies]
 proptest = { workspace = true }
 serde_json = { workspace = true }

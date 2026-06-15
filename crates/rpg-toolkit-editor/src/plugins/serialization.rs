@@ -118,7 +118,8 @@ fn to_project_file(project: &Project) -> ProjectFile {
         project.face_portraits.clone(),
         project.characters.clone(),
         project.items.clone(),
-        rpg_toolkit_common::AbilityRegistry::default(),
+        project.abilities.clone(),
+        project.enemies.clone(),
     )
 }
 
@@ -210,6 +211,8 @@ fn load_project_from_dir(
         has_unsaved_item_changes: false,
         abilities: project_file.abilities,
         has_unsaved_ability_changes: false,
+        enemies: project_file.enemies,
+        has_unsaved_enemy_changes: false,
     };
 
     editor_state.current_save_path = Some(dir.to_path_buf());
@@ -298,6 +301,8 @@ fn load_project_from_zip(
         has_unsaved_item_changes: false,
         abilities: project_file.abilities,
         has_unsaved_ability_changes: false,
+        enemies: project_file.enemies,
+        has_unsaved_enemy_changes: false,
     };
 
     editor_state.current_save_path = Some(temp_dir.path().to_path_buf());
@@ -369,6 +374,8 @@ fn load_project_from_json(
         has_unsaved_item_changes: false,
         abilities: project_file.abilities,
         has_unsaved_ability_changes: false,
+        enemies: project_file.enemies,
+        has_unsaved_enemy_changes: false,
     };
 
     editor_state.current_save_path = Some(json_path.to_path_buf());
@@ -494,6 +501,8 @@ fn save_project_to_path(
             }
             project.has_unsaved_character_changes = false;
             project.has_unsaved_item_changes = false;
+            project.has_unsaved_ability_changes = false;
+            project.has_unsaved_enemy_changes = false;
             editor_state.current_save_path = Some(path.to_path_buf());
             editor_state.original_zip_path = None;
             info!("Project saved to directory {}", path.display());
@@ -507,6 +516,8 @@ fn save_project_to_path(
             }
             project.has_unsaved_character_changes = false;
             project.has_unsaved_item_changes = false;
+            project.has_unsaved_ability_changes = false;
+            project.has_unsaved_enemy_changes = false;
             editor_state.current_save_path = Some(path.to_path_buf());
             editor_state.original_zip_path = Some(path.to_path_buf());
             info!("Project saved as ZIP to {}", path.display());
@@ -630,7 +641,8 @@ fn save_to_json(
         project.face_portraits.clone(),
         project.characters.clone(),
         project.items.clone(),
-        rpg_toolkit_common::AbilityRegistry::default(),
+        project.abilities.clone(),
+        project.enemies.clone(),
     );
 
     match project_file.serialize() {
@@ -641,6 +653,8 @@ fn save_to_json(
                 }
                 project.has_unsaved_character_changes = false;
                 project.has_unsaved_item_changes = false;
+                project.has_unsaved_ability_changes = false;
+                project.has_unsaved_enemy_changes = false;
                 editor_state.current_save_path = Some(path.to_path_buf());
                 info!("Project saved to {}", path.display());
             }

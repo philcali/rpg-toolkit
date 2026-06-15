@@ -93,6 +93,7 @@ pub enum AppEditorMode {
     Character,
     Item,
     Ability,
+    Enemy,
 }
 
 /// Resource that is `true` whenever any modal dialog window is open.
