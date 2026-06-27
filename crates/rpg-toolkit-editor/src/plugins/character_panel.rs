@@ -665,7 +665,7 @@ fn character_panel_ui(
                             (item_id.clone(), label)
                         })
                         .collect();
-                    display_entries.sort_by(|a, b| a.1.to_lowercase().cmp(&b.1.to_lowercase()));
+                    display_entries.sort_by_key(|a| a.1.to_lowercase());
 
                     let mut item_to_remove: Option<String> = None;
 
