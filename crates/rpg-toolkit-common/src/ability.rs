@@ -13,6 +13,7 @@ pub enum AbilityCategory {
     Skill,
     Spell,
     SpecialAction,
+    Monster,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -278,6 +279,7 @@ mod tests {
             Just(AbilityCategory::Skill),
             Just(AbilityCategory::Spell),
             Just(AbilityCategory::SpecialAction),
+            Just(AbilityCategory::Monster),
         ]
     }
 

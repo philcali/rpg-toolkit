@@ -193,6 +193,7 @@ fn arb_enemy(index: usize) -> impl Strategy<Value = (EnemyId, Enemy)> {
                     carried_items,
                     elemental_modifiers,
                     abilities,
+                    portrait: None,
                 };
                 (id, enemy)
             },

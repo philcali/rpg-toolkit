@@ -69,6 +69,7 @@ fn category_display_name(cat: AbilityCategory) -> &'static str {
         AbilityCategory::Skill => "Skill",
         AbilityCategory::Spell => "Spell",
         AbilityCategory::SpecialAction => "Special Action",
+        AbilityCategory::Monster => "Monster",
     }
 }
 
@@ -148,6 +149,11 @@ fn ability_panel_ui(
                         &mut panel_state.category_filter,
                         Some(AbilityCategory::SpecialAction),
                         "Special Action",
+                    );
+                    ui.selectable_value(
+                        &mut panel_state.category_filter,
+                        Some(AbilityCategory::Monster),
+                        "Monster",
                     );
                 });
 
@@ -367,6 +373,11 @@ fn ability_panel_ui(
                                     &mut new_category,
                                     AbilityCategory::SpecialAction,
                                     "Special Action",
+                                );
+                                ui.selectable_value(
+                                    &mut new_category,
+                                    AbilityCategory::Monster,
+                                    "Monster",
                                 );
                             });
 
@@ -747,6 +758,11 @@ fn ability_panel_ui(
                                 &mut panel_state.create_category,
                                 Some(AbilityCategory::SpecialAction),
                                 "Special Action",
+                            );
+                            ui.selectable_value(
+                                &mut panel_state.create_category,
+                                Some(AbilityCategory::Monster),
+                                "Monster",
                             );
                         });
                 });
