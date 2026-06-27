@@ -3,7 +3,25 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::ability::AbilityId;
 use crate::error::CommonError;
+use crate::item::ItemId;
+
+/// The type of visual asset on a character.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VisualAssetType {
+    Spritesheet,
+    FacePortrait,
+    StatusPortrait,
+}
+
+/// Optional visual asset file paths for a character.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VisualAssets {
+    pub spritesheet: Option<String>,
+    pub face_portrait: Option<String>,
+    pub status_portrait: Option<String>,
+}
 
 /// Type alias for character identifiers (UUID v4 strings).
 pub type CharacterId = String;
@@ -16,12 +34,25 @@ pub struct Stat {
     pub growth_value: u32,
 }
 
+/// A learnable ability entry linking a character to an ability at a required level.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LearnableAbility {
+    pub ability_id: AbilityId,
+    pub required_level: u32,
+}
+
 /// A playable character with stats and progression.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Character {
     pub id: CharacterId,
     pub display_name: String,
     pub stats: Vec<Stat>,
+    #[serde(default)]
+    pub learnable_abilities: Vec<LearnableAbility>,
+    #[serde(default)]
+    pub visual_assets: VisualAssets,
+    #[serde(default)]
+    pub starting_equipment: Vec<ItemId>,
 }
 
 /// The set of all available optional stat names.
@@ -67,6 +98,9 @@ impl CharacterRegistry {
             id: id.clone(),
             display_name: trimmed.to_string(),
             stats,
+            learnable_abilities: Vec::new(),
+            visual_assets: VisualAssets::default(),
+            starting_equipment: Vec::new(),
         };
 
         self.characters.insert(id.clone(), character);
@@ -200,6 +234,204 @@ impl CharacterRegistry {
                 .cmp(&b.display_name.to_lowercase())
         });
         chars
+    }
+
+    /// Adds a learnable ability to a character.
+    ///
+    /// Validates level is 1–99, rejects duplicate ability IDs, and enforces a max of 20 entries.
+    pub fn add_learnable_ability(
+        &mut self,
+        id: &CharacterId,
+        ability_id: AbilityId,
+        level: u32,
+    ) -> Result<(), CommonError> {
+        let clamped_level = level.clamp(1, 99);
+
+        let character = self.characters.get_mut(id).ok_or_else(|| {
+            CommonError::CharacterValidationError(format!("Character not found: {id}"))
+        })?;
+
+        if character
+            .learnable_abilities
+            .iter()
+            .any(|la| la.ability_id == ability_id)
+        {
+            return Err(CommonError::CharacterValidationError(format!(
+                "Ability already assigned: {ability_id}"
+            )));
+        }
+
+        if character.learnable_abilities.len() >= 20 {
+            return Err(CommonError::CharacterValidationError(
+                "Cannot have more than 20 learnable abilities".to_string(),
+            ));
+        }
+
+        character.learnable_abilities.push(LearnableAbility {
+            ability_id,
+            required_level: clamped_level,
+        });
+
+        Ok(())
+    }
+
+    /// Removes a learnable ability from a character by ability ID.
+    pub fn remove_learnable_ability(
+        &mut self,
+        id: &CharacterId,
+        ability_id: &AbilityId,
+    ) -> Result<(), CommonError> {
+        let character = self.characters.get_mut(id).ok_or_else(|| {
+            CommonError::CharacterValidationError(format!("Character not found: {id}"))
+        })?;
+
+        let original_len = character.learnable_abilities.len();
+        character
+            .learnable_abilities
+            .retain(|la| la.ability_id != *ability_id);
+
+        if character.learnable_abilities.len() == original_len {
+            return Err(CommonError::CharacterValidationError(format!(
+                "Learnable ability not found: {ability_id}"
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Updates the required level of a learnable ability, clamping to 1–99.
+    pub fn update_learnable_ability_level(
+        &mut self,
+        id: &CharacterId,
+        ability_id: &AbilityId,
+        new_level: u32,
+    ) -> Result<(), CommonError> {
+        let clamped_level = new_level.clamp(1, 99);
+
+        let character = self.characters.get_mut(id).ok_or_else(|| {
+            CommonError::CharacterValidationError(format!("Character not found: {id}"))
+        })?;
+
+        let entry = character
+            .learnable_abilities
+            .iter_mut()
+            .find(|la| la.ability_id == *ability_id)
+            .ok_or_else(|| {
+                CommonError::CharacterValidationError(format!(
+                    "Learnable ability not found: {ability_id}"
+                ))
+            })?;
+
+        entry.required_level = clamped_level;
+        Ok(())
+    }
+
+    /// Sets a visual asset path on a character.
+    ///
+    /// Trims the path; if empty after trimming, sets to None.
+    /// Otherwise truncates to 260 characters and stores.
+    pub fn set_visual_asset(
+        &mut self,
+        id: &CharacterId,
+        asset_type: VisualAssetType,
+        path: &str,
+    ) -> Result<(), CommonError> {
+        let character = self.characters.get_mut(id).ok_or_else(|| {
+            CommonError::CharacterValidationError(format!("Character not found: {id}"))
+        })?;
+
+        let trimmed = path.trim();
+        let value = if trimmed.is_empty() {
+            None
+        } else {
+            let truncated: String = trimmed.chars().take(260).collect();
+            Some(truncated)
+        };
+
+        match asset_type {
+            VisualAssetType::Spritesheet => character.visual_assets.spritesheet = value,
+            VisualAssetType::FacePortrait => character.visual_assets.face_portrait = value,
+            VisualAssetType::StatusPortrait => character.visual_assets.status_portrait = value,
+        }
+
+        Ok(())
+    }
+
+    /// Clears a visual asset path on a character, setting it to None.
+    pub fn clear_visual_asset(
+        &mut self,
+        id: &CharacterId,
+        asset_type: VisualAssetType,
+    ) -> Result<(), CommonError> {
+        let character = self.characters.get_mut(id).ok_or_else(|| {
+            CommonError::CharacterValidationError(format!("Character not found: {id}"))
+        })?;
+
+        match asset_type {
+            VisualAssetType::Spritesheet => character.visual_assets.spritesheet = None,
+            VisualAssetType::FacePortrait => character.visual_assets.face_portrait = None,
+            VisualAssetType::StatusPortrait => character.visual_assets.status_portrait = None,
+        }
+
+        Ok(())
+    }
+
+    /// Adds a starting equipment item to a character.
+    ///
+    /// Trims the item ID, validates non-empty, rejects duplicates, and enforces a max of 20 entries.
+    pub fn add_starting_equipment(
+        &mut self,
+        id: &CharacterId,
+        item_id: &str,
+    ) -> Result<(), CommonError> {
+        let trimmed = item_id.trim();
+
+        if trimmed.is_empty() {
+            return Err(CommonError::CharacterValidationError(
+                "Item ID must not be empty or whitespace-only".to_string(),
+            ));
+        }
+
+        let character = self.characters.get_mut(id).ok_or_else(|| {
+            CommonError::CharacterValidationError(format!("Character not found: {id}"))
+        })?;
+
+        if character.starting_equipment.iter().any(|e| e == trimmed) {
+            return Err(CommonError::CharacterValidationError(format!(
+                "Item already assigned: {trimmed}"
+            )));
+        }
+
+        if character.starting_equipment.len() >= 20 {
+            return Err(CommonError::CharacterValidationError(
+                "Cannot have more than 20 starting equipment items".to_string(),
+            ));
+        }
+
+        character.starting_equipment.push(trimmed.to_string());
+        Ok(())
+    }
+
+    /// Removes a starting equipment item from a character by item ID.
+    pub fn remove_starting_equipment(
+        &mut self,
+        id: &CharacterId,
+        item_id: &str,
+    ) -> Result<(), CommonError> {
+        let character = self.characters.get_mut(id).ok_or_else(|| {
+            CommonError::CharacterValidationError(format!("Character not found: {id}"))
+        })?;
+
+        let original_len = character.starting_equipment.len();
+        character.starting_equipment.retain(|e| e != item_id);
+
+        if character.starting_equipment.len() == original_len {
+            return Err(CommonError::CharacterValidationError(format!(
+                "Starting equipment item not found: {item_id}"
+            )));
+        }
+
+        Ok(())
     }
 
     /// Validates a display name.

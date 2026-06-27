@@ -51,6 +51,8 @@ pub struct Enemy {
     pub carried_items: Vec<CarriedItem>,
     pub elemental_modifiers: Vec<ElementalModifier>,
     pub abilities: Vec<AbilityId>,
+    #[serde(default)]
+    pub portrait: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -99,6 +101,7 @@ impl EnemyRegistry {
             carried_items: vec![],
             elemental_modifiers: vec![],
             abilities: vec![],
+            portrait: None,
         };
 
         self.enemies.insert(id.clone(), enemy);
@@ -140,6 +143,36 @@ impl EnemyRegistry {
             .ok_or_else(|| CommonError::EnemyValidationError(format!("Enemy not found: {id}")))?;
 
         enemy.description = desc.chars().take(256).collect::<String>();
+        Ok(())
+    }
+
+    /// Sets the portrait file path for an existing enemy.
+    ///
+    /// Trims the path, validates it is non-empty after trimming, and truncates
+    /// to 260 Unicode codepoints.
+    pub fn set_portrait(&mut self, id: &EnemyId, path: &str) -> Result<(), CommonError> {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            return Err(CommonError::EnemyValidationError(
+                "Portrait path must not be empty or whitespace-only".to_string(),
+            ));
+        }
+        let truncated: String = trimmed.chars().take(260).collect();
+        let enemy = self
+            .enemies
+            .get_mut(id)
+            .ok_or_else(|| CommonError::EnemyValidationError(format!("Enemy not found: {id}")))?;
+        enemy.portrait = Some(truncated);
+        Ok(())
+    }
+
+    /// Clears the portrait file path for an existing enemy, setting it to None.
+    pub fn clear_portrait(&mut self, id: &EnemyId) -> Result<(), CommonError> {
+        let enemy = self
+            .enemies
+            .get_mut(id)
+            .ok_or_else(|| CommonError::EnemyValidationError(format!("Enemy not found: {id}")))?;
+        enemy.portrait = None;
         Ok(())
     }
 

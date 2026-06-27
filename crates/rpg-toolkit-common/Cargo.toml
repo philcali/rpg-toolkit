@@ -13,3 +13,19 @@ zip = { version = "0.6", features = ["deflate"] }
 [dev-dependencies]
 proptest = { workspace = true }
 tempfile = "3"
+
+[[test]]
+name = "ability_category_filter"
+path = "tests/properties/ability_category_filter.rs"
+
+[[test]]
+name = "character_learnable"
+path = "tests/properties/character_learnable.rs"
+
+[[test]]
+name = "enemy_portrait"
+path = "tests/properties/enemy_portrait.rs"
+
+[[test]]
+name = "item_granted_abilities"
+path = "tests/properties/item_granted_abilities.rs"

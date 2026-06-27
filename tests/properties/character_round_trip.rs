@@ -77,6 +77,9 @@ fn arb_character(index: usize) -> impl Strategy<Value = (CharacterId, Character)
             id: id.clone(),
             display_name,
             stats,
+            learnable_abilities: Vec::new(),
+            visual_assets: Default::default(),
+            starting_equipment: Vec::new(),
         };
         (id, character)
     })

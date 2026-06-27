@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::ability::AbilityId;
 use crate::error::CommonError;
 
 pub type ItemId = String;
@@ -124,6 +125,8 @@ pub struct Item {
     pub stackable: bool,
     pub stack_limit: u32,
     pub stat_modifiers: Vec<StatModifier>,
+    #[serde(default)]
+    pub granted_abilities: Vec<AbilityId>,
 }
 
 impl Item {
@@ -211,6 +214,7 @@ impl ItemRegistry {
             stackable,
             stack_limit,
             stat_modifiers: Vec::new(),
+            granted_abilities: Vec::new(),
         };
 
         self.items.insert(id.clone(), item);
@@ -266,11 +270,13 @@ impl ItemRegistry {
             ItemCategory::Consumable => {
                 item.stackable = true;
                 item.stack_limit = 99;
+                item.granted_abilities.clear();
             }
             ItemCategory::KeyItem => {
                 item.stackable = false;
                 item.stack_limit = 1;
                 item.value = 0;
+                item.granted_abilities.clear();
             }
             _ => {
                 // Preserve current stackable/stack_limit unless invariant would be broken
@@ -282,6 +288,77 @@ impl ItemRegistry {
             }
         }
 
+        Ok(())
+    }
+
+    /// Adds a granted ability to an equippable item (Weapon/Armor/Accessory).
+    /// Validates non-empty ability_id, rejects duplicates, enforces max 4 abilities.
+    pub fn add_granted_ability(
+        &mut self,
+        id: &ItemId,
+        ability_id: &AbilityId,
+    ) -> Result<(), CommonError> {
+        let trimmed = ability_id.trim();
+        if trimmed.is_empty() {
+            return Err(CommonError::ItemValidationError(
+                "Ability ID must not be empty".to_string(),
+            ));
+        }
+
+        let item = self.items.get_mut(id).ok_or_else(|| {
+            CommonError::ItemValidationError(format!("Item with id '{}' not found", id))
+        })?;
+
+        match item.category() {
+            ItemCategory::Weapon | ItemCategory::Armor | ItemCategory::Accessory => {}
+            _ => {
+                return Err(CommonError::ItemValidationError(
+                    "Only equippable items (Weapon/Armor/Accessory) can have granted abilities"
+                        .to_string(),
+                ));
+            }
+        }
+
+        if item.granted_abilities.len() >= 4 {
+            return Err(CommonError::ItemValidationError(
+                "Item cannot have more than 4 granted abilities".to_string(),
+            ));
+        }
+
+        if item.granted_abilities.iter().any(|a| a == trimmed) {
+            return Err(CommonError::ItemValidationError(format!(
+                "Ability '{}' is already granted by this item",
+                trimmed
+            )));
+        }
+
+        item.granted_abilities.push(trimmed.to_string());
+        Ok(())
+    }
+
+    /// Removes a granted ability from an item by ability ID.
+    pub fn remove_granted_ability(
+        &mut self,
+        id: &ItemId,
+        ability_id: &AbilityId,
+    ) -> Result<(), CommonError> {
+        let trimmed = ability_id.trim();
+        let item = self.items.get_mut(id).ok_or_else(|| {
+            CommonError::ItemValidationError(format!("Item with id '{}' not found", id))
+        })?;
+
+        let pos = item
+            .granted_abilities
+            .iter()
+            .position(|a| a == trimmed)
+            .ok_or_else(|| {
+                CommonError::ItemValidationError(format!(
+                    "Ability '{}' not found on this item",
+                    trimmed
+                ))
+            })?;
+
+        item.granted_abilities.remove(pos);
         Ok(())
     }
 

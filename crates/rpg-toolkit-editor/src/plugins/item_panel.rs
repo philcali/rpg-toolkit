@@ -2,12 +2,14 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use rpg_toolkit_common::{
-    BuffTargetStat, ConsumableEffect, ConsumableEffectType, CureTargetStatus, EquipmentSlot,
-    ItemCategory, ItemCategoryData, ItemId, Rarity, StatModifier, format_modifier_value,
+    AbilityCategory, BuffTargetStat, ConsumableEffect, ConsumableEffectType, CureTargetStatus,
+    EquipmentSlot, ItemCategory, ItemCategoryData, ItemId, Rarity, StatModifier,
+    format_modifier_value,
 };
 
 use crate::data::AppEditorMode;
 use crate::data::EditorUiSet;
+use crate::plugins::searchable_combobox::searchable_combobox;
 
 /// Plugin that provides the Item Editor panel UI.
 pub struct ItemPanelPlugin;
@@ -52,6 +54,10 @@ pub struct ItemPanelState {
     pub name_edit_buffer: String,
     /// Validation error for inline name editing.
     pub name_edit_error: Option<String>,
+    /// Search buffer for the granted ability searchable combobox.
+    pub granted_ability_search_buffer: String,
+    /// Error message for granted ability add operations.
+    pub granted_ability_error: Option<String>,
 }
 
 /// Returns the egui color for a given rarity tier.
@@ -1035,6 +1041,112 @@ fn item_panel_ui(
                             panel_state.add_stat_name_buffer.clear();
                             panel_state.add_stat_value_buffer = "0".to_string();
                             panel_state.add_stat_error = None;
+                        }
+                    }
+
+                    // --- Granted Abilities Section (Weapon/Armor/Accessory only) ---
+                    {
+                        let item_category =
+                            _project.items.items.get(&selected_id).map(|i| i.category());
+
+                        if matches!(
+                            item_category,
+                            Some(ItemCategory::Weapon)
+                                | Some(ItemCategory::Armor)
+                                | Some(ItemCategory::Accessory)
+                        ) {
+                            ui.separator();
+                            ui.heading("Granted Abilities");
+
+                            // Display current granted abilities
+                            let granted_abilities: Vec<String> = _project
+                                .items
+                                .items
+                                .get(&selected_id)
+                                .map(|i| i.granted_abilities.clone())
+                                .unwrap_or_default();
+
+                            let mut ability_to_remove: Option<String> = None;
+
+                            for ability_id in &granted_abilities {
+                                ui.horizontal(|ui| {
+                                    let label = if let Some(ability) =
+                                        _project.abilities.abilities.get(ability_id)
+                                    {
+                                        let category_name = match ability.category {
+                                            AbilityCategory::Skill => "Skill",
+                                            AbilityCategory::Spell => "Spell",
+                                            AbilityCategory::SpecialAction => "Special Action",
+                                            AbilityCategory::Monster => "Monster",
+                                        };
+                                        format!("{} [{}]", ability.display_name, category_name)
+                                    } else {
+                                        format!("{} [Unknown]", ability_id)
+                                    };
+
+                                    ui.label(&label);
+
+                                    if ui.small_button("🗑").clicked() {
+                                        ability_to_remove = Some(ability_id.clone());
+                                    }
+                                });
+                            }
+
+                            if let Some(ability_id) = ability_to_remove {
+                                let _ = _project
+                                    .items
+                                    .remove_granted_ability(&selected_id, &ability_id);
+                                _project.has_unsaved_item_changes = true;
+                            }
+
+                            // Add Ability via searchable dropdown
+                            if _project.abilities.abilities.is_empty() {
+                                ui.label("No abilities available");
+                            } else {
+                                // Build items list from ability registry
+                                let items: Vec<(String, String)> = _project
+                                    .abilities
+                                    .filtered_abilities(None)
+                                    .iter()
+                                    .map(|ability| {
+                                        let category_name = match ability.category {
+                                            AbilityCategory::Skill => "Skill",
+                                            AbilityCategory::Spell => "Spell",
+                                            AbilityCategory::SpecialAction => "Special Action",
+                                            AbilityCategory::Monster => "Monster",
+                                        };
+                                        (
+                                            ability.id.clone(),
+                                            format!("{} [{}]", ability.display_name, category_name),
+                                        )
+                                    })
+                                    .collect();
+
+                                if let Some(selected_ability_id) = searchable_combobox(
+                                    ui,
+                                    "item_granted_ability",
+                                    "Select ability…",
+                                    &items,
+                                    &mut panel_state.granted_ability_search_buffer,
+                                ) {
+                                    match _project
+                                        .items
+                                        .add_granted_ability(&selected_id, &selected_ability_id)
+                                    {
+                                        Ok(()) => {
+                                            panel_state.granted_ability_error = None;
+                                            _project.has_unsaved_item_changes = true;
+                                        }
+                                        Err(e) => {
+                                            panel_state.granted_ability_error = Some(e.to_string());
+                                        }
+                                    }
+                                }
+                            }
+
+                            if let Some(ref error) = panel_state.granted_ability_error {
+                                ui.colored_label(egui::Color32::RED, error);
+                            }
                         }
                     }
                 });

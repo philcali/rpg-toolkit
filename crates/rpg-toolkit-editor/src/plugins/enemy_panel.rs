@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-use rpg_toolkit_common::{Element, EnemyId};
+use rpg_toolkit_common::{AbilityCategory, Element, EnemyId};
 
 use crate::data::AppEditorMode;
 use crate::data::EditorUiSet;
+use crate::plugins::searchable_combobox::searchable_combobox;
 
 /// Plugin that provides the Enemy Editor panel UI.
 pub struct EnemyPanelPlugin;
@@ -42,7 +43,6 @@ pub struct EnemyPanelState {
     /// Text buffer for the enemy list search.
     pub search_buffer: String,
     /// Text buffer for the ability search/filter.
-    #[allow(dead_code)]
     pub ability_search_buffer: String,
     /// Buffer for new stat name input.
     pub add_stat_buffer: String,
@@ -59,9 +59,14 @@ pub struct EnemyPanelState {
     /// Error for modifier addition.
     pub add_modifier_error: Option<String>,
     /// Buffer for new ability ID.
+    #[allow(dead_code)]
     pub add_ability_id_buffer: String,
     /// Error for ability addition.
     pub add_ability_error: Option<String>,
+    /// Text buffer for portrait path editing.
+    pub portrait_buffer: String,
+    /// Validation error for portrait path.
+    pub portrait_error: Option<String>,
 }
 
 fn enemy_panel_ui(
@@ -114,8 +119,11 @@ fn enemy_panel_ui(
                                 if let Some(enemy) = _project.enemies.enemies.get(id) {
                                     panel_state.name_edit_buffer = enemy.display_name.clone();
                                     panel_state.description_buffer = enemy.description.clone();
+                                    panel_state.portrait_buffer =
+                                        enemy.portrait.clone().unwrap_or_default();
                                 }
                                 panel_state.name_edit_error = None;
+                                panel_state.portrait_error = None;
                             }
 
                             // Delete button per entry
@@ -251,6 +259,113 @@ fn enemy_panel_ui(
                                 .update_description(&selected_id, &panel_state.description_buffer);
                         }
                         _project.has_unsaved_enemy_changes = true;
+                    }
+
+                    ui.separator();
+
+                    // --- Portrait Section ---
+                    ui.heading("Portrait");
+                    {
+                        let has_portrait = _project
+                            .enemies
+                            .enemies
+                            .get(&selected_id)
+                            .and_then(|e| e.portrait.as_ref())
+                            .is_some();
+
+                        if !has_portrait {
+                            ui.label("No portrait assigned");
+                        }
+
+                        // Text input and Browse button on the same row
+                        let portrait_response = ui
+                            .horizontal(|ui| {
+                                let response =
+                                    ui.text_edit_singleline(&mut panel_state.portrait_buffer);
+
+                                // Browse... button — opens native file dialog for image selection
+                                if ui.button("Browse...").clicked() {
+                                    let file = rfd::FileDialog::new()
+                                        .add_filter("Images", &["png", "jpg", "jpeg"])
+                                        .pick_file();
+
+                                    if let Some(path) = file {
+                                        let path_str = path.display().to_string();
+                                        // Truncate to 260 characters
+                                        let truncated: String =
+                                            path_str.chars().take(260).collect();
+                                        let trimmed = truncated.trim().to_string();
+
+                                        if trimmed.is_empty() {
+                                            panel_state.portrait_error = Some(
+                                            "Portrait path must not be empty or whitespace-only."
+                                                .to_string(),
+                                        );
+                                        } else {
+                                            match _project
+                                                .enemies
+                                                .set_portrait(&selected_id, &trimmed)
+                                            {
+                                                Ok(()) => {
+                                                    panel_state.portrait_buffer = trimmed;
+                                                    panel_state.portrait_error = None;
+                                                    _project.has_unsaved_enemy_changes = true;
+                                                }
+                                                Err(e) => {
+                                                    panel_state.portrait_error =
+                                                        Some(e.to_string());
+                                                }
+                                            }
+                                        }
+                                    }
+                                    // If dialog is cancelled (file is None), leave buffer unchanged
+                                }
+
+                                response
+                            })
+                            .inner;
+
+                        // Truncate to 260 chars as user types
+                        if panel_state.portrait_buffer.chars().count() > 260 {
+                            let truncated: String =
+                                panel_state.portrait_buffer.chars().take(260).collect();
+                            panel_state.portrait_buffer = truncated;
+                        }
+
+                        // Validate on lost focus
+                        if portrait_response.lost_focus() {
+                            let trimmed = panel_state.portrait_buffer.trim().to_string();
+                            if trimmed.is_empty() {
+                                panel_state.portrait_error = Some(
+                                    "Portrait path must not be empty or whitespace-only."
+                                        .to_string(),
+                                );
+                            } else {
+                                match _project.enemies.set_portrait(&selected_id, &trimmed) {
+                                    Ok(()) => {
+                                        panel_state.portrait_error = None;
+                                        panel_state.portrait_buffer = trimmed;
+                                        _project.has_unsaved_enemy_changes = true;
+                                    }
+                                    Err(e) => {
+                                        panel_state.portrait_error = Some(e.to_string());
+                                    }
+                                }
+                            }
+                        }
+
+                        // Show validation error
+                        if let Some(ref error) = panel_state.portrait_error {
+                            ui.colored_label(egui::Color32::RED, error);
+                        }
+
+                        // Clear button
+                        if ui.button("Clear").clicked() {
+                            let _ = _project.enemies.clear_portrait(&selected_id);
+                            panel_state.portrait_buffer.clear();
+                            panel_state.portrait_error = None;
+                            _project.has_unsaved_enemy_changes = true;
+                        }
                     }
 
                     ui.separator();
@@ -619,8 +734,22 @@ fn enemy_panel_ui(
                         let mut ability_to_remove: Option<String> = None;
 
                         for ability_id in &abilities {
+                            // Display with name and category if found in registry
+                            let display_label = if let Some(ability) =
+                                _project.abilities.abilities.get(ability_id)
+                            {
+                                let category_name = match ability.category {
+                                    AbilityCategory::Skill => "Skill",
+                                    AbilityCategory::Spell => "Spell",
+                                    AbilityCategory::SpecialAction => "Special Action",
+                                    AbilityCategory::Monster => "Monster",
+                                };
+                                format!("{} [{}]", ability.display_name, category_name)
+                            } else {
+                                ability_id.clone()
+                            };
                             ui.horizontal(|ui| {
-                                ui.label(ability_id);
+                                ui.label(&display_label);
                                 if ui.small_button("🗑").clicked() {
                                     ability_to_remove = Some(ability_id.clone());
                                 }
@@ -632,16 +761,41 @@ fn enemy_panel_ui(
                             _project.has_unsaved_enemy_changes = true;
                         }
 
-                        // Add Ability
-                        ui.horizontal(|ui| {
-                            ui.text_edit_singleline(&mut panel_state.add_ability_id_buffer);
-                            if ui.button("Add").clicked() {
+                        // Add Ability via searchable dropdown
+                        if _project.abilities.abilities.is_empty() {
+                            ui.label("No abilities available");
+                        } else {
+                            // Build items list from ability registry
+                            let items: Vec<(String, String)> = _project
+                                .abilities
+                                .filtered_abilities(None)
+                                .iter()
+                                .map(|ability| {
+                                    let category_name = match ability.category {
+                                        AbilityCategory::Skill => "Skill",
+                                        AbilityCategory::Spell => "Spell",
+                                        AbilityCategory::SpecialAction => "Special Action",
+                                        AbilityCategory::Monster => "Monster",
+                                    };
+                                    (
+                                        ability.id.clone(),
+                                        format!("{} [{}]", ability.display_name, category_name),
+                                    )
+                                })
+                                .collect();
+
+                            if let Some(selected_ability_id) = searchable_combobox(
+                                ui,
+                                "enemy_add_ability",
+                                "Select ability…",
+                                &items,
+                                &mut panel_state.ability_search_buffer,
+                            ) {
                                 match _project
                                     .enemies
-                                    .add_ability(&selected_id, &panel_state.add_ability_id_buffer)
+                                    .add_ability(&selected_id, &selected_ability_id)
                                 {
                                     Ok(()) => {
-                                        panel_state.add_ability_id_buffer.clear();
                                         panel_state.add_ability_error = None;
                                         _project.has_unsaved_enemy_changes = true;
                                     }
@@ -650,7 +804,8 @@ fn enemy_panel_ui(
                                     }
                                 }
                             }
-                        });
+                        }
+
                         if let Some(ref error) = panel_state.add_ability_error {
                             ui.colored_label(egui::Color32::RED, error);
                         }
@@ -734,9 +889,12 @@ fn enemy_panel_ui(
                         if let Some(enemy) = _project.enemies.enemies.get(&new_id) {
                             panel_state.name_edit_buffer = enemy.display_name.clone();
                             panel_state.description_buffer = enemy.description.clone();
+                            panel_state.portrait_buffer =
+                                enemy.portrait.clone().unwrap_or_default();
                         }
                         panel_state.selected_enemy = Some(new_id);
                         panel_state.name_edit_error = None;
+                        panel_state.portrait_error = None;
                         panel_state.create_dialog_open = false;
                         panel_state.create_name_buffer.clear();
                         panel_state.create_error = None;
@@ -804,6 +962,8 @@ fn enemy_panel_ui(
                 panel_state.name_edit_buffer.clear();
                 panel_state.description_buffer.clear();
                 panel_state.name_edit_error = None;
+                panel_state.portrait_buffer.clear();
+                panel_state.portrait_error = None;
             }
 
             panel_state.delete_confirm_target = None;

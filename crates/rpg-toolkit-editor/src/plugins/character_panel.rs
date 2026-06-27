@@ -1,10 +1,14 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-use rpg_toolkit_common::{CharacterRegistry, OPTIONAL_STATS, REQUIRED_STATS};
+use rpg_toolkit_common::{
+    AbilityCategory, CharacterRegistry, ItemCategory, OPTIONAL_STATS, REQUIRED_STATS,
+    VisualAssetType,
+};
 
 use crate::data::AppEditorMode;
 use crate::data::EditorUiSet;
+use crate::plugins::searchable_combobox::searchable_combobox;
 
 /// Plugin that provides the Character Editor panel UI.
 pub struct CharacterPanelPlugin;
@@ -39,6 +43,22 @@ pub struct CharacterPanelState {
     pub name_edit_buffer: String,
     /// Validation error for inline name editing.
     pub name_edit_error: Option<String>,
+    /// Search buffer for the learnable ability searchable combobox.
+    pub add_learnable_search_buffer: String,
+    /// Level value for the new learnable ability (default 1).
+    pub add_learnable_level: u32,
+    /// Error message for learnable ability addition.
+    pub add_learnable_error: Option<String>,
+    /// Text buffer for spritesheet path editing.
+    pub spritesheet_buffer: String,
+    /// Text buffer for face portrait path editing.
+    pub face_portrait_buffer: String,
+    /// Text buffer for status portrait path editing.
+    pub status_portrait_buffer: String,
+    /// Search buffer for the starting equipment searchable combobox.
+    pub starting_equipment_search_buffer: String,
+    /// Error message for starting equipment addition.
+    pub starting_equipment_error: Option<String>,
 }
 
 impl Default for CharacterPanelState {
@@ -52,6 +72,14 @@ impl Default for CharacterPanelState {
             preview_level: 1,
             name_edit_buffer: String::new(),
             name_edit_error: None,
+            add_learnable_search_buffer: String::new(),
+            add_learnable_level: 1,
+            add_learnable_error: None,
+            spritesheet_buffer: String::new(),
+            face_portrait_buffer: String::new(),
+            status_portrait_buffer: String::new(),
+            starting_equipment_search_buffer: String::new(),
+            starting_equipment_error: None,
         }
     }
 }
@@ -97,6 +125,24 @@ fn character_panel_ui(
                                 // Sync name_edit_buffer with newly selected character
                                 panel_state.name_edit_buffer = display_name.clone();
                                 panel_state.name_edit_error = None;
+                                // Sync visual asset buffers
+                                if let Some(character) = project.characters.characters.get(id) {
+                                    panel_state.spritesheet_buffer = character
+                                        .visual_assets
+                                        .spritesheet
+                                        .clone()
+                                        .unwrap_or_default();
+                                    panel_state.face_portrait_buffer = character
+                                        .visual_assets
+                                        .face_portrait
+                                        .clone()
+                                        .unwrap_or_default();
+                                    panel_state.status_portrait_buffer = character
+                                        .visual_assets
+                                        .status_portrait
+                                        .clone()
+                                        .unwrap_or_default();
+                                }
                             }
 
                             // Delete button per character
@@ -314,6 +360,377 @@ fn character_panel_ui(
                         }
                     });
                 }
+
+                ui.separator();
+
+                // --- Learnable Abilities Section ---
+                ui.heading("Learnable Abilities");
+
+                if project.abilities.abilities.is_empty() {
+                    ui.label("No abilities available");
+                } else {
+                    // Display existing learnable abilities sorted by required_level ascending
+                    let mut learnable_entries: Vec<(String, String, u32)> = project
+                        .characters
+                        .characters
+                        .get(&selected_id)
+                        .map(|c| {
+                            c.learnable_abilities
+                                .iter()
+                                .map(|la| {
+                                    let display_name = project
+                                        .abilities
+                                        .abilities
+                                        .get(&la.ability_id)
+                                        .map(|a| a.display_name.clone())
+                                        .unwrap_or_else(|| la.ability_id.clone());
+                                    (la.ability_id.clone(), display_name, la.required_level)
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    learnable_entries.sort_by_key(|(_, _, level)| *level);
+
+                    let mut ability_to_remove: Option<String> = None;
+                    let mut level_updates: Vec<(String, u32)> = Vec::new();
+
+                    for (ability_id, display_name, required_level) in &learnable_entries {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("{} (Lv. {})", display_name, required_level));
+
+                            let mut level = *required_level;
+                            if ui
+                                .add(egui::DragValue::new(&mut level).range(1..=99))
+                                .changed()
+                            {
+                                level_updates.push((ability_id.clone(), level));
+                            }
+
+                            if ui.small_button("🗑").clicked() {
+                                ability_to_remove = Some(ability_id.clone());
+                            }
+                        });
+                    }
+
+                    // Apply level updates
+                    for (ability_id, new_level) in level_updates {
+                        let _ = project.characters.update_learnable_ability_level(
+                            &selected_id,
+                            &ability_id,
+                            new_level,
+                        );
+                        project.has_unsaved_character_changes = true;
+                    }
+
+                    // Apply removal
+                    if let Some(ability_id) = ability_to_remove {
+                        let _ = project
+                            .characters
+                            .remove_learnable_ability(&selected_id, &ability_id);
+                        project.has_unsaved_character_changes = true;
+                    }
+
+                    ui.separator();
+
+                    // Add learnable ability controls
+                    ui.horizontal(|ui| {
+                        ui.label("Level:");
+                        ui.add(
+                            egui::DragValue::new(&mut panel_state.add_learnable_level)
+                                .range(1..=99),
+                        );
+                    });
+
+                    // Clamp in case of manual edits
+                    panel_state.add_learnable_level = panel_state.add_learnable_level.clamp(1, 99);
+
+                    // Build items list from ability registry (sorted alphabetically by display name)
+                    let items: Vec<(String, String)> = project
+                        .abilities
+                        .filtered_abilities(None)
+                        .iter()
+                        .map(|ability| {
+                            let category_name = match ability.category {
+                                AbilityCategory::Skill => "Skill",
+                                AbilityCategory::Spell => "Spell",
+                                AbilityCategory::SpecialAction => "Special Action",
+                                AbilityCategory::Monster => "Monster",
+                            };
+                            (
+                                ability.id.clone(),
+                                format!("{} [{}]", ability.display_name, category_name),
+                            )
+                        })
+                        .collect();
+
+                    if let Some(selected_ability_id) = searchable_combobox(
+                        ui,
+                        "character_add_learnable_ability",
+                        "Select ability…",
+                        &items,
+                        &mut panel_state.add_learnable_search_buffer,
+                    ) {
+                        match project.characters.add_learnable_ability(
+                            &selected_id,
+                            selected_ability_id,
+                            panel_state.add_learnable_level,
+                        ) {
+                            Ok(()) => {
+                                panel_state.add_learnable_error = None;
+                                project.has_unsaved_character_changes = true;
+                            }
+                            Err(e) => {
+                                panel_state.add_learnable_error = Some(e.to_string());
+                            }
+                        }
+                    }
+
+                    if let Some(ref error) = panel_state.add_learnable_error {
+                        ui.colored_label(egui::Color32::RED, error);
+                    }
+                }
+
+                ui.separator();
+
+                // --- Visual Assets Section ---
+                ui.heading("Visual Assets");
+
+                // Helper macro-like approach: iterate over the three asset types
+                let asset_fields: Vec<(&str, VisualAssetType)> = vec![
+                    ("Spritesheet", VisualAssetType::Spritesheet),
+                    ("Face Portrait", VisualAssetType::FacePortrait),
+                    ("Status Portrait", VisualAssetType::StatusPortrait),
+                ];
+
+                for (label, asset_type) in &asset_fields {
+                    ui.label(*label);
+
+                    // Check if current value is None to show placeholder
+                    let current_value =
+                        project
+                            .characters
+                            .characters
+                            .get(&selected_id)
+                            .and_then(|c| match asset_type {
+                                VisualAssetType::Spritesheet => {
+                                    c.visual_assets.spritesheet.as_ref()
+                                }
+                                VisualAssetType::FacePortrait => {
+                                    c.visual_assets.face_portrait.as_ref()
+                                }
+                                VisualAssetType::StatusPortrait => {
+                                    c.visual_assets.status_portrait.as_ref()
+                                }
+                            });
+
+                    if current_value.is_none() {
+                        ui.label("No asset assigned");
+                    }
+
+                    // Get mutable reference to the appropriate buffer
+                    let buffer = match asset_type {
+                        VisualAssetType::Spritesheet => &mut panel_state.spritesheet_buffer,
+                        VisualAssetType::FacePortrait => &mut panel_state.face_portrait_buffer,
+                        VisualAssetType::StatusPortrait => &mut panel_state.status_portrait_buffer,
+                    };
+
+                    let response = ui.text_edit_singleline(buffer);
+
+                    // Truncate to 260 chars
+                    let buffer = match asset_type {
+                        VisualAssetType::Spritesheet => &mut panel_state.spritesheet_buffer,
+                        VisualAssetType::FacePortrait => &mut panel_state.face_portrait_buffer,
+                        VisualAssetType::StatusPortrait => &mut panel_state.status_portrait_buffer,
+                    };
+                    if buffer.chars().count() > 260 {
+                        let truncated: String = buffer.chars().take(260).collect();
+                        *buffer = truncated;
+                    }
+
+                    // On lost focus: trim, if empty → set to None, otherwise store
+                    if response.lost_focus() {
+                        let buffer = match asset_type {
+                            VisualAssetType::Spritesheet => &mut panel_state.spritesheet_buffer,
+                            VisualAssetType::FacePortrait => &mut panel_state.face_portrait_buffer,
+                            VisualAssetType::StatusPortrait => {
+                                &mut panel_state.status_portrait_buffer
+                            }
+                        };
+                        let trimmed = buffer.trim().to_string();
+                        if trimmed.is_empty() {
+                            let _ = project
+                                .characters
+                                .clear_visual_asset(&selected_id, *asset_type);
+                            buffer.clear();
+                        } else {
+                            let _ = project.characters.set_visual_asset(
+                                &selected_id,
+                                *asset_type,
+                                &trimmed,
+                            );
+                            *buffer = trimmed;
+                        }
+                        project.has_unsaved_character_changes = true;
+                    }
+
+                    ui.horizontal(|ui| {
+                        // Browse... button — opens native file dialog for image selection
+                        if ui.button("Browse...").clicked() {
+                            let file = rfd::FileDialog::new()
+                                .add_filter("Images", &["png", "jpg", "jpeg"])
+                                .pick_file();
+
+                            if let Some(path) = file {
+                                let path_str = path.display().to_string();
+                                // Truncate to 260 characters
+                                let truncated: String = path_str.chars().take(260).collect();
+
+                                // Populate the buffer
+                                let buffer = match asset_type {
+                                    VisualAssetType::Spritesheet => {
+                                        &mut panel_state.spritesheet_buffer
+                                    }
+                                    VisualAssetType::FacePortrait => {
+                                        &mut panel_state.face_portrait_buffer
+                                    }
+                                    VisualAssetType::StatusPortrait => {
+                                        &mut panel_state.status_portrait_buffer
+                                    }
+                                };
+                                *buffer = truncated.clone();
+
+                                // Commit to the character model immediately
+                                let _ = project.characters.set_visual_asset(
+                                    &selected_id,
+                                    *asset_type,
+                                    &truncated,
+                                );
+                                project.has_unsaved_character_changes = true;
+                            }
+                            // If dialog is cancelled (file is None), leave buffer unchanged
+                        }
+
+                        // Clear button
+                        if ui.button("Clear").clicked() {
+                            let _ = project
+                                .characters
+                                .clear_visual_asset(&selected_id, *asset_type);
+                            let buffer = match asset_type {
+                                VisualAssetType::Spritesheet => &mut panel_state.spritesheet_buffer,
+                                VisualAssetType::FacePortrait => {
+                                    &mut panel_state.face_portrait_buffer
+                                }
+                                VisualAssetType::StatusPortrait => {
+                                    &mut panel_state.status_portrait_buffer
+                                }
+                            };
+                            buffer.clear();
+                            project.has_unsaved_character_changes = true;
+                        }
+                    });
+
+                    ui.separator();
+                }
+
+                // --- Starting Equipment Section ---
+                ui.heading("Starting Equipment");
+
+                if project.items.items.is_empty() {
+                    ui.label("No items available");
+                } else {
+                    // Display current starting equipment sorted by display name (case-insensitive)
+                    let starting_equipment: Vec<String> = project
+                        .characters
+                        .characters
+                        .get(&selected_id)
+                        .map(|c| c.starting_equipment.clone())
+                        .unwrap_or_default();
+
+                    // Build sorted display entries: (item_id, display_label)
+                    let mut display_entries: Vec<(String, String)> = starting_equipment
+                        .iter()
+                        .map(|item_id| {
+                            let label = if let Some(item) = project.items.items.get(item_id) {
+                                let category_name = match item.category() {
+                                    ItemCategory::Weapon => "Weapon",
+                                    ItemCategory::Armor => "Armor",
+                                    ItemCategory::Accessory => "Accessory",
+                                    ItemCategory::Consumable => "Consumable",
+                                    ItemCategory::KeyItem => "Key Item",
+                                };
+                                format!("{} [{}]", item.display_name, category_name)
+                            } else {
+                                item_id.clone()
+                            };
+                            (item_id.clone(), label)
+                        })
+                        .collect();
+                    display_entries.sort_by(|a, b| a.1.to_lowercase().cmp(&b.1.to_lowercase()));
+
+                    let mut item_to_remove: Option<String> = None;
+
+                    for (item_id, label) in &display_entries {
+                        ui.horizontal(|ui| {
+                            ui.label(label);
+
+                            if ui.small_button("🗑").clicked() {
+                                item_to_remove = Some(item_id.clone());
+                            }
+                        });
+                    }
+
+                    if let Some(item_id) = item_to_remove {
+                        let _ = project
+                            .characters
+                            .remove_starting_equipment(&selected_id, &item_id);
+                        project.has_unsaved_character_changes = true;
+                    }
+
+                    // Add starting equipment via searchable dropdown
+                    let items: Vec<(String, String)> = project
+                        .items
+                        .filtered_items(None)
+                        .iter()
+                        .map(|item| {
+                            let category_name = match item.category() {
+                                ItemCategory::Weapon => "Weapon",
+                                ItemCategory::Armor => "Armor",
+                                ItemCategory::Accessory => "Accessory",
+                                ItemCategory::Consumable => "Consumable",
+                                ItemCategory::KeyItem => "Key Item",
+                            };
+                            (
+                                item.id.clone(),
+                                format!("{} [{}]", item.display_name, category_name),
+                            )
+                        })
+                        .collect();
+
+                    if let Some(selected_item_id) = searchable_combobox(
+                        ui,
+                        "character_starting_equipment",
+                        "Select item…",
+                        &items,
+                        &mut panel_state.starting_equipment_search_buffer,
+                    ) {
+                        match project
+                            .characters
+                            .add_starting_equipment(&selected_id, &selected_item_id)
+                        {
+                            Ok(()) => {
+                                panel_state.starting_equipment_error = None;
+                                project.has_unsaved_character_changes = true;
+                            }
+                            Err(e) => {
+                                panel_state.starting_equipment_error = Some(e.to_string());
+                            }
+                        }
+                    }
+
+                    if let Some(ref error) = panel_state.starting_equipment_error {
+                        ui.colored_label(egui::Color32::RED, error);
+                    }
+                }
             } else {
                 ui.centered_and_justified(|ui| {
                     ui.label("Select a character to edit");
@@ -404,6 +821,10 @@ fn character_panel_ui(
                         panel_state.create_dialog_open = false;
                         panel_state.create_name_buffer.clear();
                         panel_state.create_error = None;
+                        // New characters have no visual assets
+                        panel_state.spritesheet_buffer.clear();
+                        panel_state.face_portrait_buffer.clear();
+                        panel_state.status_portrait_buffer.clear();
                         project.has_unsaved_character_changes = true;
                     }
                     Err(e) => {
@@ -469,10 +890,25 @@ fn character_panel_ui(
                     panel_state.selected_character = Some(first.id.clone());
                     panel_state.name_edit_buffer = first.display_name.clone();
                     panel_state.name_edit_error = None;
+                    panel_state.spritesheet_buffer =
+                        first.visual_assets.spritesheet.clone().unwrap_or_default();
+                    panel_state.face_portrait_buffer = first
+                        .visual_assets
+                        .face_portrait
+                        .clone()
+                        .unwrap_or_default();
+                    panel_state.status_portrait_buffer = first
+                        .visual_assets
+                        .status_portrait
+                        .clone()
+                        .unwrap_or_default();
                 } else {
                     panel_state.selected_character = None;
                     panel_state.name_edit_buffer.clear();
                     panel_state.name_edit_error = None;
+                    panel_state.spritesheet_buffer.clear();
+                    panel_state.face_portrait_buffer.clear();
+                    panel_state.status_portrait_buffer.clear();
                 }
             }
 

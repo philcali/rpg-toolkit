@@ -19,7 +19,8 @@ pub use animation::{
     AnimationFrame, TileAnimation, compute_animation_frame_index, validate_tile_animation,
 };
 pub use character::{
-    Character, CharacterId, CharacterRegistry, OPTIONAL_STATS, REQUIRED_STATS, Stat,
+    Character, CharacterId, CharacterRegistry, LearnableAbility, OPTIONAL_STATS, REQUIRED_STATS,
+    Stat, VisualAssetType,
 };
 pub use condition::{
     BranchCondition, ConditionCheck, ConditionLogic, ConditionOperator, ConditionalTrigger,
