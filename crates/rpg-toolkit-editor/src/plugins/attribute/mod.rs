@@ -13,6 +13,8 @@ mod spawn_point_dialog;
 
 #[allow(unused_imports)]
 pub use action_editor::{ActionEditorState, truncate_preview};
+#[allow(unused_imports)]
+pub use action_editor_ui::RewardFormContext;
 pub use elevation_dialog::{ElevationDialog, ElevationTransitionDialog};
 pub use event_trigger_dialog::EventTriggerDialog;
 pub use npc_dialog::NpcPlacementDialog;

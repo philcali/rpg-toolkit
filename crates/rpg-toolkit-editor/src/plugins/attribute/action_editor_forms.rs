@@ -6,10 +6,11 @@ use bevy_egui::egui;
 
 use rpg_toolkit_common::{
     ConditionCheck, ConditionLogic, ConditionOperator, DialogPositionData, FadeType,
-    PlayerAppearance, ScreenShakeMode,
+    PlayerAppearance, ScreenShakeMode, TransferDirection,
 };
 
 use crate::data::map::EventAction;
+use crate::plugins::searchable_combobox::searchable_combobox;
 
 use super::action_editor::{ActionEditorState, DialogTextMode, EditorChoice};
 
@@ -894,6 +895,7 @@ pub fn render_show_selection_form(
                         map_entries,
                         face_portraits,
                         1,
+                        None,
                     );
                 });
 
@@ -972,5 +974,575 @@ pub fn render_show_selection_form(
         editor_state.selection_position = DialogPositionData::Bottom;
         editor_state.selection_face_portrait = None;
         editor_state.selection_choices = vec![EditorChoice::default(), EditorChoice::default()];
+    }
+}
+
+/// Renders the TransferDirection toggle common to all reward action forms.
+fn render_transfer_direction_toggle(
+    ui: &mut egui::Ui,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+) {
+    ui.horizontal(|ui| {
+        ui.label("Direction:");
+        egui::ComboBox::from_id_salt(format!("{}_reward_direction", id_salt))
+            .selected_text(match editor_state.reward_direction {
+                TransferDirection::Give => "Give",
+                TransferDirection::Take => "Take",
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    &mut editor_state.reward_direction,
+                    TransferDirection::Give,
+                    "Give",
+                );
+                ui.selectable_value(
+                    &mut editor_state.reward_direction,
+                    TransferDirection::Take,
+                    "Take",
+                );
+            });
+    });
+}
+
+pub fn render_give_currency_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit GiveCurrency Action:"
+    } else {
+        "Add GiveCurrency Action:"
+    };
+    ui.label(form_label);
+
+    // TransferDirection toggle
+    render_transfer_direction_toggle(ui, editor_state, id_salt);
+
+    // Amount input
+    ui.horizontal(|ui| {
+        ui.label("Amount:");
+        ui.add(egui::TextEdit::singleline(&mut editor_state.currency_amount).desired_width(100.0));
+        ui.label("(1 – 9,999,999)");
+    });
+
+    // Validation
+    let amount_valid = editor_state
+        .currency_amount
+        .trim()
+        .parse::<u64>()
+        .is_ok_and(|a| (1..=9_999_999).contains(&a));
+    let take_failure_valid = editor_state.reward_direction != TransferDirection::Take
+        || !editor_state.reward_on_failure.is_empty();
+    let is_valid = amount_valid && take_failure_valid;
+
+    if !is_valid {
+        if !amount_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "Amount must be between 1 and 9,999,999",
+            );
+        }
+        if !take_failure_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "At least one on_failure action is required for Take direction",
+            );
+        }
+    }
+
+    // Add/Update button
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update GiveCurrency"
+    } else {
+        "Add GiveCurrency"
+    };
+    if ui
+        .add_enabled(is_valid, egui::Button::new(btn_label))
+        .clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        editor_state.currency_amount = "100".to_string();
+        editor_state.reward_direction = TransferDirection::Give;
+        editor_state.reward_on_success.clear();
+        editor_state.reward_on_failure.clear();
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.currency_amount = "100".to_string();
+        editor_state.reward_direction = TransferDirection::Give;
+        editor_state.reward_on_success.clear();
+        editor_state.reward_on_failure.clear();
+    }
+}
+
+pub fn render_give_experience_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+    characters: &[(String, String)],
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit GiveExperience Action:"
+    } else {
+        "Add GiveExperience Action:"
+    };
+    ui.label(form_label);
+
+    // TransferDirection toggle
+    render_transfer_direction_toggle(ui, editor_state, id_salt);
+
+    // Amount input
+    ui.horizontal(|ui| {
+        ui.label("Amount:");
+        ui.add(
+            egui::TextEdit::singleline(&mut editor_state.experience_amount).desired_width(100.0),
+        );
+        ui.label("(1 – 9,999,999)");
+    });
+
+    // Target character selector
+    ui.horizontal(|ui| {
+        ui.label("Target:");
+        let selected_text = match &editor_state.experience_target {
+            Some(id) if !id.is_empty() => characters
+                .iter()
+                .find(|(cid, _)| cid == id)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| id.clone()),
+            _ => "All Party Members".to_string(),
+        };
+        egui::ComboBox::from_id_salt(format!("{}_exp_target", id_salt))
+            .selected_text(selected_text)
+            .show_ui(ui, |ui| {
+                if ui
+                    .selectable_label(
+                        editor_state.experience_target.is_none(),
+                        "All Party Members",
+                    )
+                    .clicked()
+                {
+                    editor_state.experience_target = None;
+                }
+                for (id, name) in characters {
+                    let is_selected = editor_state.experience_target.as_ref() == Some(id);
+                    if ui.selectable_label(is_selected, name).clicked() {
+                        editor_state.experience_target = Some(id.clone());
+                    }
+                }
+            });
+    });
+
+    // Validation
+    let amount_valid = editor_state
+        .experience_amount
+        .trim()
+        .parse::<u64>()
+        .is_ok_and(|a| (1..=9_999_999).contains(&a));
+    let take_failure_valid = editor_state.reward_direction != TransferDirection::Take
+        || !editor_state.reward_on_failure.is_empty();
+    let is_valid = amount_valid && take_failure_valid;
+
+    if !is_valid {
+        if !amount_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "Amount must be between 1 and 9,999,999",
+            );
+        }
+        if !take_failure_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "At least one on_failure action is required for Take direction",
+            );
+        }
+    }
+
+    // Add/Update button
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update GiveExperience"
+    } else {
+        "Add GiveExperience"
+    };
+    if ui
+        .add_enabled(is_valid, egui::Button::new(btn_label))
+        .clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        editor_state.experience_amount = "100".to_string();
+        editor_state.experience_target = None;
+        editor_state.reward_direction = TransferDirection::Give;
+        editor_state.reward_on_success.clear();
+        editor_state.reward_on_failure.clear();
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.experience_amount = "100".to_string();
+        editor_state.experience_target = None;
+        editor_state.reward_direction = TransferDirection::Give;
+        editor_state.reward_on_success.clear();
+        editor_state.reward_on_failure.clear();
+    }
+}
+
+pub fn render_give_item_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+    items: &[(String, String)],
+    item_search_buffer: &mut String,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit GiveItem Action:"
+    } else {
+        "Add GiveItem Action:"
+    };
+    ui.label(form_label);
+
+    // TransferDirection toggle
+    render_transfer_direction_toggle(ui, editor_state, id_salt);
+
+    // Item selector (searchable)
+    ui.horizontal(|ui| {
+        ui.label("Item:");
+        let current_label = if editor_state.give_item_id.is_empty() {
+            "Select item...".to_string()
+        } else {
+            items
+                .iter()
+                .find(|(id, _)| *id == editor_state.give_item_id)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| editor_state.give_item_id.clone())
+        };
+        if let Some(selected_id) = searchable_combobox(
+            ui,
+            &format!("{}_item_select", id_salt),
+            &current_label,
+            items,
+            item_search_buffer,
+        ) {
+            editor_state.give_item_id = selected_id;
+        }
+    });
+
+    // Quantity input
+    ui.horizontal(|ui| {
+        ui.label("Quantity:");
+        ui.add(
+            egui::TextEdit::singleline(&mut editor_state.give_item_quantity).desired_width(60.0),
+        );
+        ui.label("(1 – 999)");
+    });
+
+    // Validation
+    let item_valid = !editor_state.give_item_id.is_empty();
+    let quantity_valid = editor_state
+        .give_item_quantity
+        .trim()
+        .parse::<u32>()
+        .is_ok_and(|q| (1..=999).contains(&q));
+    let take_failure_valid = editor_state.reward_direction != TransferDirection::Take
+        || !editor_state.reward_on_failure.is_empty();
+    let is_valid = item_valid && quantity_valid && take_failure_valid;
+
+    if !is_valid {
+        if !item_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "An item must be selected",
+            );
+        }
+        if !quantity_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "Quantity must be between 1 and 999",
+            );
+        }
+        if !take_failure_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "At least one on_failure action is required for Take direction",
+            );
+        }
+    }
+
+    // Add/Update button
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update GiveItem"
+    } else {
+        "Add GiveItem"
+    };
+    if ui
+        .add_enabled(is_valid, egui::Button::new(btn_label))
+        .clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        editor_state.give_item_id = String::new();
+        editor_state.give_item_quantity = "1".to_string();
+        editor_state.reward_direction = TransferDirection::Give;
+        editor_state.reward_on_success.clear();
+        editor_state.reward_on_failure.clear();
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.give_item_id = String::new();
+        editor_state.give_item_quantity = "1".to_string();
+        editor_state.reward_direction = TransferDirection::Give;
+        editor_state.reward_on_success.clear();
+        editor_state.reward_on_failure.clear();
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn render_learn_ability_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+    abilities: &[(String, String)],
+    characters: &[(String, String)],
+    ability_search_buffer: &mut String,
+    character_search_buffer: &mut String,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit LearnAbility Action:"
+    } else {
+        "Add LearnAbility Action:"
+    };
+    ui.label(form_label);
+
+    // TransferDirection toggle
+    render_transfer_direction_toggle(ui, editor_state, id_salt);
+
+    // Ability selector (searchable)
+    ui.horizontal(|ui| {
+        ui.label("Ability:");
+        let current_label = if editor_state.learn_ability_id.is_empty() {
+            "Select ability...".to_string()
+        } else {
+            abilities
+                .iter()
+                .find(|(id, _)| *id == editor_state.learn_ability_id)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| editor_state.learn_ability_id.clone())
+        };
+        if let Some(selected_id) = searchable_combobox(
+            ui,
+            &format!("{}_ability_select", id_salt),
+            &current_label,
+            abilities,
+            ability_search_buffer,
+        ) {
+            editor_state.learn_ability_id = selected_id;
+        }
+    });
+
+    // Character target selector (searchable)
+    ui.horizontal(|ui| {
+        ui.label("Target:");
+        let current_label = if editor_state.learn_ability_target.is_empty() {
+            "Select character...".to_string()
+        } else {
+            characters
+                .iter()
+                .find(|(id, _)| *id == editor_state.learn_ability_target)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| editor_state.learn_ability_target.clone())
+        };
+        if let Some(selected_id) = searchable_combobox(
+            ui,
+            &format!("{}_learn_char_select", id_salt),
+            &current_label,
+            characters,
+            character_search_buffer,
+        ) {
+            editor_state.learn_ability_target = selected_id;
+        }
+    });
+
+    // Validation
+    let ability_valid = !editor_state.learn_ability_id.is_empty();
+    let target_valid = !editor_state.learn_ability_target.is_empty();
+    let take_failure_valid = editor_state.reward_direction != TransferDirection::Take
+        || !editor_state.reward_on_failure.is_empty();
+    let is_valid = ability_valid && target_valid && take_failure_valid;
+
+    if !is_valid {
+        if !ability_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "An ability must be selected",
+            );
+        }
+        if !target_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "A target character must be selected",
+            );
+        }
+        if !take_failure_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "At least one on_failure action is required for Take direction",
+            );
+        }
+    }
+
+    // Add/Update button
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update LearnAbility"
+    } else {
+        "Add LearnAbility"
+    };
+    if ui
+        .add_enabled(is_valid, egui::Button::new(btn_label))
+        .clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        editor_state.learn_ability_id = String::new();
+        editor_state.learn_ability_target = String::new();
+        editor_state.reward_direction = TransferDirection::Give;
+        editor_state.reward_on_success.clear();
+        editor_state.reward_on_failure.clear();
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.learn_ability_id = String::new();
+        editor_state.learn_ability_target = String::new();
+        editor_state.reward_direction = TransferDirection::Give;
+        editor_state.reward_on_success.clear();
+        editor_state.reward_on_failure.clear();
+    }
+}
+
+pub fn render_add_party_member_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+    characters: &[(String, String)],
+    character_search_buffer: &mut String,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit AddPartyMember Action:"
+    } else {
+        "Add AddPartyMember Action:"
+    };
+    ui.label(form_label);
+
+    // TransferDirection toggle
+    render_transfer_direction_toggle(ui, editor_state, id_salt);
+
+    // Character selector (searchable)
+    ui.horizontal(|ui| {
+        ui.label("Character:");
+        let current_label = if editor_state.add_party_character_id.is_empty() {
+            "Select character...".to_string()
+        } else {
+            characters
+                .iter()
+                .find(|(id, _)| *id == editor_state.add_party_character_id)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| editor_state.add_party_character_id.clone())
+        };
+        if let Some(selected_id) = searchable_combobox(
+            ui,
+            &format!("{}_party_char_select", id_salt),
+            &current_label,
+            characters,
+            character_search_buffer,
+        ) {
+            editor_state.add_party_character_id = selected_id;
+        }
+    });
+
+    // Validation
+    let character_valid = !editor_state.add_party_character_id.is_empty()
+        && editor_state.add_party_character_id.len() <= 64;
+    let take_failure_valid = editor_state.reward_direction != TransferDirection::Take
+        || !editor_state.reward_on_failure.is_empty();
+    let is_valid = character_valid && take_failure_valid;
+
+    if !is_valid {
+        if !character_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "A character must be selected (1–64 characters)",
+            );
+        }
+        if !take_failure_valid {
+            ui.colored_label(
+                egui::Color32::from_rgb(220, 50, 50),
+                "At least one on_failure action is required for Take direction",
+            );
+        }
+    }
+
+    // Add/Update button
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update AddPartyMember"
+    } else {
+        "Add AddPartyMember"
+    };
+    if ui
+        .add_enabled(is_valid, egui::Button::new(btn_label))
+        .clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        editor_state.add_party_character_id = String::new();
+        editor_state.reward_direction = TransferDirection::Give;
+        editor_state.reward_on_success.clear();
+        editor_state.reward_on_failure.clear();
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.add_party_character_id = String::new();
+        editor_state.reward_direction = TransferDirection::Give;
+        editor_state.reward_on_success.clear();
+        editor_state.reward_on_failure.clear();
     }
 }

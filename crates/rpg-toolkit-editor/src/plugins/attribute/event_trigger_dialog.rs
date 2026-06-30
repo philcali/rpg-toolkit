@@ -87,6 +87,7 @@ pub fn event_trigger_panel_ui(
                 &map_entries,
                 &project.face_portraits,
                 0,
+                None,
             );
 
             ui.separator();
@@ -212,6 +213,7 @@ pub fn render_conditional_triggers_panel(
                     map_entries,
                     face_portraits,
                     1,
+                    None,
                 );
             });
 

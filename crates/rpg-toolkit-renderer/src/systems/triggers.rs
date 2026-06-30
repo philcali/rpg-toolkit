@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use rpg_toolkit_common::{
-    DialogTextData, EventAction, FadeType, PlayerAppearance, ScreenShakeMode,
+    DialogTextData, EventAction, FadeType, PlayerAppearance, ScreenShakeMode, TransferDirection,
 };
 use std::collections::VecDeque;
 
@@ -13,8 +13,8 @@ use crate::effects::{
 };
 use crate::events::{MapChanged, PlayerMoved, ShowDialog};
 use crate::resources::{
-    ActionQueue, FadeState, GameState, RendererProjectData, RendererState, ScreenShakeState,
-    WaitingFor,
+    ActionQueue, CharacterProgressState, CurrencyState, FadeState, GameState, InventoryState,
+    PartyState, RendererProjectData, RendererState, ScreenShakeState, WaitingFor,
 };
 use crate::systems::player::grid_to_world;
 use crate::systems::selection::{ResolvedChoice, SelectionState};
@@ -114,6 +114,7 @@ pub fn check_triggers(
 /// Advances the action queue: fires the next action in the sequence.
 /// Waits for blocking actions (dialog, screen shake, fade) to complete before advancing.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::type_complexity)]
 pub fn advance_action_queue(
     mut commands: Commands,
     action_queue: Option<ResMut<ActionQueue>>,
@@ -130,7 +131,21 @@ pub fn advance_action_queue(
     mut camera_query: Query<&mut Transform, With<GameCamera>>,
     mut player_query: Query<&mut Visibility, With<PlayerCharacter>>,
     fade_overlay_query: Query<Entity, With<FadeOverlay>>,
+    mut reward_state: (
+        Option<ResMut<CurrencyState>>,
+        Option<ResMut<CharacterProgressState>>,
+        Option<ResMut<PartyState>>,
+        Option<ResMut<InventoryState>>,
+    ),
 ) {
+    // Destructure reward state tuple for convenient access
+    let (
+        ref mut currency_state,
+        ref mut character_progress,
+        ref mut party_state,
+        ref mut inventory_state,
+    ) = reward_state;
+
     let Some(mut queue) = action_queue else {
         return;
     };
@@ -503,6 +518,324 @@ pub fn advance_action_queue(
 
                 queue.waiting_for = WaitingFor::Selection;
                 return;
+            }
+            // Reward action: GiveCurrency
+            EventAction::GiveCurrency {
+                amount,
+                direction,
+                on_success,
+                on_failure,
+            } => {
+                queue.actions.pop_front();
+                if let Some(currency) = currency_state {
+                    match direction {
+                        TransferDirection::Give => {
+                            currency.balance = currency.balance.saturating_add(amount);
+                        }
+                        TransferDirection::Take => {
+                            let branch = if currency.balance >= amount {
+                                currency.balance -= amount;
+                                on_success
+                            } else {
+                                on_failure
+                            };
+                            for action in branch.into_iter().rev() {
+                                queue.actions.push_front(action);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+            // Reward action: LearnAbility
+            EventAction::LearnAbility {
+                ability_id,
+                target,
+                direction,
+                on_success,
+                on_failure,
+            } => {
+                queue.actions.pop_front();
+
+                // Check if ability exists in project's abilities registry
+                let ability_exists = project_data.as_ref().is_some_and(|pd| {
+                    pd.project_file
+                        .abilities
+                        .abilities
+                        .contains_key(&ability_id)
+                });
+
+                if !ability_exists {
+                    warn!(
+                        "LearnAbility ability_id '{}' not found in AbilityRegistry; skipping",
+                        ability_id
+                    );
+                    continue;
+                }
+
+                if let Some(progress) = character_progress {
+                    match direction {
+                        TransferDirection::Give => {
+                            if let Some(entry) = progress.characters.get_mut(&target) {
+                                if !entry.learned_abilities.contains(&ability_id) {
+                                    entry.learned_abilities.push(ability_id);
+                                }
+                                // else: already known, no-op
+                            } else {
+                                warn!(
+                                    "LearnAbility target '{}' not found in CharacterProgressState; skipping",
+                                    target
+                                );
+                            }
+                        }
+                        TransferDirection::Take => {
+                            let branch = if let Some(entry) = progress.characters.get_mut(&target) {
+                                if let Some(pos) = entry
+                                    .learned_abilities
+                                    .iter()
+                                    .position(|a| a == &ability_id)
+                                {
+                                    entry.learned_abilities.remove(pos);
+                                    on_success
+                                } else {
+                                    on_failure
+                                }
+                            } else {
+                                warn!(
+                                    "LearnAbility target '{}' not found in CharacterProgressState; skipping",
+                                    target
+                                );
+                                // Target not found — treat as failure
+                                on_failure
+                            };
+                            for action in branch.into_iter().rev() {
+                                queue.actions.push_front(action);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+            // Reward action: AddPartyMember
+            EventAction::AddPartyMember {
+                character_id,
+                direction,
+                on_success,
+                on_failure,
+            } => {
+                queue.actions.pop_front();
+
+                // Check if character exists in project's character registry
+                let character_exists = project_data.as_ref().is_some_and(|pd| {
+                    pd.project_file
+                        .characters
+                        .characters
+                        .contains_key(&character_id)
+                });
+
+                if !character_exists {
+                    warn!(
+                        "AddPartyMember character_id '{}' not found in CharacterRegistry; skipping",
+                        character_id
+                    );
+                    continue;
+                }
+
+                if let Some(party) = party_state {
+                    match direction {
+                        TransferDirection::Give => {
+                            if !party.members.contains(&character_id) {
+                                party.members.push(character_id);
+                            }
+                            // else: already in party, no-op
+                        }
+                        TransferDirection::Take => {
+                            let branch = if let Some(pos) =
+                                party.members.iter().position(|id| id == &character_id)
+                            {
+                                party.members.remove(pos);
+                                on_success
+                            } else {
+                                on_failure
+                            };
+                            for action in branch.into_iter().rev() {
+                                queue.actions.push_front(action);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+            // GiveItem reward action
+            EventAction::GiveItem {
+                item_id,
+                quantity,
+                direction,
+                on_success,
+                on_failure,
+            } => {
+                queue.actions.pop_front();
+
+                // Look up item definition from project data for stackability info
+                let item_def = project_data
+                    .as_ref()
+                    .and_then(|pd| pd.project_file.items.items.get(&item_id));
+
+                if item_def.is_none() {
+                    warn!(
+                        "GiveItem item_id '{}' not found in ItemRegistry; skipping",
+                        item_id
+                    );
+                    continue;
+                }
+                let item_def = item_def.unwrap();
+
+                if let Some(inventory) = inventory_state {
+                    match direction {
+                        TransferDirection::Give => {
+                            let success =
+                                if let Some(current_qty) = inventory.items.get_mut(&item_id) {
+                                    if !item_def.stackable {
+                                        // Unstackable item already owned — failure
+                                        false
+                                    } else if *current_qty >= item_def.stack_limit {
+                                        // Already at stack cap — failure
+                                        false
+                                    } else {
+                                        // Add up to stack_limit
+                                        *current_qty =
+                                            (*current_qty + quantity).min(item_def.stack_limit);
+                                        true
+                                    }
+                                } else {
+                                    // New item — always succeeds
+                                    inventory
+                                        .items
+                                        .insert(item_id, quantity.min(item_def.stack_limit));
+                                    true
+                                };
+
+                            let branch = if success { on_success } else { on_failure };
+                            for action in branch.into_iter().rev() {
+                                queue.actions.push_front(action);
+                            }
+                        }
+                        TransferDirection::Take => {
+                            let branch = if let Some(&current_qty) = inventory.items.get(&item_id) {
+                                if current_qty >= quantity {
+                                    let new_qty = current_qty - quantity;
+                                    if new_qty == 0 {
+                                        inventory.items.remove(&item_id);
+                                    } else {
+                                        inventory.items.insert(item_id, new_qty);
+                                    }
+                                    on_success
+                                } else {
+                                    on_failure
+                                }
+                            } else {
+                                on_failure
+                            };
+                            for action in branch.into_iter().rev() {
+                                queue.actions.push_front(action);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+            // Reward action: GiveExperience
+            EventAction::GiveExperience {
+                amount,
+                target,
+                direction,
+                on_success,
+                on_failure,
+            } => {
+                queue.actions.pop_front();
+                if let Some(progress) = character_progress {
+                    match direction {
+                        TransferDirection::Give => {
+                            match target {
+                                Some(char_id) => {
+                                    if let Some(entry) = progress.characters.get_mut(&char_id) {
+                                        entry.experience = entry.experience.saturating_add(amount);
+                                    } else {
+                                        warn!(
+                                            "GiveExperience target '{}' not found in CharacterProgressState; skipping",
+                                            char_id
+                                        );
+                                    }
+                                }
+                                None => {
+                                    // Give to all party members
+                                    if let Some(party) = party_state {
+                                        for member_id in &party.members {
+                                            if let Some(entry) =
+                                                progress.characters.get_mut(member_id)
+                                            {
+                                                entry.experience =
+                                                    entry.experience.saturating_add(amount);
+                                            } else {
+                                                warn!(
+                                                    "GiveExperience party member '{}' not found in CharacterProgressState; skipping member",
+                                                    member_id
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        TransferDirection::Take => {
+                            let sufficient = match target {
+                                Some(ref char_id) => progress
+                                    .characters
+                                    .get(char_id)
+                                    .is_some_and(|e| e.experience >= amount),
+                                None => {
+                                    // All party members must have sufficient (atomic check)
+                                    party_state.as_ref().is_some_and(|party| {
+                                        party.members.iter().all(|id| {
+                                            progress
+                                                .characters
+                                                .get(id)
+                                                .is_some_and(|e| e.experience >= amount)
+                                        })
+                                    })
+                                }
+                            };
+                            let branch = if sufficient {
+                                // Apply subtraction
+                                match target {
+                                    Some(ref char_id) => {
+                                        if let Some(entry) = progress.characters.get_mut(char_id) {
+                                            entry.experience -= amount;
+                                        }
+                                    }
+                                    None => {
+                                        if let Some(party) = party_state {
+                                            for member_id in &party.members {
+                                                if let Some(entry) =
+                                                    progress.characters.get_mut(member_id)
+                                                {
+                                                    entry.experience -= amount;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                on_success
+                            } else {
+                                on_failure
+                            };
+                            for action in branch.into_iter().rev() {
+                                queue.actions.push_front(action);
+                            }
+                        }
+                    }
+                }
+                continue;
             }
         }
     }

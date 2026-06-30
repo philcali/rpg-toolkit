@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use rpg_toolkit_common::{
-    EventAction, FadeType, MapId, ProjectFile, ScreenShakeMode, SpritesheetId, TilesetId,
+    AbilityId, CharacterId, EventAction, FadeType, ItemId, MapId, ProjectFile, ScreenShakeMode,
+    SpritesheetId, TilesetId,
 };
 use std::collections::{HashMap, VecDeque};
 
@@ -210,4 +211,35 @@ pub struct NpcCollisionEvent {
 #[derive(Resource)]
 pub struct SavePath {
     pub path: std::path::PathBuf,
+}
+
+/// Player's current currency balance.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct CurrencyState {
+    pub balance: u64,
+}
+
+/// Player's inventory: item_id → quantity held.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct InventoryState {
+    pub items: HashMap<ItemId, u32>,
+}
+
+/// Per-character experience and learned abilities.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CharacterProgress {
+    pub experience: u64,
+    pub learned_abilities: Vec<AbilityId>,
+}
+
+/// Progress state for all characters.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct CharacterProgressState {
+    pub characters: HashMap<CharacterId, CharacterProgress>,
+}
+
+/// Active party members (ordered list).
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct PartyState {
+    pub members: Vec<CharacterId>,
 }

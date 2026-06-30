@@ -40,7 +40,7 @@ pub use manifest::ProjectManifest;
 pub use map::{
     ChoiceData, DialogConfigData, DialogPositionData, DialogTextData, EventAction, FadeType, Layer,
     MapData, MapId, PlayerAppearance, ScreenShakeMode, SpawnPoint, TileAttributeLayer,
-    TileAttributes, TileRef, TilesetId,
+    TileAttributes, TileRef, TilesetId, TransferDirection,
 };
 pub use project::{ProjectFile, SpritesheetReferences};
 pub use spritesheet::{

@@ -1,7 +1,10 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::ability::AbilityId;
+use crate::character::CharacterId;
 use crate::condition::{BranchCondition, ConditionalTrigger};
 use crate::error::CommonError;
+use crate::item::ItemId;
 use crate::spritesheet::NpcInstance;
 
 /// Type alias for map identifiers (UUID v4 strings).
@@ -180,6 +183,106 @@ pub fn default_fade_color() -> [f32; 4] {
     [0.0, 0.0, 0.0, 1.0]
 }
 
+/// Direction of a reward transfer: Give grants to the player, Take removes from the player.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TransferDirection {
+    #[default]
+    Give,
+    Take,
+}
+
+/// Returns the default quantity of 1 for GiveItem actions.
+fn default_quantity() -> u32 {
+    1
+}
+
+/// Deserializes and validates a reward amount (currency or experience) in the range [1, 9_999_999].
+fn deserialize_reward_amount<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let amount = u64::deserialize(deserializer)?;
+    if !(1..=9_999_999).contains(&amount) {
+        return Err(serde::de::Error::custom(format!(
+            "amount must be between 1 and 9999999 inclusive, got {}",
+            amount
+        )));
+    }
+    Ok(amount)
+}
+
+/// Deserializes and validates an item quantity in the range [1, 999].
+fn deserialize_item_quantity<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let quantity = u32::deserialize(deserializer)?;
+    if !(1..=999).contains(&quantity) {
+        return Err(serde::de::Error::custom(format!(
+            "quantity must be between 1 and 999 inclusive, got {}",
+            quantity
+        )));
+    }
+    Ok(quantity)
+}
+
+/// Deserializes and validates a non-empty string field.
+fn deserialize_non_empty_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        return Err(serde::de::Error::custom("field must not be empty"));
+    }
+    Ok(s)
+}
+
+/// Deserializes and validates an optional string field that, if present, must be non-empty.
+fn deserialize_optional_non_empty_string<'de, D>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt = Option::<String>::deserialize(deserializer)?;
+    if let Some(ref s) = opt
+        && s.is_empty()
+    {
+        return Err(serde::de::Error::custom(
+            "target must not be empty when present",
+        ));
+    }
+    Ok(opt)
+}
+
+/// Deserializes and validates a character_id with length 1–64.
+fn deserialize_character_id_length<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        return Err(serde::de::Error::custom("character_id must not be empty"));
+    }
+    if s.len() > 64 {
+        return Err(serde::de::Error::custom(format!(
+            "character_id must be at most 64 characters, got {}",
+            s.len()
+        )));
+    }
+    Ok(s)
+}
+
+/// Helper for deserializing item_quantity with a default of 1, applying validation.
+fn deserialize_item_quantity_with_default<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // This handles the case where the field is present in JSON
+    deserialize_item_quantity(deserializer)
+}
+
 /// A single action within an event trigger sequence.
 /// Uses `#[serde(tag = "type")]` for clean, forward-compatible JSON.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -240,6 +343,70 @@ pub enum EventAction {
         /// Ordered list of choices (2–6 inclusive).
         #[serde(deserialize_with = "deserialize_validated_choices")]
         choices: Vec<ChoiceData>,
+    },
+    /// Award or deduct currency.
+    GiveCurrency {
+        #[serde(deserialize_with = "deserialize_reward_amount")]
+        amount: u64,
+        #[serde(default)]
+        direction: TransferDirection,
+        #[serde(default)]
+        on_success: Vec<EventAction>,
+        #[serde(default)]
+        on_failure: Vec<EventAction>,
+    },
+    /// Award or deduct experience points.
+    GiveExperience {
+        #[serde(deserialize_with = "deserialize_reward_amount")]
+        amount: u64,
+        #[serde(default, deserialize_with = "deserialize_optional_non_empty_string")]
+        target: Option<CharacterId>,
+        #[serde(default)]
+        direction: TransferDirection,
+        #[serde(default)]
+        on_success: Vec<EventAction>,
+        #[serde(default)]
+        on_failure: Vec<EventAction>,
+    },
+    /// Add or remove an item from inventory.
+    GiveItem {
+        #[serde(deserialize_with = "deserialize_non_empty_string")]
+        item_id: ItemId,
+        #[serde(
+            default = "default_quantity",
+            deserialize_with = "deserialize_item_quantity_with_default"
+        )]
+        quantity: u32,
+        #[serde(default)]
+        direction: TransferDirection,
+        #[serde(default)]
+        on_success: Vec<EventAction>,
+        #[serde(default)]
+        on_failure: Vec<EventAction>,
+    },
+    /// Teach or remove an ability from a character.
+    LearnAbility {
+        #[serde(deserialize_with = "deserialize_non_empty_string")]
+        ability_id: AbilityId,
+        #[serde(deserialize_with = "deserialize_non_empty_string")]
+        target: CharacterId,
+        #[serde(default)]
+        direction: TransferDirection,
+        #[serde(default)]
+        on_success: Vec<EventAction>,
+        #[serde(default)]
+        on_failure: Vec<EventAction>,
+    },
+    /// Add or remove a character from the active party.
+    AddPartyMember {
+        #[serde(deserialize_with = "deserialize_character_id_length")]
+        character_id: CharacterId,
+        #[serde(default)]
+        direction: TransferDirection,
+        #[serde(default)]
+        on_success: Vec<EventAction>,
+        #[serde(default)]
+        on_failure: Vec<EventAction>,
     },
 }
 
@@ -685,5 +852,664 @@ mod tests {
             result.err()
         );
         assert_eq!(result.unwrap().actions, vec![]);
+    }
+
+    // --- GiveCurrency validation tests ---
+
+    #[test]
+    fn give_currency_valid_amount() {
+        let json = r#"{"type": "GiveCurrency", "amount": 100}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "Valid amount should parse: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn give_currency_min_amount() {
+        let json = r#"{"type": "GiveCurrency", "amount": 1}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "Min amount (1) should be valid: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn give_currency_max_amount() {
+        let json = r#"{"type": "GiveCurrency", "amount": 9999999}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "Max amount (9999999) should be valid: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn give_currency_rejects_zero_amount() {
+        let json = r#"{"type": "GiveCurrency", "amount": 0}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Zero amount should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("between 1 and 9999999"),
+            "Error should mention range: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn give_currency_rejects_amount_over_max() {
+        let json = r#"{"type": "GiveCurrency", "amount": 10000000}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Amount over max should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("between 1 and 9999999"),
+            "Error should mention range: {}",
+            err
+        );
+    }
+
+    // --- GiveExperience validation tests ---
+
+    #[test]
+    fn give_experience_valid_no_target() {
+        let json = r#"{"type": "GiveExperience", "amount": 500}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "Valid experience should parse: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn give_experience_valid_with_target() {
+        let json = r#"{"type": "GiveExperience", "amount": 500, "target": "hero_01"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "Valid experience with target should parse: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn give_experience_rejects_zero_amount() {
+        let json = r#"{"type": "GiveExperience", "amount": 0}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Zero amount should be rejected");
+    }
+
+    #[test]
+    fn give_experience_rejects_empty_target() {
+        let json = r#"{"type": "GiveExperience", "amount": 100, "target": ""}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Empty target should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must not be empty"),
+            "Error should mention empty: {}",
+            err
+        );
+    }
+
+    // --- GiveItem validation tests ---
+
+    #[test]
+    fn give_item_valid() {
+        let json = r#"{"type": "GiveItem", "item_id": "potion", "quantity": 5}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "Valid GiveItem should parse: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn give_item_quantity_defaults_to_1() {
+        let json = r#"{"type": "GiveItem", "item_id": "potion"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "GiveItem without quantity should default to 1: {:?}",
+            result.err()
+        );
+        if let EventAction::GiveItem { quantity, .. } = result.unwrap() {
+            assert_eq!(quantity, 1);
+        } else {
+            panic!("Expected GiveItem variant");
+        }
+    }
+
+    #[test]
+    fn give_item_rejects_empty_item_id() {
+        let json = r#"{"type": "GiveItem", "item_id": "", "quantity": 1}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Empty item_id should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must not be empty"),
+            "Error should mention empty: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn give_item_rejects_quantity_zero() {
+        let json = r#"{"type": "GiveItem", "item_id": "potion", "quantity": 0}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Zero quantity should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("between 1 and 999"),
+            "Error should mention range: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn give_item_rejects_quantity_over_999() {
+        let json = r#"{"type": "GiveItem", "item_id": "potion", "quantity": 1000}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Quantity over 999 should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("between 1 and 999"),
+            "Error should mention range: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn give_item_accepts_max_quantity() {
+        let json = r#"{"type": "GiveItem", "item_id": "potion", "quantity": 999}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "Max quantity (999) should be valid: {:?}",
+            result.err()
+        );
+    }
+
+    // --- LearnAbility validation tests ---
+
+    #[test]
+    fn learn_ability_valid() {
+        let json = r#"{"type": "LearnAbility", "ability_id": "fireball", "target": "mage_01"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "Valid LearnAbility should parse: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn learn_ability_rejects_empty_ability_id() {
+        let json = r#"{"type": "LearnAbility", "ability_id": "", "target": "mage_01"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Empty ability_id should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must not be empty"),
+            "Error should mention empty: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn learn_ability_rejects_empty_target() {
+        let json = r#"{"type": "LearnAbility", "ability_id": "fireball", "target": ""}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Empty target should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must not be empty"),
+            "Error should mention empty: {}",
+            err
+        );
+    }
+
+    // --- AddPartyMember validation tests ---
+
+    #[test]
+    fn add_party_member_valid() {
+        let json = r#"{"type": "AddPartyMember", "character_id": "hero_01"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "Valid AddPartyMember should parse: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn add_party_member_rejects_empty_character_id() {
+        let json = r#"{"type": "AddPartyMember", "character_id": ""}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Empty character_id should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must not be empty"),
+            "Error should mention empty: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn add_party_member_rejects_character_id_over_64() {
+        let long_id = "a".repeat(65);
+        let json = format!(
+            r#"{{"type": "AddPartyMember", "character_id": "{}"}}"#,
+            long_id
+        );
+        let result: Result<EventAction, _> = serde_json::from_str(&json);
+        assert!(
+            result.is_err(),
+            "character_id over 64 chars should be rejected"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("at most 64"),
+            "Error should mention max length: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn add_party_member_accepts_64_char_character_id() {
+        let id = "a".repeat(64);
+        let json = format!(r#"{{"type": "AddPartyMember", "character_id": "{}"}}"#, id);
+        let result: Result<EventAction, _> = serde_json::from_str(&json);
+        assert!(
+            result.is_ok(),
+            "64-char character_id should be valid: {:?}",
+            result.err()
+        );
+    }
+
+    // --- Backward compatibility: pre-existing variants still deserialize ---
+
+    #[test]
+    fn backward_compat_jump_to_deserializes() {
+        let json =
+            r#"{"type": "JumpTo", "target_map_id": "map-001", "target_x": 5, "target_y": 10}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "JumpTo should still deserialize: {:?}",
+            result.err()
+        );
+        if let EventAction::JumpTo {
+            target_map_id,
+            target_x,
+            target_y,
+            target_elevation,
+        } = result.unwrap()
+        {
+            assert_eq!(target_map_id, "map-001");
+            assert_eq!(target_x, 5);
+            assert_eq!(target_y, 10);
+            assert_eq!(target_elevation, None);
+        } else {
+            panic!("Expected JumpTo variant");
+        }
+    }
+
+    #[test]
+    fn backward_compat_set_state_deserializes() {
+        let json = r#"{"type": "SetState", "key": "chest_opened", "value": "true"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "SetState should still deserialize: {:?}",
+            result.err()
+        );
+        if let EventAction::SetState { key, value } = result.unwrap() {
+            assert_eq!(key, "chest_opened");
+            assert_eq!(value, "true");
+        } else {
+            panic!("Expected SetState variant");
+        }
+    }
+
+    #[test]
+    fn backward_compat_screen_shake_deserializes() {
+        let json = r#"{"type": "ScreenShake", "intensity": 5.0, "duration": 1.5}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "ScreenShake should still deserialize: {:?}",
+            result.err()
+        );
+        if let EventAction::ScreenShake {
+            intensity,
+            duration,
+            mode,
+        } = result.unwrap()
+        {
+            assert_eq!(intensity, 5.0);
+            assert_eq!(duration, 1.5);
+            assert_eq!(mode, ScreenShakeMode::Timed);
+        } else {
+            panic!("Expected ScreenShake variant");
+        }
+    }
+
+    #[test]
+    fn backward_compat_stop_screen_shake_deserializes() {
+        let json = r#"{"type": "StopScreenShake"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "StopScreenShake should still deserialize: {:?}",
+            result.err()
+        );
+        assert!(matches!(result.unwrap(), EventAction::StopScreenShake));
+    }
+
+    #[test]
+    fn backward_compat_fade_transition_deserializes() {
+        let json = r#"{"type": "FadeTransition", "fade_type": "FadeOut", "duration": 0.5}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "FadeTransition should still deserialize: {:?}",
+            result.err()
+        );
+        if let EventAction::FadeTransition {
+            fade_type,
+            duration,
+            color,
+        } = result.unwrap()
+        {
+            assert_eq!(fade_type, FadeType::FadeOut);
+            assert_eq!(duration, 0.5);
+            assert_eq!(color, [0.0, 0.0, 0.0, 1.0]);
+        } else {
+            panic!("Expected FadeTransition variant");
+        }
+    }
+
+    // --- Reward variants serialize with correct "type" tag ---
+
+    #[test]
+    fn give_currency_serializes_with_correct_type_tag() {
+        let action = EventAction::GiveCurrency {
+            amount: 500,
+            direction: TransferDirection::Give,
+            on_success: vec![],
+            on_failure: vec![],
+        };
+        let json = serde_json::to_string(&action).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["type"], "GiveCurrency");
+        assert_eq!(value["amount"], 500);
+    }
+
+    #[test]
+    fn give_experience_serializes_with_correct_type_tag() {
+        let action = EventAction::GiveExperience {
+            amount: 1000,
+            target: Some("warrior".to_string()),
+            direction: TransferDirection::Take,
+            on_success: vec![],
+            on_failure: vec![],
+        };
+        let json = serde_json::to_string(&action).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["type"], "GiveExperience");
+        assert_eq!(value["amount"], 1000);
+        assert_eq!(value["target"], "warrior");
+        assert_eq!(value["direction"], "Take");
+    }
+
+    #[test]
+    fn give_item_serializes_with_correct_type_tag() {
+        let action = EventAction::GiveItem {
+            item_id: "sword_01".to_string(),
+            quantity: 3,
+            direction: TransferDirection::Give,
+            on_success: vec![],
+            on_failure: vec![],
+        };
+        let json = serde_json::to_string(&action).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["type"], "GiveItem");
+        assert_eq!(value["item_id"], "sword_01");
+        assert_eq!(value["quantity"], 3);
+    }
+
+    #[test]
+    fn learn_ability_serializes_with_correct_type_tag() {
+        let action = EventAction::LearnAbility {
+            ability_id: "heal".to_string(),
+            target: "cleric_01".to_string(),
+            direction: TransferDirection::Give,
+            on_success: vec![],
+            on_failure: vec![],
+        };
+        let json = serde_json::to_string(&action).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["type"], "LearnAbility");
+        assert_eq!(value["ability_id"], "heal");
+        assert_eq!(value["target"], "cleric_01");
+    }
+
+    #[test]
+    fn add_party_member_serializes_with_correct_type_tag() {
+        let action = EventAction::AddPartyMember {
+            character_id: "npc_ally".to_string(),
+            direction: TransferDirection::Take,
+            on_success: vec![EventAction::SetState {
+                key: "recruited".to_string(),
+                value: "true".to_string(),
+            }],
+            on_failure: vec![],
+        };
+        let json = serde_json::to_string(&action).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["type"], "AddPartyMember");
+        assert_eq!(value["character_id"], "npc_ally");
+        assert_eq!(value["direction"], "Take");
+    }
+
+    // --- direction defaults to Give when absent from JSON ---
+
+    #[test]
+    fn give_currency_direction_defaults_to_give() {
+        let json = r#"{"type": "GiveCurrency", "amount": 100}"#;
+        let action: EventAction = serde_json::from_str(json).unwrap();
+        if let EventAction::GiveCurrency { direction, .. } = action {
+            assert_eq!(direction, TransferDirection::Give);
+        } else {
+            panic!("Expected GiveCurrency variant");
+        }
+    }
+
+    #[test]
+    fn give_experience_direction_defaults_to_give() {
+        let json = r#"{"type": "GiveExperience", "amount": 200}"#;
+        let action: EventAction = serde_json::from_str(json).unwrap();
+        if let EventAction::GiveExperience { direction, .. } = action {
+            assert_eq!(direction, TransferDirection::Give);
+        } else {
+            panic!("Expected GiveExperience variant");
+        }
+    }
+
+    #[test]
+    fn give_item_direction_defaults_to_give() {
+        let json = r#"{"type": "GiveItem", "item_id": "potion"}"#;
+        let action: EventAction = serde_json::from_str(json).unwrap();
+        if let EventAction::GiveItem { direction, .. } = action {
+            assert_eq!(direction, TransferDirection::Give);
+        } else {
+            panic!("Expected GiveItem variant");
+        }
+    }
+
+    #[test]
+    fn learn_ability_direction_defaults_to_give() {
+        let json = r#"{"type": "LearnAbility", "ability_id": "fireball", "target": "mage"}"#;
+        let action: EventAction = serde_json::from_str(json).unwrap();
+        if let EventAction::LearnAbility { direction, .. } = action {
+            assert_eq!(direction, TransferDirection::Give);
+        } else {
+            panic!("Expected LearnAbility variant");
+        }
+    }
+
+    #[test]
+    fn add_party_member_direction_defaults_to_give() {
+        let json = r#"{"type": "AddPartyMember", "character_id": "hero"}"#;
+        let action: EventAction = serde_json::from_str(json).unwrap();
+        if let EventAction::AddPartyMember { direction, .. } = action {
+            assert_eq!(direction, TransferDirection::Give);
+        } else {
+            panic!("Expected AddPartyMember variant");
+        }
+    }
+
+    // --- on_success/on_failure default to empty when absent from JSON ---
+
+    #[test]
+    fn give_currency_on_success_on_failure_default_to_empty() {
+        let json = r#"{"type": "GiveCurrency", "amount": 50}"#;
+        let action: EventAction = serde_json::from_str(json).unwrap();
+        if let EventAction::GiveCurrency {
+            on_success,
+            on_failure,
+            ..
+        } = action
+        {
+            assert!(on_success.is_empty(), "on_success should default to empty");
+            assert!(on_failure.is_empty(), "on_failure should default to empty");
+        } else {
+            panic!("Expected GiveCurrency variant");
+        }
+    }
+
+    #[test]
+    fn give_experience_on_success_on_failure_default_to_empty() {
+        let json = r#"{"type": "GiveExperience", "amount": 100}"#;
+        let action: EventAction = serde_json::from_str(json).unwrap();
+        if let EventAction::GiveExperience {
+            on_success,
+            on_failure,
+            ..
+        } = action
+        {
+            assert!(on_success.is_empty(), "on_success should default to empty");
+            assert!(on_failure.is_empty(), "on_failure should default to empty");
+        } else {
+            panic!("Expected GiveExperience variant");
+        }
+    }
+
+    #[test]
+    fn give_item_on_success_on_failure_default_to_empty() {
+        let json = r#"{"type": "GiveItem", "item_id": "key"}"#;
+        let action: EventAction = serde_json::from_str(json).unwrap();
+        if let EventAction::GiveItem {
+            on_success,
+            on_failure,
+            ..
+        } = action
+        {
+            assert!(on_success.is_empty(), "on_success should default to empty");
+            assert!(on_failure.is_empty(), "on_failure should default to empty");
+        } else {
+            panic!("Expected GiveItem variant");
+        }
+    }
+
+    #[test]
+    fn learn_ability_on_success_on_failure_default_to_empty() {
+        let json = r#"{"type": "LearnAbility", "ability_id": "heal", "target": "cleric"}"#;
+        let action: EventAction = serde_json::from_str(json).unwrap();
+        if let EventAction::LearnAbility {
+            on_success,
+            on_failure,
+            ..
+        } = action
+        {
+            assert!(on_success.is_empty(), "on_success should default to empty");
+            assert!(on_failure.is_empty(), "on_failure should default to empty");
+        } else {
+            panic!("Expected LearnAbility variant");
+        }
+    }
+
+    #[test]
+    fn add_party_member_on_success_on_failure_default_to_empty() {
+        let json = r#"{"type": "AddPartyMember", "character_id": "ally"}"#;
+        let action: EventAction = serde_json::from_str(json).unwrap();
+        if let EventAction::AddPartyMember {
+            on_success,
+            on_failure,
+            ..
+        } = action
+        {
+            assert!(on_success.is_empty(), "on_success should default to empty");
+            assert!(on_failure.is_empty(), "on_failure should default to empty");
+        } else {
+            panic!("Expected AddPartyMember variant");
+        }
+    }
+
+    // --- Invalid direction string produces descriptive error ---
+
+    #[test]
+    fn invalid_direction_produces_descriptive_error() {
+        let json = r#"{"type": "GiveCurrency", "amount": 100, "direction": "Invalid"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Invalid direction should be rejected");
+        let err = result.unwrap_err().to_string();
+        // Serde should produce an error mentioning the unknown variant
+        assert!(
+            err.contains("Invalid") || err.contains("unknown variant") || err.contains("expected"),
+            "Error should be descriptive about invalid direction: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn invalid_direction_on_give_experience_produces_error() {
+        let json = r#"{"type": "GiveExperience", "amount": 50, "direction": "Steal"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "Invalid direction 'Steal' should be rejected"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Steal") || err.contains("unknown variant") || err.contains("expected"),
+            "Error should be descriptive about invalid direction: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn invalid_direction_on_give_item_produces_error() {
+        let json = r#"{"type": "GiveItem", "item_id": "potion", "direction": "Borrow"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "Invalid direction 'Borrow' should be rejected"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Borrow") || err.contains("unknown variant") || err.contains("expected"),
+            "Error should be descriptive about invalid direction: {}",
+            err
+        );
     }
 }
