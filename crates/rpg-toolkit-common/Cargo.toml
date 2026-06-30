@@ -29,3 +29,7 @@ path = "tests/properties/enemy_portrait.rs"
 [[test]]
 name = "item_granted_abilities"
 path = "tests/properties/item_granted_abilities.rs"
+
+[[test]]
+name = "event_reward_actions"
+path = "tests/properties/event_reward_actions.rs"

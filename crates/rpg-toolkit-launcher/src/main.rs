@@ -2,7 +2,8 @@ use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use rpg_toolkit_common::ProjectFile;
 use rpg_toolkit_renderer::{
-    DialogTextRegistry, GameState, PixelScaleConfig, PixelScaleMode, ProjectRendererPlugin,
+    CharacterProgress, CharacterProgressState, CurrencyState, DialogTextRegistry, GameState,
+    InventoryState, PartyState, PixelScaleConfig, PixelScaleMode, ProjectRendererPlugin,
     RendererProjectData, SaveFile, SavePath,
 };
 use std::collections::HashMap;
@@ -265,6 +266,30 @@ fn main() {
     .insert_resource(SavePath { path: save_path })
     .insert_resource(GameState {
         flags: save_file.state.into_iter().collect(),
+    })
+    .insert_resource(CurrencyState {
+        balance: save_file.currency,
+    })
+    .insert_resource(InventoryState {
+        items: save_file.inventory.into_iter().collect(),
+    })
+    .insert_resource(PartyState {
+        members: save_file.party,
+    })
+    .insert_resource(CharacterProgressState {
+        characters: save_file
+            .character_progress
+            .into_iter()
+            .map(|(id, data)| {
+                (
+                    id,
+                    CharacterProgress {
+                        experience: data.experience,
+                        learned_abilities: data.learned_abilities,
+                    },
+                )
+            })
+            .collect(),
     })
     .add_systems(PreStartup, load_project_resources)
     .add_plugins(ProjectRendererPlugin)

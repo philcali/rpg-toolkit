@@ -7,3 +7,6 @@ pub mod player;
 pub mod selection;
 pub mod spritesheet;
 pub mod triggers;
+
+#[cfg(test)]
+mod reward_action_tests;

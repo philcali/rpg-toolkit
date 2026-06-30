@@ -315,6 +315,7 @@ pub fn npc_placement_dialog_ui(
                 &map_entries,
                 &project.face_portraits,
                 0,
+                None,
             );
 
             ui.separator();

@@ -17,8 +17,9 @@ pub use components::{
 pub use events::{MapChanged, PlayerMoved, ShowDialog};
 pub use input::{Direction, MovementIntent, read_input};
 pub use resources::{
-    ActionQueue, AnimationConfig, FadeState, GameState, InteractionIntent, MovementConfig,
-    NpcCollisionEvent, NpcPositions, PixelScaleConfig, PixelScaleMode, PlayerAppearanceState,
+    ActionQueue, AnimationConfig, CharacterProgress, CharacterProgressState, CurrencyState,
+    FadeState, GameState, InteractionIntent, InventoryState, MovementConfig, NpcCollisionEvent,
+    NpcPositions, PartyState, PixelScaleConfig, PixelScaleMode, PlayerAppearanceState,
     PlayerVisual, RendererProjectData, RendererState, ScreenShakeState, WaitingFor,
 };
 pub use systems::camera::{apply_pixel_scale, compute_zoom_to_fit, spawn_camera, update_camera};
@@ -58,7 +59,7 @@ pub use systems::selection::{
 };
 
 pub use resources::SavePath;
-pub use save::SaveFile;
+pub use save::{CharacterProgressData, SaveFile, save_game};
 
 /// The renderer plugin that renders a loaded project as a playable game world.
 pub struct ProjectRendererPlugin;
@@ -78,6 +79,10 @@ impl Plugin for ProjectRendererPlugin {
             .init_resource::<InteractionIntent>()
             .init_resource::<NpcCollisionEvent>()
             .init_resource::<GameState>()
+            .init_resource::<CurrencyState>()
+            .init_resource::<InventoryState>()
+            .init_resource::<CharacterProgressState>()
+            .init_resource::<PartyState>()
             .init_resource::<RendererAnimationTick>()
             // Events
             .add_message::<MapChanged>()
@@ -136,8 +141,7 @@ impl Plugin for ProjectRendererPlugin {
                         .after(read_input)
                         .before(player_movement),
                 ),
-            )
-            .add_systems(Last, save_shutdown);
+            );
     }
 }
 
@@ -152,24 +156,5 @@ fn fire_initial_map_changed(
             previous_map_id: None,
             new_map_id: map_id.clone(),
         });
-    }
-}
-
-/// Persists `GameState` to disk only when the state has actually changed.
-fn save_shutdown(save_path: Res<SavePath>, game_state: Res<GameState>) {
-    if !game_state.is_changed() {
-        return;
-    }
-
-    let save_file = SaveFile {
-        state: game_state
-            .flags
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect(),
-    };
-
-    if let Err(e) = save_file.save(&save_path.path) {
-        eprintln!("Failed to save game state: {}", e);
     }
 }

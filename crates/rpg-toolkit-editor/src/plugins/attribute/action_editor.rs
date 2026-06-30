@@ -6,6 +6,7 @@ use crate::data::map::EventAction;
 use rpg_toolkit_common::{
     BranchCondition, ChoiceData, ConditionCheck, ConditionLogic, DialogConfigData,
     DialogPositionData, DialogTextData, FadeType, PlayerAppearance, ScreenShakeMode,
+    TransferDirection,
 };
 
 /// The type of action being added in the Event Trigger Editor.
@@ -22,6 +23,11 @@ pub enum ActionType {
     SetPlayerAppearance,
     StateCheck,
     Branch,
+    GiveCurrency,
+    GiveExperience,
+    GiveItem,
+    LearnAbility,
+    AddPartyMember,
 }
 
 /// The text source mode for a ShowDialog action.
@@ -115,6 +121,25 @@ pub struct ActionEditorState {
     pub selection_position: DialogPositionData,
     pub selection_face_portrait: Option<String>,
     pub selection_choices: Vec<EditorChoice>,
+    // Reward action shared fields
+    pub reward_direction: TransferDirection,
+    pub reward_on_success: Vec<EventAction>,
+    pub reward_on_failure: Vec<EventAction>,
+    pub reward_on_success_editor: Option<Box<ActionEditorState>>,
+    pub reward_on_failure_editor: Option<Box<ActionEditorState>>,
+    // GiveCurrency fields
+    pub currency_amount: String,
+    // GiveExperience fields
+    pub experience_amount: String,
+    pub experience_target: Option<String>,
+    // GiveItem fields
+    pub give_item_id: String,
+    pub give_item_quantity: String,
+    // LearnAbility fields
+    pub learn_ability_id: String,
+    pub learn_ability_target: String,
+    // AddPartyMember fields
+    pub add_party_character_id: String,
 }
 
 impl Default for ActionEditorState {
@@ -157,6 +182,25 @@ impl Default for ActionEditorState {
             selection_position: DialogPositionData::Bottom,
             selection_face_portrait: None,
             selection_choices: vec![EditorChoice::default(), EditorChoice::default()],
+            // Reward action shared fields
+            reward_direction: TransferDirection::Give,
+            reward_on_success: Vec::new(),
+            reward_on_failure: Vec::new(),
+            reward_on_success_editor: Some(Box::new(ActionEditorState::new_nested())),
+            reward_on_failure_editor: Some(Box::new(ActionEditorState::new_nested())),
+            // GiveCurrency fields
+            currency_amount: "100".to_string(),
+            // GiveExperience fields
+            experience_amount: "100".to_string(),
+            experience_target: None,
+            // GiveItem fields
+            give_item_id: String::new(),
+            give_item_quantity: "1".to_string(),
+            // LearnAbility fields
+            learn_ability_id: String::new(),
+            learn_ability_target: String::new(),
+            // AddPartyMember fields
+            add_party_character_id: String::new(),
         }
     }
 }
@@ -208,6 +252,25 @@ impl ActionEditorState {
             selection_position: DialogPositionData::Bottom,
             selection_face_portrait: None,
             selection_choices: Vec::new(), // Empty — no recursion
+            // Reward action shared fields — no recursive Box here
+            reward_direction: TransferDirection::Give,
+            reward_on_success: Vec::new(),
+            reward_on_failure: Vec::new(),
+            reward_on_success_editor: None,
+            reward_on_failure_editor: None,
+            // GiveCurrency fields
+            currency_amount: "100".to_string(),
+            // GiveExperience fields
+            experience_amount: "100".to_string(),
+            experience_target: None,
+            // GiveItem fields
+            give_item_id: String::new(),
+            give_item_quantity: "1".to_string(),
+            // LearnAbility fields
+            learn_ability_id: String::new(),
+            learn_ability_target: String::new(),
+            // AddPartyMember fields
+            add_party_character_id: String::new(),
         }
     }
 
@@ -346,6 +409,73 @@ impl ActionEditorState {
                         }
                     })
                     .collect();
+            }
+            // Reward action variants
+            EventAction::GiveCurrency {
+                amount,
+                direction,
+                on_success,
+                on_failure,
+            } => {
+                self.action_type = ActionType::GiveCurrency;
+                self.currency_amount = amount.to_string();
+                self.reward_direction = *direction;
+                self.reward_on_success = on_success.clone();
+                self.reward_on_failure = on_failure.clone();
+            }
+            EventAction::GiveExperience {
+                amount,
+                target,
+                direction,
+                on_success,
+                on_failure,
+            } => {
+                self.action_type = ActionType::GiveExperience;
+                self.experience_amount = amount.to_string();
+                self.experience_target = target.clone();
+                self.reward_direction = *direction;
+                self.reward_on_success = on_success.clone();
+                self.reward_on_failure = on_failure.clone();
+            }
+            EventAction::GiveItem {
+                item_id,
+                quantity,
+                direction,
+                on_success,
+                on_failure,
+            } => {
+                self.action_type = ActionType::GiveItem;
+                self.give_item_id = item_id.clone();
+                self.give_item_quantity = quantity.to_string();
+                self.reward_direction = *direction;
+                self.reward_on_success = on_success.clone();
+                self.reward_on_failure = on_failure.clone();
+            }
+            EventAction::LearnAbility {
+                ability_id,
+                target,
+                direction,
+                on_success,
+                on_failure,
+            } => {
+                self.action_type = ActionType::LearnAbility;
+                self.learn_ability_id = ability_id.clone();
+                self.learn_ability_target = target.clone();
+                self.reward_direction = *direction;
+                self.reward_on_success = on_success.clone();
+                self.reward_on_failure = on_failure.clone();
+            }
+            EventAction::AddPartyMember {
+                character_id,
+                direction,
+                on_success,
+                on_failure,
+            } => {
+                self.action_type = ActionType::AddPartyMember;
+                self.add_party_character_id = character_id.clone();
+                self.reward_direction = *direction;
+                self.reward_on_success = on_success.clone();
+                self.reward_on_failure = on_failure.clone();
             }
         }
         self.editing_index = Some(index);
@@ -543,6 +673,81 @@ impl ActionEditorState {
                     prompt,
                     config,
                     choices,
+                })
+            }
+            ActionType::GiveCurrency => {
+                let amount = self.currency_amount.trim().parse::<u64>().ok()?;
+                if amount == 0 {
+                    return None;
+                }
+                let amount = amount.clamp(1, 9_999_999);
+                Some(EventAction::GiveCurrency {
+                    amount,
+                    direction: self.reward_direction,
+                    on_success: self.reward_on_success.clone(),
+                    on_failure: self.reward_on_failure.clone(),
+                })
+            }
+            ActionType::GiveExperience => {
+                let amount = self.experience_amount.trim().parse::<u64>().ok()?;
+                if amount == 0 {
+                    return None;
+                }
+                let amount = amount.clamp(1, 9_999_999);
+                let target = match &self.experience_target {
+                    Some(t) if !t.trim().is_empty() => Some(t.clone()),
+                    _ => None,
+                };
+                Some(EventAction::GiveExperience {
+                    amount,
+                    target,
+                    direction: self.reward_direction,
+                    on_success: self.reward_on_success.clone(),
+                    on_failure: self.reward_on_failure.clone(),
+                })
+            }
+            ActionType::GiveItem => {
+                if self.give_item_id.trim().is_empty() {
+                    return None;
+                }
+                let quantity = self
+                    .give_item_quantity
+                    .trim()
+                    .parse::<u32>()
+                    .unwrap_or(1)
+                    .clamp(1, 999);
+                Some(EventAction::GiveItem {
+                    item_id: self.give_item_id.clone(),
+                    quantity,
+                    direction: self.reward_direction,
+                    on_success: self.reward_on_success.clone(),
+                    on_failure: self.reward_on_failure.clone(),
+                })
+            }
+            ActionType::LearnAbility => {
+                if self.learn_ability_id.trim().is_empty()
+                    || self.learn_ability_target.trim().is_empty()
+                {
+                    return None;
+                }
+                Some(EventAction::LearnAbility {
+                    ability_id: self.learn_ability_id.clone(),
+                    target: self.learn_ability_target.clone(),
+                    direction: self.reward_direction,
+                    on_success: self.reward_on_success.clone(),
+                    on_failure: self.reward_on_failure.clone(),
+                })
+            }
+            ActionType::AddPartyMember => {
+                let id = self.add_party_character_id.trim();
+                if id.is_empty() || id.len() > 64 {
+                    return None;
+                }
+                Some(EventAction::AddPartyMember {
+                    character_id: self.add_party_character_id.clone(),
+                    direction: self.reward_direction,
+                    on_success: self.reward_on_success.clone(),
+                    on_failure: self.reward_on_failure.clone(),
                 })
             }
         }
