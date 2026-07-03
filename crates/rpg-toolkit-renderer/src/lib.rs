@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use rpg_toolkit_common::AppPhase;
 
 pub mod components;
 pub mod dialog;
@@ -88,18 +89,14 @@ impl Plugin for ProjectRendererPlugin {
             .add_message::<MapChanged>()
             .add_message::<PlayerMoved>()
             .add_message::<ShowDialog>()
-            // Startup systems
+            // Startup systems (ungated - run regardless of AppPhase)
             .add_systems(
                 Startup,
-                (
-                    load_spritesheet_assets,
-                    spawn_player,
-                    spawn_camera,
-                    fire_initial_map_changed,
-                )
-                    .chain(),
+                (load_spritesheet_assets, spawn_player, spawn_camera).chain(),
             )
-            // Update systems with explicit ordering
+            // Fire initial map changed when entering InGame
+            .add_systems(OnEnter(AppPhase::InGame), fire_initial_map_changed)
+            // Update systems gated on InGame
             .add_systems(
                 Update,
                 (
@@ -125,7 +122,8 @@ impl Plugin for ProjectRendererPlugin {
                     update_character_depth_sort.after(resort_tile_z_on_elevation_change),
                     apply_pixel_scale.after(update_character_depth_sort),
                     update_camera.after(apply_pixel_scale),
-                ),
+                )
+                    .run_if(in_state(AppPhase::InGame)),
             )
             // Effect and dialog systems (separate tuple to stay within Bevy's limit)
             .add_systems(
@@ -140,7 +138,8 @@ impl Plugin for ProjectRendererPlugin {
                     handle_selection_input
                         .after(read_input)
                         .before(player_movement),
-                ),
+                )
+                    .run_if(in_state(AppPhase::InGame)),
             );
     }
 }

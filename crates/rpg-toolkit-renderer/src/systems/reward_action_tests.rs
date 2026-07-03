@@ -22,12 +22,16 @@ fn test_app() -> App {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins);
     app.add_plugins(AssetPlugin::default());
+    app.add_plugins(bevy::state::app::StatesPlugin);
     app.init_asset::<Image>();
 
     // Register messages used by advance_action_queue
     app.add_message::<MapChanged>();
     app.add_message::<PlayerMoved>();
     app.add_message::<ShowDialog>();
+
+    // Initialize AppPhase state (required by advance_action_queue)
+    app.init_state::<rpg_toolkit_common::AppPhase>();
 
     // Initialize resources
     app.init_resource::<RendererState>();

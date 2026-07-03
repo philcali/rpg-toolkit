@@ -5,7 +5,7 @@
 use bevy_egui::egui;
 
 use rpg_toolkit_common::{
-    ConditionCheck, ConditionLogic, ConditionOperator, DialogPositionData, FadeType,
+    AppPhase, ConditionCheck, ConditionLogic, ConditionOperator, DialogPositionData, FadeType,
     PlayerAppearance, ScreenShakeMode, TransferDirection,
 };
 
@@ -1544,5 +1544,96 @@ pub fn render_add_party_member_form(
         editor_state.reward_direction = TransferDirection::Give;
         editor_state.reward_on_success.clear();
         editor_state.reward_on_failure.clear();
+    }
+}
+
+pub fn render_save_game_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+) {
+    ui.label("Save Game requires no additional configuration.");
+
+    let is_editing = editor_state.editing_index.is_some();
+    let btn_label = if is_editing {
+        "Update Action"
+    } else {
+        "Add Action"
+    };
+
+    if ui.button(btn_label).clicked()
+        && let Some(action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            actions[idx] = action;
+        } else {
+            actions.push(action);
+        }
+        editor_state.reset();
+    }
+    if is_editing && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+    }
+}
+
+pub fn render_change_phase_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+) {
+    ui.horizontal(|ui| {
+        ui.label("Target Phase:");
+        let phase_text = format!("{:?}", editor_state.change_phase_target);
+        egui::ComboBox::from_id_salt(format!("{}_change_phase_target", id_salt))
+            .selected_text(&phase_text)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    &mut editor_state.change_phase_target,
+                    AppPhase::TitleScreen,
+                    "TitleScreen",
+                );
+                ui.selectable_value(
+                    &mut editor_state.change_phase_target,
+                    AppPhase::InGame,
+                    "InGame",
+                );
+                ui.selectable_value(
+                    &mut editor_state.change_phase_target,
+                    AppPhase::Battle,
+                    "Battle",
+                );
+                ui.selectable_value(
+                    &mut editor_state.change_phase_target,
+                    AppPhase::Shop,
+                    "Shop",
+                );
+                ui.selectable_value(
+                    &mut editor_state.change_phase_target,
+                    AppPhase::Status,
+                    "Status",
+                );
+            });
+    });
+
+    let is_editing = editor_state.editing_index.is_some();
+    let btn_label = if is_editing {
+        "Update Action"
+    } else {
+        "Add Action"
+    };
+
+    if ui.button(btn_label).clicked()
+        && let Some(action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            actions[idx] = action;
+        } else {
+            actions.push(action);
+        }
+        editor_state.reset();
+    }
+    if is_editing && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
     }
 }

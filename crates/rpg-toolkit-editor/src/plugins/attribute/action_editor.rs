@@ -4,7 +4,7 @@
 
 use crate::data::map::EventAction;
 use rpg_toolkit_common::{
-    BranchCondition, ChoiceData, ConditionCheck, ConditionLogic, DialogConfigData,
+    AppPhase, BranchCondition, ChoiceData, ConditionCheck, ConditionLogic, DialogConfigData,
     DialogPositionData, DialogTextData, FadeType, PlayerAppearance, ScreenShakeMode,
     TransferDirection,
 };
@@ -28,6 +28,8 @@ pub enum ActionType {
     GiveItem,
     LearnAbility,
     AddPartyMember,
+    SaveGame,
+    ChangePhase,
 }
 
 /// The text source mode for a ShowDialog action.
@@ -140,6 +142,8 @@ pub struct ActionEditorState {
     pub learn_ability_target: String,
     // AddPartyMember fields
     pub add_party_character_id: String,
+    // ChangePhase fields
+    pub change_phase_target: AppPhase,
 }
 
 impl Default for ActionEditorState {
@@ -201,6 +205,8 @@ impl Default for ActionEditorState {
             learn_ability_target: String::new(),
             // AddPartyMember fields
             add_party_character_id: String::new(),
+            // ChangePhase fields
+            change_phase_target: AppPhase::InGame,
         }
     }
 }
@@ -271,6 +277,8 @@ impl ActionEditorState {
             learn_ability_target: String::new(),
             // AddPartyMember fields
             add_party_character_id: String::new(),
+            // ChangePhase fields
+            change_phase_target: AppPhase::InGame,
         }
     }
 
@@ -476,6 +484,13 @@ impl ActionEditorState {
                 self.reward_direction = *direction;
                 self.reward_on_success = on_success.clone();
                 self.reward_on_failure = on_failure.clone();
+            }
+            EventAction::SaveGame => {
+                self.action_type = ActionType::SaveGame;
+            }
+            EventAction::ChangePhase { phase } => {
+                self.action_type = ActionType::ChangePhase;
+                self.change_phase_target = phase.clone();
             }
         }
         self.editing_index = Some(index);
@@ -750,6 +765,10 @@ impl ActionEditorState {
                     on_failure: self.reward_on_failure.clone(),
                 })
             }
+            ActionType::SaveGame => Some(EventAction::SaveGame),
+            ActionType::ChangePhase => Some(EventAction::ChangePhase {
+                phase: self.change_phase_target.clone(),
+            }),
         }
     }
 }
