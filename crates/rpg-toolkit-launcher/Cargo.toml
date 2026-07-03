@@ -7,5 +7,6 @@ edition = "2024"
 bevy = { workspace = true }
 rpg-toolkit-common = { path = "../rpg-toolkit-common" }
 rpg-toolkit-renderer = { path = "../rpg-toolkit-renderer" }
+rpg-toolkit-scenes = { path = "../rpg-toolkit-scenes" }
 tempfile = "3"
 zip = { version = "0.6", features = ["deflate"] }

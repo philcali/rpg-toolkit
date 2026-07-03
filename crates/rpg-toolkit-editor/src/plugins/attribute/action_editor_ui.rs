@@ -167,6 +167,12 @@ pub fn render_action_editor(
                 EventAction::AddPartyMember { character_id, .. } => {
                     format!("{}. AddPartyMember — {}", i + 1, character_id)
                 }
+                EventAction::SaveGame => {
+                    format!("{}. SaveGame", i + 1)
+                }
+                EventAction::ChangePhase { phase } => {
+                    format!("{}. ChangePhase — {:?}", i + 1, phase)
+                }
             };
             if is_being_edited {
                 ui.label(
@@ -255,6 +261,8 @@ pub fn render_action_editor(
             ActionType::GiveItem => "GiveItem",
             ActionType::LearnAbility => "LearnAbility",
             ActionType::AddPartyMember => "AddPartyMember",
+            ActionType::SaveGame => "SaveGame",
+            ActionType::ChangePhase => "ChangePhase",
         };
         egui::ComboBox::from_id_salt(format!("{}_action_type", id_salt))
             .selected_text(action_type_text)
@@ -332,6 +340,16 @@ pub fn render_action_editor(
                     &mut editor_state.action_type,
                     ActionType::AddPartyMember,
                     "AddPartyMember",
+                );
+                ui.selectable_value(
+                    &mut editor_state.action_type,
+                    ActionType::SaveGame,
+                    "Save Game",
+                );
+                ui.selectable_value(
+                    &mut editor_state.action_type,
+                    ActionType::ChangePhase,
+                    "Change Phase",
                 );
             });
     });
@@ -487,6 +505,12 @@ pub fn render_action_editor(
                     &mut fallback,
                 );
             }
+        }
+        ActionType::SaveGame => {
+            action_editor_forms::render_save_game_form(ui, actions, editor_state);
+        }
+        ActionType::ChangePhase => {
+            action_editor_forms::render_change_phase_form(ui, actions, editor_state, id_salt);
         }
     }
 

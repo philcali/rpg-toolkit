@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use rpg_toolkit_common::{
-    DialogTextData, EventAction, FadeType, PlayerAppearance, ScreenShakeMode, TransferDirection,
+    AppPhase, DialogTextData, EventAction, FadeType, PlayerAppearance, ScreenShakeMode,
+    TransferDirection,
 };
 use std::collections::VecDeque;
 
@@ -14,7 +15,7 @@ use crate::effects::{
 use crate::events::{MapChanged, PlayerMoved, ShowDialog};
 use crate::resources::{
     ActionQueue, CharacterProgressState, CurrencyState, FadeState, GameState, InventoryState,
-    PartyState, RendererProjectData, RendererState, ScreenShakeState, WaitingFor,
+    PartyState, RendererProjectData, RendererState, SavePath, ScreenShakeState, WaitingFor,
 };
 use crate::systems::player::grid_to_world;
 use crate::systems::selection::{ResolvedChoice, SelectionState};
@@ -130,12 +131,18 @@ pub fn advance_action_queue(
     mut show_dialog: MessageWriter<ShowDialog>,
     mut camera_query: Query<&mut Transform, With<GameCamera>>,
     mut player_query: Query<&mut Visibility, With<PlayerCharacter>>,
-    fade_overlay_query: Query<Entity, With<FadeOverlay>>,
     mut reward_state: (
         Option<ResMut<CurrencyState>>,
         Option<ResMut<CharacterProgressState>>,
         Option<ResMut<PartyState>>,
         Option<ResMut<InventoryState>>,
+    ),
+    save_phase_state: (
+        Option<Res<SavePath>>,
+        Query<&PlayerCharacter, Without<GameCamera>>,
+        Res<State<AppPhase>>,
+        ResMut<NextState<AppPhase>>,
+        Query<Entity, With<FadeOverlay>>,
     ),
 ) {
     // Destructure reward state tuple for convenient access
@@ -145,6 +152,10 @@ pub fn advance_action_queue(
         ref mut party_state,
         ref mut inventory_state,
     ) = reward_state;
+
+    // Destructure save/phase state tuple
+    let (save_path_res, player_pos_query, app_phase_state, mut next_app_phase, fade_overlay_query) =
+        save_phase_state;
 
     let Some(mut queue) = action_queue else {
         return;
@@ -836,6 +847,45 @@ pub fn advance_action_queue(
                     }
                 }
                 continue;
+            }
+            EventAction::SaveGame => {
+                // Gather player location from RendererState and PlayerCharacter
+                let map_id = renderer_state.active_map_id.as_deref();
+                let (pos, elev) = player_pos_query
+                    .single()
+                    .map(|player| (Some((player.grid_x, player.grid_y)), Some(player.elevation)))
+                    .unwrap_or((None, None));
+
+                if let Some(ref save_path) = save_path_res {
+                    if let (Some(gs), Some(cs), Some(is), Some(ps), Some(cps)) = (
+                        game_state.as_ref(),
+                        currency_state.as_ref(),
+                        inventory_state.as_ref(),
+                        party_state.as_ref(),
+                        character_progress.as_ref(),
+                    ) && let Err(e) =
+                        crate::save::save_game(gs, cs, is, ps, cps, save_path, map_id, pos, elev)
+                    {
+                        warn!("SaveGame failed: {}", e);
+                    }
+                } else {
+                    warn!("SaveGame: no SavePath resource present; skipping");
+                }
+                queue.actions.pop_front();
+                continue;
+            }
+            EventAction::ChangePhase { phase } => {
+                let current = app_phase_state.get();
+                if *current == phase {
+                    // No-op: already in target phase
+                    queue.actions.pop_front();
+                    continue;
+                }
+                // Transition state — the queue is preserved (not removed)
+                // Systems stop running due to run_condition, effectively pausing
+                next_app_phase.set(phase);
+                queue.actions.pop_front();
+                return; // Stop processing this frame
             }
         }
     }

@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bevy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -33,3 +34,7 @@ path = "tests/properties/item_granted_abilities.rs"
 [[test]]
 name = "event_reward_actions"
 path = "tests/properties/event_reward_actions.rs"
+
+[[test]]
+name = "save_file_location_round_trip"
+path = "tests/properties/save_file_location_round_trip.rs"

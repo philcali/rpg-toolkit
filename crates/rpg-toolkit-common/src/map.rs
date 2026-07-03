@@ -1,6 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::ability::AbilityId;
+use crate::app_phase::AppPhase;
 use crate::character::CharacterId;
 use crate::condition::{BranchCondition, ConditionalTrigger};
 use crate::error::CommonError;
@@ -407,6 +408,12 @@ pub enum EventAction {
         on_success: Vec<EventAction>,
         #[serde(default)]
         on_failure: Vec<EventAction>,
+    },
+    /// Persist all game state to disk at the current location.
+    SaveGame,
+    /// Transition to a different application phase.
+    ChangePhase {
+        phase: AppPhase,
     },
 }
 
@@ -1511,5 +1518,86 @@ mod tests {
             "Error should be descriptive about invalid direction: {}",
             err
         );
+    }
+
+    // --- SaveGame and ChangePhase serialization tests ---
+
+    #[test]
+    fn save_game_serializes_as_type_tag() {
+        let action = EventAction::SaveGame;
+        let json = serde_json::to_string(&action).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value, serde_json::json!({"type": "SaveGame"}));
+    }
+
+    #[test]
+    fn save_game_deserializes() {
+        let json = r#"{"type": "SaveGame"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "SaveGame should deserialize: {:?}",
+            result.err()
+        );
+        assert_eq!(result.unwrap(), EventAction::SaveGame);
+    }
+
+    #[test]
+    fn save_game_round_trip() {
+        let original = EventAction::SaveGame;
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: EventAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn change_phase_serializes_with_type_tag_and_phase() {
+        let action = EventAction::ChangePhase {
+            phase: AppPhase::Battle,
+        };
+        let json = serde_json::to_string(&action).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["type"], "ChangePhase");
+        assert_eq!(value["phase"], "Battle");
+    }
+
+    #[test]
+    fn change_phase_deserializes() {
+        let json = r#"{"type": "ChangePhase", "phase": "Shop"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_ok(),
+            "ChangePhase should deserialize: {:?}",
+            result.err()
+        );
+        assert_eq!(
+            result.unwrap(),
+            EventAction::ChangePhase {
+                phase: AppPhase::Shop
+            }
+        );
+    }
+
+    #[test]
+    fn change_phase_round_trip_all_variants() {
+        let phases = vec![
+            AppPhase::TitleScreen,
+            AppPhase::InGame,
+            AppPhase::Battle,
+            AppPhase::Shop,
+            AppPhase::Status,
+        ];
+        for phase in phases {
+            let original = EventAction::ChangePhase {
+                phase: phase.clone(),
+            };
+            let json = serde_json::to_string(&original).unwrap();
+            let deserialized: EventAction = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                original, deserialized,
+                "Round-trip failed for phase: {:?}",
+                phase
+            );
+        }
     }
 }

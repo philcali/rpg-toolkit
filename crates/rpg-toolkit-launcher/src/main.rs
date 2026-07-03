@@ -1,10 +1,13 @@
 use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
-use rpg_toolkit_common::ProjectFile;
+use rpg_toolkit_common::{AppPhase, ProjectFile};
 use rpg_toolkit_renderer::{
-    CharacterProgress, CharacterProgressState, CurrencyState, DialogTextRegistry, GameState,
-    InventoryState, PartyState, PixelScaleConfig, PixelScaleMode, ProjectRendererPlugin,
-    RendererProjectData, SaveFile, SavePath,
+    DialogTextRegistry, PixelScaleConfig, PixelScaleMode, ProjectRendererPlugin,
+    RendererProjectData, SavePath,
+};
+use rpg_toolkit_scenes::{
+    CharacterProgressState, CurrencyState, GameState, InventoryState, PartyState, RendererState,
+    TitleScreenConfig, TitleScreenPlugin,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -222,14 +225,6 @@ fn main() {
         }
     };
 
-    if project_file.spawn_point.is_none() {
-        eprintln!("Error: project has no spawn point defined");
-        std::process::exit(1);
-    }
-
-    // Load save file (defaults to empty state if not found)
-    let save_file = SaveFile::load(&save_path);
-
     let mut app = App::new();
     app.add_plugins(
         DefaultPlugins
@@ -258,40 +253,31 @@ fn main() {
         });
     }
 
+    // Initialize AppPhase state (starts at TitleScreen by default)
+    app.init_state::<AppPhase>();
+
+    // Insert game state resources with defaults (not from save file)
+    app.init_resource::<GameState>();
+    app.init_resource::<CurrencyState>();
+    app.init_resource::<InventoryState>();
+    app.init_resource::<PartyState>();
+    app.init_resource::<CharacterProgressState>();
+    app.init_resource::<RendererState>();
+
     app.insert_resource(PendingProjectLoad {
-        project_file,
+        project_file: project_file.clone(),
         tileset_paths,
         _temp_dir: temp_dir,
     })
-    .insert_resource(SavePath { path: save_path })
-    .insert_resource(GameState {
-        flags: save_file.state.into_iter().collect(),
+    .insert_resource(SavePath {
+        path: save_path.clone(),
     })
-    .insert_resource(CurrencyState {
-        balance: save_file.currency,
-    })
-    .insert_resource(InventoryState {
-        items: save_file.inventory.into_iter().collect(),
-    })
-    .insert_resource(PartyState {
-        members: save_file.party,
-    })
-    .insert_resource(CharacterProgressState {
-        characters: save_file
-            .character_progress
-            .into_iter()
-            .map(|(id, data)| {
-                (
-                    id,
-                    CharacterProgress {
-                        experience: data.experience,
-                        learned_abilities: data.learned_abilities,
-                    },
-                )
-            })
-            .collect(),
+    .insert_resource(TitleScreenConfig {
+        save_path,
+        spawn_point: project_file.spawn_point.clone(),
     })
     .add_systems(PreStartup, load_project_resources)
+    .add_plugins(TitleScreenPlugin)
     .add_plugins(ProjectRendererPlugin)
     .run();
 }

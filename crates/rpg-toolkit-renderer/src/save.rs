@@ -1,71 +1,15 @@
-use std::collections::BTreeMap;
-use std::path::Path;
-
-use serde::{Deserialize, Serialize};
+// Re-export SaveFile and CharacterProgressData from rpg-toolkit-common for backward compatibility.
+pub use rpg_toolkit_common::{CharacterProgressData, SaveFile};
 
 use crate::resources::{
     CharacterProgressState, CurrencyState, GameState, InventoryState, PartyState, SavePath,
 };
 
-/// Serializable representation of a character's progress for the save file.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CharacterProgressData {
-    #[serde(default)]
-    pub experience: u64,
-    #[serde(default)]
-    pub learned_abilities: Vec<String>,
-}
-
-/// On-disk save file format.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct SaveFile {
-    /// Game state flags (key-value string pairs).
-    #[serde(default)]
-    pub state: BTreeMap<String, String>,
-
-    /// Player's currency balance.
-    #[serde(default)]
-    pub currency: u64,
-
-    /// Player's inventory: item_id → quantity.
-    #[serde(default)]
-    pub inventory: BTreeMap<String, u32>,
-
-    /// Active party member character IDs (ordered).
-    #[serde(default)]
-    pub party: Vec<String>,
-
-    /// Per-character progress: character_id → progress data.
-    #[serde(default)]
-    pub character_progress: BTreeMap<String, CharacterProgressData>,
-}
-
-impl SaveFile {
-    /// Load a save file from disk, or return default if it doesn't exist.
-    pub fn load(path: &Path) -> Self {
-        match std::fs::read_to_string(path) {
-            Ok(contents) => serde_json::from_str(&contents).unwrap_or_default(),
-            Err(_) => Self::default(),
-        }
-    }
-
-    /// Write the save file to disk.
-    pub fn save(&self, path: &Path) -> Result<(), String> {
-        let parent = path
-            .parent()
-            .ok_or_else(|| format!("save path has no parent directory: {}", path.display()))?;
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("could not create save directory: {}", e))?;
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| format!("could not serialize save file: {}", e))?;
-        std::fs::write(path, json).map_err(|e| format!("could not write save file: {}", e))
-    }
-}
-
 /// Serialize all game state resources into a SaveFile and write to disk.
 ///
 /// This is NOT a Bevy system — it is a standalone function intended to be called
 /// by a future "save point" EventAction handler.
+#[allow(clippy::too_many_arguments)]
 pub fn save_game(
     game_state: &GameState,
     currency: &CurrencyState,
@@ -73,6 +17,9 @@ pub fn save_game(
     party: &PartyState,
     character_progress: &CharacterProgressState,
     save_path: &SavePath,
+    map_id: Option<&str>,
+    position: Option<(u32, u32)>,
+    elevation: Option<u32>,
 ) -> Result<(), String> {
     let save_file = SaveFile {
         state: game_state
@@ -100,6 +47,9 @@ pub fn save_game(
                 )
             })
             .collect(),
+        map_id: map_id.map(|s| s.to_string()),
+        position,
+        elevation,
     };
 
     save_file.save(&save_path.path)
@@ -204,6 +154,9 @@ mod tests {
             &party,
             &character_progress,
             &save_path,
+            None,
+            None,
+            None,
         )
         .expect("save_game should succeed");
 
@@ -299,6 +252,9 @@ mod tests {
             &party,
             &character_progress,
             &save_path,
+            None,
+            None,
+            None,
         )
         .expect("save_game with empty resources should succeed");
 
