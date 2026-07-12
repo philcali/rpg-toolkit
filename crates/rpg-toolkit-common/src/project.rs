@@ -8,6 +8,7 @@ use crate::enemy::EnemyRegistry;
 use crate::error::CommonError;
 use crate::item::ItemRegistry;
 use crate::map::{DialogTextData, EventAction, MapData, MapId, SpawnPoint, TilesetId};
+use crate::shop::ShopRegistry;
 use crate::spritesheet::{CharacterSpritesheet, SpritesheetId};
 use crate::tileset::TilesetMeta;
 
@@ -49,6 +50,9 @@ pub struct ProjectFile {
     /// Enemy registry: all enemies defined in this project.
     #[serde(default)]
     pub enemies: EnemyRegistry,
+    /// Shop registry: all shops defined in this project.
+    #[serde(default)]
+    pub shops: ShopRegistry,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -66,6 +70,7 @@ impl ProjectFile {
         items: ItemRegistry,
         abilities: AbilityRegistry,
         enemies: EnemyRegistry,
+        shops: ShopRegistry,
     ) -> Self {
         Self {
             maps,
@@ -79,6 +84,7 @@ impl ProjectFile {
             items,
             abilities,
             enemies,
+            shops,
         }
     }
 
@@ -137,6 +143,28 @@ impl ProjectFile {
                     "enemy registry key '{}' does not match enemy id '{}'",
                     id, enemy.id
                 )));
+            }
+        }
+
+        // Validate shop IDs match their keys in the registry
+        for (id, shop) in &project.shops.shops {
+            if id != &shop.id {
+                return Err(CommonError::ProjectValidationError(format!(
+                    "shop registry key '{}' does not match shop id '{}'",
+                    id, shop.id
+                )));
+            }
+        }
+
+        // Warn about shop entries referencing non-existent items
+        for (shop_id, shop) in &project.shops.shops {
+            for entry in &shop.entries {
+                if !project.items.items.contains_key(&entry.item_id) {
+                    eprintln!(
+                        "warning: shop '{}' entry references non-existent item '{}'",
+                        shop_id, entry.item_id
+                    );
+                }
             }
         }
 
@@ -304,6 +332,7 @@ impl ProjectFile {
             items: self.items.clone(),
             abilities: self.abilities.clone(),
             enemies: self.enemies.clone(),
+            shops: self.shops.clone(),
         }
     }
 }

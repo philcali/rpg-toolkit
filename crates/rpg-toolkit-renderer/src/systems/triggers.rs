@@ -887,6 +887,31 @@ pub fn advance_action_queue(
                 queue.actions.pop_front();
                 return; // Stop processing this frame
             }
+            EventAction::OpenShop { shop_id } => {
+                // Validate shop_id exists in the ShopRegistry
+                let shop_exists = project_data
+                    .as_ref()
+                    .is_some_and(|pd| pd.project_file.shops.shops.contains_key(&shop_id));
+
+                if !shop_exists {
+                    warn!(
+                        "OpenShop action references shop_id '{}' not found in ShopRegistry; skipping",
+                        shop_id
+                    );
+                    queue.actions.pop_front();
+                    continue;
+                }
+
+                // Insert ActiveShopId resource for the Shop Scene plugin to consume
+                commands.insert_resource(crate::resources::ActiveShopId {
+                    shop_id: shop_id.clone(),
+                });
+
+                // Transition AppPhase to Shop
+                next_app_phase.set(AppPhase::Shop);
+                queue.actions.pop_front();
+                return; // Stop processing this frame
+            }
         }
     }
 }

@@ -683,6 +683,7 @@ mod tests {
             rpg_toolkit_common::ItemRegistry::default(),
             rpg_toolkit_common::AbilityRegistry::default(),
             rpg_toolkit_common::EnemyRegistry::default(),
+            rpg_toolkit_common::ShopRegistry::default(),
         );
         app.insert_resource(crate::resources::RendererProjectData {
             project_file,

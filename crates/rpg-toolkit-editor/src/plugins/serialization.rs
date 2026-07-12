@@ -7,6 +7,7 @@ use crate::data::tileset::TilesetEntry;
 use crate::data::undo::UndoHistory;
 use crate::data::{EditorState, Project, ProjectFile};
 use crate::plugins::dialog_text_panel::{TextIdIndex, rebuild_text_id_index};
+use rpg_toolkit_common::{CharacterSpritesheet, SpritesheetId};
 
 /// Plugin that handles project save/load via JSON serialization and native file dialogs.
 pub struct SerializationPlugin;
@@ -52,14 +53,16 @@ fn detect_project_source(path: &std::path::Path) -> Option<ProjectSource> {
 }
 
 /// When saving to a directory format, ensure asset files are in the right
-/// subdirectory and update file_path references accordingly.
-fn prepare_assets_for_save(project: &mut Project, project_dir: &std::path::Path) {
+/// subdirectory. Copies files to the target directory but does NOT mutate
+/// the in-memory project's file_path references — those remain valid for
+/// the running editor. Returns the normalized path mappings for serialization.
+fn prepare_assets_for_save(project: &Project, project_dir: &std::path::Path) {
     let tilesets_dir = project_dir.join("tilesets");
     let data_dir = project_dir.join("data");
     std::fs::create_dir_all(&tilesets_dir).ok();
     std::fs::create_dir_all(&data_dir).ok();
 
-    for entry in project.tilesets.values_mut() {
+    for entry in project.tilesets.values() {
         let current_path = &entry.meta.file_path;
         if current_path.is_empty() {
             continue;
@@ -68,18 +71,15 @@ fn prepare_assets_for_save(project: &mut Project, project_dir: &std::path::Path)
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown.png");
-        let new_path = format!("tilesets/{}", name);
         let dest = tilesets_dir.join(name);
-        if current_path != &new_path
-            && !dest.exists()
+        if !dest.exists()
             && let Ok(data) = std::fs::read(current_path)
         {
             std::fs::write(&dest, data).ok();
         }
-        entry.meta.file_path = new_path;
     }
 
-    for ss in project.spritesheets.values_mut() {
+    for ss in project.spritesheets.values() {
         let current_path = &ss.file_path;
         if current_path.is_empty() {
             continue;
@@ -88,31 +88,51 @@ fn prepare_assets_for_save(project: &mut Project, project_dir: &std::path::Path)
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown.png");
-        let new_path = format!("data/{}", name);
         let dest = data_dir.join(name);
-        if current_path != &new_path
-            && !dest.exists()
+        if !dest.exists()
             && let Ok(data) = std::fs::read(current_path)
         {
             std::fs::write(&dest, data).ok();
         }
-        ss.file_path = new_path;
     }
 }
 
-/// Build a `ProjectFile` from the editor's `Project` resource.
-fn to_project_file(project: &Project) -> ProjectFile {
+/// Build a `ProjectFile` from the editor's `Project` resource with normalized
+/// relative paths suitable for on-disk storage.
+fn to_project_file_for_save(project: &Project) -> ProjectFile {
     let tilesets_meta: HashMap<_, _> = project
         .tilesets
         .iter()
-        .map(|(id, entry)| (id.clone(), entry.meta.clone()))
+        .map(|(id, entry)| {
+            let name = std::path::Path::new(&entry.meta.file_path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown.png");
+            let mut meta = entry.meta.clone();
+            meta.file_path = format!("tilesets/{}", name);
+            (id.clone(), meta)
+        })
+        .collect();
+
+    let spritesheets: HashMap<_, _> = project
+        .spritesheets
+        .iter()
+        .map(|(id, ss)| {
+            let name = std::path::Path::new(&ss.file_path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown.png");
+            let mut ss_clone = ss.clone();
+            ss_clone.file_path = format!("data/{}", name);
+            (id.clone(), ss_clone)
+        })
         .collect();
 
     ProjectFile::new(
         project.maps.clone(),
         tilesets_meta,
         project.spawn_point.clone(),
-        project.spritesheets.clone(),
+        spritesheets,
         project.player_spritesheet.clone(),
         project.dialog_texts.clone(),
         project.face_portraits.clone(),
@@ -120,7 +140,31 @@ fn to_project_file(project: &Project) -> ProjectFile {
         project.items.clone(),
         project.abilities.clone(),
         project.enemies.clone(),
+        project.shops.clone(),
     )
+}
+
+/// Resolve spritesheet file paths from relative (as stored on disk) to absolute
+/// paths that the Bevy asset_server can load at runtime.
+/// If a path is already absolute, it is kept as-is.
+fn resolve_spritesheet_paths(
+    spritesheets: &HashMap<SpritesheetId, CharacterSpritesheet>,
+    base_dir: &std::path::Path,
+) -> HashMap<SpritesheetId, CharacterSpritesheet> {
+    spritesheets
+        .iter()
+        .map(|(id, ss)| {
+            let mut ss_clone = ss.clone();
+            if !ss_clone.file_path.is_empty() {
+                let path = std::path::Path::new(&ss_clone.file_path);
+                if !path.is_absolute() {
+                    let resolved = base_dir.join(path);
+                    ss_clone.file_path = resolved.to_string_lossy().to_string();
+                }
+            }
+            (id.clone(), ss_clone)
+        })
+        .collect()
 }
 
 /// Reconstruct tileset entries from a `ProjectFile` using the given asset server and atlas layouts.
@@ -201,7 +245,7 @@ fn load_project_from_dir(
         undo_histories,
         has_unsaved_changes,
         spawn_point: project_file.spawn_point,
-        spritesheets: project_file.spritesheets,
+        spritesheets: resolve_spritesheet_paths(&project_file.spritesheets, dir),
         player_spritesheet: project_file.player_spritesheet,
         dialog_texts: project_file.dialog_texts,
         face_portraits: project_file.face_portraits,
@@ -213,11 +257,14 @@ fn load_project_from_dir(
         has_unsaved_ability_changes: false,
         enemies: project_file.enemies,
         has_unsaved_enemy_changes: false,
+        shops: project_file.shops,
+        has_unsaved_shop_changes: false,
     };
 
     editor_state.current_save_path = Some(dir.to_path_buf());
     editor_state.active_brush = None;
     editor_state.original_zip_path = None;
+    editor_state._temp_dir = None;
 
     **text_id_index = rebuild_text_id_index(&project.maps);
 
@@ -291,7 +338,7 @@ fn load_project_from_zip(
         undo_histories,
         has_unsaved_changes,
         spawn_point: project_file.spawn_point,
-        spritesheets: project_file.spritesheets,
+        spritesheets: resolve_spritesheet_paths(&project_file.spritesheets, temp_dir.path()),
         player_spritesheet: project_file.player_spritesheet,
         dialog_texts: project_file.dialog_texts,
         face_portraits: project_file.face_portraits,
@@ -303,11 +350,14 @@ fn load_project_from_zip(
         has_unsaved_ability_changes: false,
         enemies: project_file.enemies,
         has_unsaved_enemy_changes: false,
+        shops: project_file.shops,
+        has_unsaved_shop_changes: false,
     };
 
     editor_state.current_save_path = Some(temp_dir.path().to_path_buf());
     editor_state.active_brush = None;
     editor_state.original_zip_path = Some(zip_path.to_path_buf());
+    editor_state._temp_dir = Some(temp_dir);
 
     **text_id_index = rebuild_text_id_index(&project.maps);
 
@@ -364,7 +414,7 @@ fn load_project_from_json(
         undo_histories,
         has_unsaved_changes,
         spawn_point: project_file.spawn_point,
-        spritesheets: project_file.spritesheets,
+        spritesheets: resolve_spritesheet_paths(&project_file.spritesheets, &project_dir),
         player_spritesheet: project_file.player_spritesheet,
         dialog_texts: project_file.dialog_texts,
         face_portraits: project_file.face_portraits,
@@ -376,11 +426,14 @@ fn load_project_from_json(
         has_unsaved_ability_changes: false,
         enemies: project_file.enemies,
         has_unsaved_enemy_changes: false,
+        shops: project_file.shops,
+        has_unsaved_shop_changes: false,
     };
 
     editor_state.current_save_path = Some(json_path.to_path_buf());
     editor_state.active_brush = None;
     editor_state.original_zip_path = None;
+    editor_state._temp_dir = None;
 
     **text_id_index = rebuild_text_id_index(&project.maps);
 
@@ -407,7 +460,10 @@ fn handle_serialization_actions(
 
     match request {
         SerializationRequest::Save => {
-            if let Some(ref path) = editor_state.current_save_path.clone() {
+            if let Some(ref zip_path) = editor_state.original_zip_path.clone() {
+                // Re-save back to the original ZIP archive
+                save_project_to_path(zip_path, &mut project, &mut editor_state);
+            } else if let Some(ref path) = editor_state.current_save_path.clone() {
                 save_project_to_path(path, &mut project, &mut editor_state);
             } else {
                 save_project_with_dialog(&mut project, &mut editor_state);
@@ -465,6 +521,7 @@ fn handle_serialization_actions(
             editor_state.current_save_path = None;
             editor_state.active_brush = None;
             editor_state.original_zip_path = None;
+            editor_state._temp_dir = None;
             info!("New project created");
         }
     }
@@ -503,8 +560,10 @@ fn save_project_to_path(
             project.has_unsaved_item_changes = false;
             project.has_unsaved_ability_changes = false;
             project.has_unsaved_enemy_changes = false;
+            project.has_unsaved_shop_changes = false;
             editor_state.current_save_path = Some(path.to_path_buf());
             editor_state.original_zip_path = None;
+            editor_state._temp_dir = None;
             info!("Project saved to directory {}", path.display());
         }
     } else if path.extension().is_some_and(|e| e == "rpg") {
@@ -518,6 +577,7 @@ fn save_project_to_path(
             project.has_unsaved_item_changes = false;
             project.has_unsaved_ability_changes = false;
             project.has_unsaved_enemy_changes = false;
+            project.has_unsaved_shop_changes = false;
             editor_state.current_save_path = Some(path.to_path_buf());
             editor_state.original_zip_path = Some(path.to_path_buf());
             info!("Project saved as ZIP to {}", path.display());
@@ -528,9 +588,9 @@ fn save_project_to_path(
 }
 
 /// Save project to a directory-based format.
-fn save_to_directory(path: &std::path::Path, project: &mut ResMut<Project>) -> Result<(), String> {
+fn save_to_directory(path: &std::path::Path, project: &Project) -> Result<(), String> {
     prepare_assets_for_save(project, path);
-    let project_file = to_project_file(project);
+    let project_file = to_project_file_for_save(project);
     project_file
         .serialize_to_dir(path)
         .map_err(|e| e.to_string())
@@ -539,7 +599,7 @@ fn save_to_directory(path: &std::path::Path, project: &mut ResMut<Project>) -> R
 /// Save project as a ZIP archive.
 fn save_to_zip(
     zip_path: &std::path::Path,
-    project: &mut Project,
+    project: &Project,
     current_save_path: Option<&std::path::Path>,
 ) -> Result<(), String> {
     let project_dir = current_save_path
@@ -554,7 +614,7 @@ fn save_to_zip(
 
     prepare_assets_for_save(project, &project_dir);
 
-    let project_file = to_project_file(project);
+    let project_file = to_project_file_for_save(project);
     let manifest = project_file.to_manifest();
 
     let mut file =
@@ -589,8 +649,8 @@ fn save_to_zip(
             );
             continue;
         }
-        let dest = format!("tilesets/{}", meta.file_path);
-        zip.start_file(&dest, options).map_err(|e| e.to_string())?;
+        zip.start_file(&meta.file_path, options)
+            .map_err(|e| e.to_string())?;
         let data = std::fs::read(&src)
             .map_err(|e| format!("could not read tileset {}: {}", src.display(), e))?;
         zip.write_all(&data).map_err(|e| e.to_string())?;
@@ -606,8 +666,8 @@ fn save_to_zip(
             );
             continue;
         }
-        let dest = format!("data/{}", ss.file_path);
-        zip.start_file(&dest, options).map_err(|e| e.to_string())?;
+        zip.start_file(&ss.file_path, options)
+            .map_err(|e| e.to_string())?;
         let data = std::fs::read(&src)
             .map_err(|e| format!("could not read spritesheet {}: {}", src.display(), e))?;
         zip.write_all(&data).map_err(|e| e.to_string())?;
@@ -643,6 +703,7 @@ fn save_to_json(
         project.items.clone(),
         project.abilities.clone(),
         project.enemies.clone(),
+        project.shops.clone(),
     );
 
     match project_file.serialize() {
@@ -655,6 +716,7 @@ fn save_to_json(
                 project.has_unsaved_item_changes = false;
                 project.has_unsaved_ability_changes = false;
                 project.has_unsaved_enemy_changes = false;
+                project.has_unsaved_shop_changes = false;
                 editor_state.current_save_path = Some(path.to_path_buf());
                 info!("Project saved to {}", path.display());
             }

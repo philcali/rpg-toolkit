@@ -145,7 +145,7 @@ This plan implements the Character Editor feature across `rpg-toolkit-common` (d
     - On cancel: retain character unchanged
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [~] 6. Checkpoint
+- [ ] 6. Checkpoint
   - Ensure all tests pass, ask the user if questions arise.
 
 - [x] 7. Final integration and wiring
@@ -165,7 +165,7 @@ This plan implements the Character Editor feature across `rpg-toolkit-common` (d
     - Test: backward-compatible deserialization with no "characters" key
     - _Requirements: 3.4, 6.4, 6.5, 7.3, 5.1, 2.3_
 
-- [~] 8. Final checkpoint
+- [ ] 8. Final checkpoint
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

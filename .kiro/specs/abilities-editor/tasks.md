@@ -161,7 +161,7 @@ This plan implements the Abilities Editor feature across two crates: `rpg-toolki
     - Register `AbilityPanelPlugin` in the editor's plugin group
     - _Requirements: 8.3_
 
-- [~] 8. Final checkpoint - Ensure all tests pass and project compiles
+- [ ] 8. Final checkpoint - Ensure all tests pass and project compiles
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

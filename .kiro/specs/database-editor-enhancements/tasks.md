@@ -91,7 +91,7 @@ This plan implements nine database editor enhancements for the RPG toolkit: Mons
     - Add `add_learnable_search_buffer`, `add_learnable_level`, `add_learnable_error` to panel state
     - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.9_
 
-- [~] 5. Checkpoint - Verify core data models and learning system
+- [ ] 5. Checkpoint - Verify core data models and learning system
   - Ensure all tests pass, ask the user if questions arise.
 
 - [x] 6. Implement enemy portrait
@@ -247,7 +247,7 @@ This plan implements nine database editor enhancements for the RPG toolkit: Mons
     - Mark `has_unsaved_character_changes` on any modification
     - _Requirements: 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.11_
 
-- [-] 14. Final checkpoint - Ensure all tests pass
+- [ ] 14. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

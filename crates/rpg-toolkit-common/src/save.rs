@@ -46,6 +46,10 @@ pub struct SaveFile {
     /// The player's elevation level when saving.
     #[serde(default)]
     pub elevation: Option<u32>,
+
+    /// Shop stock persistence: shop_id → item_id → remaining stock.
+    #[serde(default)]
+    pub shop_stock: BTreeMap<String, BTreeMap<String, u32>>,
 }
 
 impl SaveFile {

@@ -5489,6 +5489,7 @@ dependencies = [
  "proptest",
  "rpg-toolkit-common",
  "rpg-toolkit-renderer",
+ "rpg-toolkit-scenes",
  "serde_json",
 ]
 

@@ -61,6 +61,7 @@ fn empty_project_data() -> RendererProjectData {
         ItemRegistry::default(),
         AbilityRegistry::default(),
         rpg_toolkit_common::EnemyRegistry::default(),
+        rpg_toolkit_common::ShopRegistry::default(),
     );
     RendererProjectData {
         project_file,

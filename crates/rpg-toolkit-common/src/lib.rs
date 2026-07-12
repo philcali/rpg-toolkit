@@ -11,6 +11,7 @@ pub mod manifest;
 pub mod map;
 pub mod project;
 pub mod save;
+pub mod shop;
 pub mod spritesheet;
 pub mod tileset;
 
@@ -47,6 +48,7 @@ pub use map::{
 };
 pub use project::{ProjectFile, SpritesheetReferences};
 pub use save::{CharacterProgressData, SaveFile};
+pub use shop::{ActiveShopId, ShopDefinition, ShopEntry, ShopId, ShopRegistry};
 pub use spritesheet::{
     CharacterSpritesheet, FacingDirection, NpcInstance, PatrolConfig, PatrolMode, SpritesheetId,
     TriggerMode, faced_tile, next_waypoint_index, sprite_atlas_index,

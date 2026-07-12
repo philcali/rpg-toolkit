@@ -292,6 +292,14 @@ pub fn npc_placement_dialog_ui(
 
             let dialog = &mut *dialog;
 
+            // Build shops list from ShopRegistry for the action editor
+            let shops: Vec<(String, String)> = project
+                .shops
+                .sorted_shops()
+                .iter()
+                .map(|s| (s.id.clone(), s.display_name.clone()))
+                .collect();
+
             // Conditional Triggers section
             ui.separator();
             render_conditional_triggers_panel(
@@ -301,6 +309,7 @@ pub fn npc_placement_dialog_ui(
                 "npc_cond_trig",
                 &map_entries,
                 &project.face_portraits,
+                &shops,
             );
 
             ui.separator();
@@ -316,6 +325,7 @@ pub fn npc_placement_dialog_ui(
                 &project.face_portraits,
                 0,
                 None,
+                &shops,
             );
 
             ui.separator();

@@ -94,6 +94,7 @@ pub enum AppEditorMode {
     Item,
     Ability,
     Enemy,
+    Shop,
 }
 
 /// Resource that is `true` whenever any modal dialog window is open.
@@ -160,6 +161,9 @@ pub struct EditorState {
     pub palette_tile_scale: f32,
     /// Search buffer for the tileset searchable combobox.
     pub tileset_search_buffer: String,
+    /// Guard to keep the temp directory alive for the duration of the editor session
+    /// when a project was loaded from a ZIP archive.
+    pub _temp_dir: Option<tempfile::TempDir>,
 }
 
 impl Default for EditorState {
@@ -178,6 +182,7 @@ impl Default for EditorState {
             original_zip_path: None,
             palette_tile_scale: 24.0,
             tileset_search_buffer: String::new(),
+            _temp_dir: None,
         }
     }
 }

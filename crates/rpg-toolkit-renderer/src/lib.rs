@@ -18,10 +18,11 @@ pub use components::{
 pub use events::{MapChanged, PlayerMoved, ShowDialog};
 pub use input::{Direction, MovementIntent, read_input};
 pub use resources::{
-    ActionQueue, AnimationConfig, CharacterProgress, CharacterProgressState, CurrencyState,
-    FadeState, GameState, InteractionIntent, InventoryState, MovementConfig, NpcCollisionEvent,
-    NpcPositions, PartyState, PixelScaleConfig, PixelScaleMode, PlayerAppearanceState,
-    PlayerVisual, RendererProjectData, RendererState, ScreenShakeState, WaitingFor,
+    ActionQueue, ActiveShopId, AnimationConfig, CharacterProgress, CharacterProgressState,
+    CurrencyState, FadeState, GameState, InteractionIntent, InventoryState, MovementConfig,
+    NpcCollisionEvent, NpcPositions, PartyState, PixelScaleConfig, PixelScaleMode,
+    PlayerAppearanceState, PlayerVisual, RendererProjectData, RendererState, ScreenShakeState,
+    WaitingFor,
 };
 pub use systems::camera::{apply_pixel_scale, compute_zoom_to_fit, spawn_camera, update_camera};
 pub use systems::collision::is_tile_blocked;

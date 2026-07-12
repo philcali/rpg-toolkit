@@ -726,6 +726,7 @@ pub fn render_show_selection_form(
     id_salt: &str,
     map_entries: &[(String, String)],
     face_portraits: &std::collections::HashMap<String, String>,
+    shops: &[(String, String)],
 ) {
     let form_label = if editor_state.editing_index.is_some() {
         "Edit ShowSelection Action:"
@@ -896,6 +897,7 @@ pub fn render_show_selection_form(
                         face_portraits,
                         1,
                         None,
+                        shops,
                     );
                 });
 

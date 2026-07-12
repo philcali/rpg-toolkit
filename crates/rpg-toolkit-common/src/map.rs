@@ -6,6 +6,7 @@ use crate::character::CharacterId;
 use crate::condition::{BranchCondition, ConditionalTrigger};
 use crate::error::CommonError;
 use crate::item::ItemId;
+use crate::shop::ShopId;
 use crate::spritesheet::NpcInstance;
 
 /// Type alias for map identifiers (UUID v4 strings).
@@ -414,6 +415,11 @@ pub enum EventAction {
     /// Transition to a different application phase.
     ChangePhase {
         phase: AppPhase,
+    },
+    /// Open a shop for the player to browse and purchase items.
+    OpenShop {
+        #[serde(deserialize_with = "deserialize_non_empty_string")]
+        shop_id: ShopId,
     },
 }
 

@@ -65,6 +65,14 @@ pub fn event_trigger_panel_ui(
 
             let dialog = &mut *dialog;
 
+            // Build shops list from ShopRegistry for the action editor
+            let shops: Vec<(String, String)> = project
+                .shops
+                .sorted_shops()
+                .iter()
+                .map(|s| (s.id.clone(), s.display_name.clone()))
+                .collect();
+
             // === Conditional Triggers section ===
             render_conditional_triggers_panel(
                 ui,
@@ -73,6 +81,7 @@ pub fn event_trigger_panel_ui(
                 "evt_cond_trig",
                 &map_entries,
                 &project.face_portraits,
+                &shops,
             );
 
             ui.separator();
@@ -88,6 +97,7 @@ pub fn event_trigger_panel_ui(
                 &project.face_portraits,
                 0,
                 None,
+                &shops,
             );
 
             ui.separator();
@@ -162,6 +172,7 @@ pub fn render_conditional_triggers_panel(
     id_salt: &str,
     map_entries: &[(String, String)],
     face_portraits: &std::collections::HashMap<String, String>,
+    shops: &[(String, String)],
 ) {
     ui.label(egui::RichText::new("Conditional Triggers").strong());
     ui.label("First matching condition overrides the default actions:");
@@ -214,6 +225,7 @@ pub fn render_conditional_triggers_panel(
                     face_portraits,
                     1,
                     None,
+                    shops,
                 );
             });
 

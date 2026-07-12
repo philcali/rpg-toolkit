@@ -230,6 +230,7 @@ proptest! {
             ItemRegistry::default(),
             AbilityRegistry::default(),
             registry.clone(),
+            rpg_toolkit_common::ShopRegistry::default(),
         );
 
         // Serialize to JSON

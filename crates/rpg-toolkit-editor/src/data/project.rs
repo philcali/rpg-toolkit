@@ -7,7 +7,7 @@ pub use rpg_toolkit_common::ProjectFile;
 
 use rpg_toolkit_common::{
     AbilityRegistry, CharacterRegistry, CharacterSpritesheet, EnemyRegistry, ItemRegistry, MapData,
-    MapId, SpawnPoint, SpritesheetId, TilesetId,
+    MapId, ShopRegistry, SpawnPoint, SpritesheetId, TilesetId,
 };
 
 use super::state::EditorError;
@@ -46,6 +46,10 @@ pub struct Project {
     pub enemies: EnemyRegistry,
     /// Whether enemy data has been modified since the last save.
     pub has_unsaved_enemy_changes: bool,
+    /// Shop registry: all shops defined in this project.
+    pub shops: ShopRegistry,
+    /// Whether shop data has been modified since the last save.
+    pub has_unsaved_shop_changes: bool,
 }
 
 impl Project {

@@ -26,4 +26,6 @@ pub enum CommonError {
     AbilityValidationError(String),
     #[error("Enemy validation error: {0}")]
     EnemyValidationError(String),
+    #[error("Shop validation error: {0}")]
+    ShopValidationError(String),
 }

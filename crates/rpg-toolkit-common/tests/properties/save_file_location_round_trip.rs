@@ -61,6 +61,7 @@ fn arb_save_file() -> impl Strategy<Value = SaveFile> {
                     map_id,
                     position,
                     elevation,
+                    shop_stock: std::collections::BTreeMap::new(),
                 }
             },
         )
