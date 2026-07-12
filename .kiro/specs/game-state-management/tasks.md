@@ -68,7 +68,7 @@ This plan implements application phase management, save file location persistenc
     - Handle missing `SavePath` resource gracefully with a warning
     - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 4.2, 4.4, 4.5_
 
-- [~] 4. Checkpoint - Ensure all tests pass
+- [ ] 4. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [x] 5. Create rpg-toolkit-scenes crate with TitleScreenPlugin
@@ -89,7 +89,7 @@ This plan implements application phase management, save file location persistenc
     - Despawn all title screen entities on `OnExit`
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9_
 
-- [~] 6. Checkpoint - Ensure all tests pass
+- [ ] 6. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [x] 7. Refactor launcher and add editor support
@@ -110,7 +110,7 @@ This plan implements application phase management, save file location persistenc
     - Update `action_editor_ui.rs` to render "Save Game" (no config) and "Change Phase" (dropdown of AppPhase variants)
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6_
 
-- [~] 8. Final checkpoint - Ensure all tests pass
+- [ ] 8. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

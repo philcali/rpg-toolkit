@@ -50,6 +50,7 @@ pub fn save_game(
         map_id: map_id.map(|s| s.to_string()),
         position,
         elevation,
+        shop_stock: std::collections::BTreeMap::new(),
     };
 
     save_file.save(&save_path.path)

@@ -6,6 +6,7 @@ use bevy_egui::egui;
 use rpg_toolkit_common::{DialogTextData, TransferDirection};
 
 use crate::data::map::EventAction;
+use crate::plugins::searchable_combobox::searchable_combobox;
 
 use super::action_editor::{ActionEditorState, ActionType, truncate_preview};
 use super::action_editor_forms;
@@ -42,6 +43,7 @@ pub fn render_action_editor(
     face_portraits: &std::collections::HashMap<String, String>,
     depth: usize,
     reward_ctx: Option<&mut RewardFormContext<'_>>,
+    shops: &[(String, String)],
 ) {
     // Display existing actions with remove/reorder/edit controls
     let mut remove_idx: Option<usize> = None;
@@ -173,6 +175,9 @@ pub fn render_action_editor(
                 EventAction::ChangePhase { phase } => {
                     format!("{}. ChangePhase — {:?}", i + 1, phase)
                 }
+                EventAction::OpenShop { shop_id } => {
+                    format!("{}. OpenShop — {}", i + 1, shop_id)
+                }
             };
             if is_being_edited {
                 ui.label(
@@ -205,7 +210,7 @@ pub fn render_action_editor(
 
     // Render collapsible nested action editors for Branch and StateCheck items
     if depth == 0 {
-        render_nested_branch_editors(ui, actions, id_salt, map_entries, face_portraits);
+        render_nested_branch_editors(ui, actions, id_salt, map_entries, face_portraits, shops);
     }
 
     if let Some(idx) = remove_idx {
@@ -263,6 +268,7 @@ pub fn render_action_editor(
             ActionType::AddPartyMember => "AddPartyMember",
             ActionType::SaveGame => "SaveGame",
             ActionType::ChangePhase => "ChangePhase",
+            ActionType::OpenShop => "OpenShop",
         };
         egui::ComboBox::from_id_salt(format!("{}_action_type", id_salt))
             .selected_text(action_type_text)
@@ -351,6 +357,18 @@ pub fn render_action_editor(
                     ActionType::ChangePhase,
                     "Change Phase",
                 );
+                // OpenShop — disabled with tooltip when no shops exist
+                let shop_disabled = shops.is_empty();
+                let response = ui.add_enabled(
+                    !shop_disabled,
+                    egui::Button::new("Open Shop")
+                        .selected(editor_state.action_type == ActionType::OpenShop),
+                );
+                if shop_disabled {
+                    response.on_disabled_hover_text("Create at least one shop first");
+                } else if response.clicked() {
+                    editor_state.action_type = ActionType::OpenShop;
+                }
             });
     });
 
@@ -410,6 +428,7 @@ pub fn render_action_editor(
                 id_salt,
                 map_entries,
                 face_portraits,
+                shops,
             );
         }
         // Reward action forms
@@ -512,6 +531,45 @@ pub fn render_action_editor(
         ActionType::ChangePhase => {
             action_editor_forms::render_change_phase_form(ui, actions, editor_state, id_salt);
         }
+        ActionType::OpenShop => {
+            // Searchable shop selector populated from ShopRegistry
+            let current_label = if editor_state.open_shop_id.is_empty() {
+                "Select a shop…".to_string()
+            } else {
+                shops
+                    .iter()
+                    .find(|(id, _)| *id == editor_state.open_shop_id)
+                    .map(|(_, name)| name.clone())
+                    .unwrap_or_else(|| editor_state.open_shop_id.clone())
+            };
+
+            ui.horizontal(|ui| {
+                ui.label("Shop:");
+                if let Some(selected_id) = searchable_combobox(
+                    ui,
+                    &format!("{}_open_shop_selector", id_salt),
+                    &current_label,
+                    shops,
+                    &mut editor_state.shop_search_buffer,
+                ) {
+                    editor_state.open_shop_id = selected_id;
+                }
+            });
+
+            let can_add = !editor_state.open_shop_id.is_empty();
+            if ui
+                .add_enabled(can_add, egui::Button::new("Add Action"))
+                .clicked()
+                && let Some(action) = editor_state.build_action()
+            {
+                if let Some(idx) = editor_state.editing_index {
+                    actions[idx] = action;
+                } else {
+                    actions.push(action);
+                }
+                editor_state.reset();
+            }
+        }
     }
 
     // Render nested on_success/on_failure editors for reward actions when direction is Take.
@@ -532,6 +590,7 @@ pub fn render_action_editor(
             map_entries,
             face_portraits,
             depth,
+            shops,
         );
     }
 }
@@ -545,6 +604,7 @@ fn render_reward_nested_editors(
     map_entries: &[(String, String)],
     face_portraits: &std::collections::HashMap<String, String>,
     depth: usize,
+    shops: &[(String, String)],
 ) {
     ui.separator();
 
@@ -570,6 +630,7 @@ fn render_reward_nested_editors(
                 face_portraits,
                 depth + 1,
                 None,
+                shops,
             );
         }
     });
@@ -596,6 +657,7 @@ fn render_reward_nested_editors(
                 face_portraits,
                 depth + 1,
                 None,
+                shops,
             );
         }
     });
@@ -609,6 +671,7 @@ fn render_nested_branch_editors(
     id_salt: &str,
     map_entries: &[(String, String)],
     face_portraits: &std::collections::HashMap<String, String>,
+    shops: &[(String, String)],
 ) {
     // We need indexed mutable access. Use a simple index loop.
     let len = actions.len();
@@ -639,6 +702,7 @@ fn render_nested_branch_editors(
                                     face_portraits,
                                     1,
                                     None,
+                                    shops,
                                 );
                             }
                         });
@@ -661,6 +725,7 @@ fn render_nested_branch_editors(
                                 face_portraits,
                                 1,
                                 None,
+                                shops,
                             );
                         }
                     });
@@ -689,6 +754,7 @@ fn render_nested_branch_editors(
                                     face_portraits,
                                     1,
                                     None,
+                                    shops,
                                 );
                             }
                         });
@@ -710,6 +776,7 @@ fn render_nested_branch_editors(
                                 face_portraits,
                                 1,
                                 None,
+                                shops,
                             );
                         }
                     });
@@ -739,6 +806,7 @@ fn render_nested_branch_editors(
                                 face_portraits,
                                 1,
                                 None,
+                                shops,
                             );
                         });
                     }
@@ -797,6 +865,7 @@ fn render_nested_branch_editors(
                             face_portraits,
                             1,
                             None,
+                            shops,
                         );
                     });
 
@@ -816,6 +885,7 @@ fn render_nested_branch_editors(
                             face_portraits,
                             1,
                             None,
+                            shops,
                         );
                     });
                 });

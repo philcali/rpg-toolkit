@@ -30,6 +30,7 @@ pub enum ActionType {
     AddPartyMember,
     SaveGame,
     ChangePhase,
+    OpenShop,
 }
 
 /// The text source mode for a ShowDialog action.
@@ -144,6 +145,9 @@ pub struct ActionEditorState {
     pub add_party_character_id: String,
     // ChangePhase fields
     pub change_phase_target: AppPhase,
+    // OpenShop fields
+    pub open_shop_id: String,
+    pub shop_search_buffer: String,
 }
 
 impl Default for ActionEditorState {
@@ -207,6 +211,9 @@ impl Default for ActionEditorState {
             add_party_character_id: String::new(),
             // ChangePhase fields
             change_phase_target: AppPhase::InGame,
+            // OpenShop fields
+            open_shop_id: String::new(),
+            shop_search_buffer: String::new(),
         }
     }
 }
@@ -279,6 +286,9 @@ impl ActionEditorState {
             add_party_character_id: String::new(),
             // ChangePhase fields
             change_phase_target: AppPhase::InGame,
+            // OpenShop fields
+            open_shop_id: String::new(),
+            shop_search_buffer: String::new(),
         }
     }
 
@@ -491,6 +501,10 @@ impl ActionEditorState {
             EventAction::ChangePhase { phase } => {
                 self.action_type = ActionType::ChangePhase;
                 self.change_phase_target = phase.clone();
+            }
+            EventAction::OpenShop { shop_id } => {
+                self.action_type = ActionType::OpenShop;
+                self.open_shop_id = shop_id.clone();
             }
         }
         self.editing_index = Some(index);
@@ -769,6 +783,14 @@ impl ActionEditorState {
             ActionType::ChangePhase => Some(EventAction::ChangePhase {
                 phase: self.change_phase_target.clone(),
             }),
+            ActionType::OpenShop => {
+                if self.open_shop_id.trim().is_empty() {
+                    return None;
+                }
+                Some(EventAction::OpenShop {
+                    shop_id: self.open_shop_id.clone(),
+                })
+            }
         }
     }
 }

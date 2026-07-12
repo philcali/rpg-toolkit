@@ -68,8 +68,13 @@ path = "enemy_invariants.rs"
 name = "enemy_round_trip"
 path = "enemy_round_trip.rs"
 
+[[test]]
+name = "shop_transactions"
+path = "shop_transactions.rs"
+
 [dev-dependencies]
 proptest = { workspace = true }
 serde_json = { workspace = true }
 rpg-toolkit-common = { path = "../../crates/rpg-toolkit-common" }
 rpg-toolkit-renderer = { path = "../../crates/rpg-toolkit-renderer" }
+rpg-toolkit-scenes = { path = "../../crates/rpg-toolkit-scenes" }

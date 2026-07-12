@@ -230,6 +230,7 @@ pub fn process_spritesheet_remove(
             project.items.clone(),
             rpg_toolkit_common::AbilityRegistry::default(),
             rpg_toolkit_common::EnemyRegistry::default(),
+            rpg_toolkit_common::ShopRegistry::default(),
         );
         let refs = temp_project_file.compute_spritesheet_references(&remove_id);
 

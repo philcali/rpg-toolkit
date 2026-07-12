@@ -6,8 +6,8 @@ use rpg_toolkit_renderer::{
     RendererProjectData, SavePath,
 };
 use rpg_toolkit_scenes::{
-    CharacterProgressState, CurrencyState, GameState, InventoryState, PartyState, RendererState,
-    TitleScreenConfig, TitleScreenPlugin,
+    CharacterProgressState, CurrencyState, GameState, InventoryState, ItemRegistryRes, PartyState,
+    RendererState, ShopRegistryRes, ShopScenePlugin, TitleScreenConfig, TitleScreenPlugin,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -20,6 +20,14 @@ struct PendingProjectLoad {
     tileset_paths: HashMap<String, std::path::PathBuf>,
     /// Guard to keep temp directory alive for the app lifetime.
     _temp_dir: Option<tempfile::TempDir>,
+}
+
+/// Resource that holds the temp directory alive for the entire app lifetime.
+/// Without this, ZIP-extracted files would be deleted before Bevy's async
+/// asset loader can read them.
+#[derive(Resource)]
+struct TempDirGuard {
+    _dir: tempfile::TempDir,
 }
 
 fn parse_scale_arg(args: &[String]) -> Option<PixelScaleMode> {
@@ -96,7 +104,7 @@ fn detect_project_source(path: &Path) -> Result<ProjectSource, String> {
 fn load_from_dir(
     path: &Path,
 ) -> Result<(ProjectFile, HashMap<String, std::path::PathBuf>), String> {
-    let project_file = ProjectFile::deserialize_from_dir(path)
+    let mut project_file = ProjectFile::deserialize_from_dir(path)
         .map_err(|e| format!("failed to load project: {}", e))?;
     let project_dir = path
         .canonicalize()
@@ -106,6 +114,15 @@ fn load_from_dir(
         .iter()
         .map(|(id, meta)| (id.clone(), project_dir.join(&meta.file_path)))
         .collect();
+    // Resolve spritesheet paths to absolute so the renderer can load them
+    for ss in project_file.spritesheets.values_mut() {
+        if !ss.file_path.is_empty() && !Path::new(&ss.file_path).is_absolute() {
+            ss.file_path = project_dir
+                .join(&ss.file_path)
+                .to_string_lossy()
+                .to_string();
+        }
+    }
     Ok((project_file, tileset_paths))
 }
 
@@ -123,13 +140,23 @@ fn load_from_zip(
     let zip_data = std::fs::read(path).map_err(|e| format!("could not read zip file: {}", e))?;
     let temp_dir =
         tempfile::tempdir().map_err(|e| format!("could not create temp directory: {}", e))?;
-    let project_file = ProjectFile::deserialize_from_zip(&zip_data, temp_dir.path())
+    let mut project_file = ProjectFile::deserialize_from_zip(&zip_data, temp_dir.path())
         .map_err(|e| format!("failed to load project from zip: {}", e))?;
     let tileset_paths: HashMap<String, std::path::PathBuf> = project_file
         .tilesets
         .iter()
         .map(|(id, meta)| (id.clone(), temp_dir.path().join(&meta.file_path)))
         .collect();
+    // Resolve spritesheet paths to absolute so the renderer can load them
+    for ss in project_file.spritesheets.values_mut() {
+        if !ss.file_path.is_empty() && !Path::new(&ss.file_path).is_absolute() {
+            ss.file_path = temp_dir
+                .path()
+                .join(&ss.file_path)
+                .to_string_lossy()
+                .to_string();
+        }
+    }
     Ok((project_file, tileset_paths, temp_dir))
 }
 
@@ -139,7 +166,7 @@ fn load_from_legacy_json(
 ) -> Result<(ProjectFile, HashMap<String, std::path::PathBuf>), String> {
     let contents =
         std::fs::read_to_string(path).map_err(|e| format!("could not read file: {}", e))?;
-    let project_file = ProjectFile::deserialize(&contents)
+    let mut project_file = ProjectFile::deserialize(&contents)
         .map_err(|e| format!("failed to deserialize project: {}", e))?;
     let project_dir = path
         .parent()
@@ -150,6 +177,15 @@ fn load_from_legacy_json(
         .iter()
         .map(|(id, meta)| (id.clone(), project_dir.join(&meta.file_path)))
         .collect();
+    // Resolve spritesheet paths to absolute so the renderer can load them
+    for ss in project_file.spritesheets.values_mut() {
+        if !ss.file_path.is_empty() && !Path::new(&ss.file_path).is_absolute() {
+            ss.file_path = project_dir
+                .join(&ss.file_path)
+                .to_string_lossy()
+                .to_string();
+        }
+    }
     Ok((project_file, tileset_paths))
 }
 
@@ -264,10 +300,15 @@ fn main() {
     app.init_resource::<CharacterProgressState>();
     app.init_resource::<RendererState>();
 
+    // Keep temp directory alive for the entire app lifetime (ZIP extractions)
+    if let Some(td) = temp_dir {
+        app.insert_resource(TempDirGuard { _dir: td });
+    }
+
     app.insert_resource(PendingProjectLoad {
         project_file: project_file.clone(),
         tileset_paths,
-        _temp_dir: temp_dir,
+        _temp_dir: None,
     })
     .insert_resource(SavePath {
         path: save_path.clone(),
@@ -278,6 +319,7 @@ fn main() {
     })
     .add_systems(PreStartup, load_project_resources)
     .add_plugins(TitleScreenPlugin)
+    .add_plugins(ShopScenePlugin)
     .add_plugins(ProjectRendererPlugin)
     .run();
 }
@@ -319,6 +361,14 @@ fn load_project_resources(
         tileset_atlas_layouts,
         spritesheet_textures: HashMap::new(),
         spritesheet_atlas_layouts: HashMap::new(),
+    });
+
+    commands.insert_resource(ShopRegistryRes {
+        registry: pending.project_file.shops.clone(),
+    });
+
+    commands.insert_resource(ItemRegistryRes {
+        registry: pending.project_file.items.clone(),
     });
 
     commands.insert_resource(DialogTextRegistry::from_map(

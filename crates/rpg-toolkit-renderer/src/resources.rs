@@ -243,3 +243,6 @@ pub struct CharacterProgressState {
 pub struct PartyState {
     pub members: Vec<CharacterId>,
 }
+
+// Re-export ActiveShopId from rpg-toolkit-common for backward compatibility.
+pub use rpg_toolkit_common::ActiveShopId;

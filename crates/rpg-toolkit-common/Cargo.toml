@@ -38,3 +38,11 @@ path = "tests/properties/event_reward_actions.rs"
 [[test]]
 name = "save_file_location_round_trip"
 path = "tests/properties/save_file_location_round_trip.rs"
+
+[[test]]
+name = "shop_invariants"
+path = "tests/properties/shop_invariants.rs"
+
+[[test]]
+name = "shop_round_trip"
+path = "tests/properties/shop_round_trip.rs"

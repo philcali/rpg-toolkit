@@ -10,6 +10,7 @@ use crate::enemy::EnemyRegistry;
 use crate::error::CommonError;
 use crate::item::ItemRegistry;
 use crate::map::{MapData, MapId, SpawnPoint, TilesetId};
+use crate::shop::ShopRegistry;
 use crate::spritesheet::{CharacterSpritesheet, SpritesheetId};
 use crate::tileset::TilesetMeta;
 
@@ -42,6 +43,9 @@ pub struct ProjectManifest {
     /// Enemy registry: all enemies defined in this project.
     #[serde(default)]
     pub enemies: EnemyRegistry,
+    /// Shop registry: all shops defined in this project.
+    #[serde(default)]
+    pub shops: ShopRegistry,
 }
 
 impl ProjectManifest {
@@ -185,6 +189,7 @@ impl ProjectManifest {
             self.items,
             self.abilities,
             self.enemies,
+            self.shops,
         ))
     }
 
@@ -260,6 +265,7 @@ mod tests {
     use crate::character::CharacterRegistry;
     use crate::enemy::EnemyRegistry;
     use crate::item::ItemRegistry;
+    use crate::shop::ShopRegistry;
     use std::fs;
 
     #[test]
@@ -305,6 +311,7 @@ mod tests {
             items: ItemRegistry::default(),
             abilities: AbilityRegistry::default(),
             enemies: EnemyRegistry::default(),
+            shops: ShopRegistry::default(),
         };
 
         let bytes = manifest.to_bytes().unwrap();
@@ -333,6 +340,7 @@ mod tests {
             ItemRegistry::default(),
             AbilityRegistry::default(),
             EnemyRegistry::default(),
+            ShopRegistry::default(),
         );
 
         project_file.serialize_to_dir(&tmp).unwrap();
@@ -383,6 +391,7 @@ mod tests {
             items: ItemRegistry::default(),
             abilities: AbilityRegistry::default(),
             enemies: EnemyRegistry::default(),
+            shops: ShopRegistry::default(),
         };
 
         let errors = manifest.validate_refs(&tmp);
