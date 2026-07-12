@@ -553,7 +553,7 @@ fn save_project_to_path(
         if let Err(e) = save_to_directory(path, project) {
             warn!("Failed to save project to directory: {}", e);
         } else {
-            for (_id, has_changes) in project.has_unsaved_changes.iter_mut() {
+            for has_changes in project.has_unsaved_changes.values_mut() {
                 *has_changes = false;
             }
             project.has_unsaved_character_changes = false;
@@ -570,7 +570,7 @@ fn save_project_to_path(
         if let Err(e) = save_to_zip(path, project, editor_state.current_save_path.as_deref()) {
             warn!("Failed to save project as ZIP: {}", e);
         } else {
-            for (_id, has_changes) in project.has_unsaved_changes.iter_mut() {
+            for has_changes in project.has_unsaved_changes.values_mut() {
                 *has_changes = false;
             }
             project.has_unsaved_character_changes = false;
@@ -709,7 +709,7 @@ fn save_to_json(
     match project_file.serialize() {
         Ok(json) => match std::fs::write(path, &json) {
             Ok(()) => {
-                for (_id, has_changes) in project.has_unsaved_changes.iter_mut() {
+                for has_changes in project.has_unsaved_changes.values_mut() {
                     *has_changes = false;
                 }
                 project.has_unsaved_character_changes = false;

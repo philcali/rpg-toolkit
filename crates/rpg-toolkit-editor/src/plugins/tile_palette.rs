@@ -362,7 +362,7 @@ fn tile_palette_ui(
                                 resp.rect,
                                 0.0,
                                 egui::Stroke::new(
-                                    2.0,
+                                    2.0_f32,
                                     egui::Color32::from_rgba_unmultiplied(0, 200, 255, 200),
                                 ),
                                 egui::StrokeKind::Outside,
@@ -382,7 +382,7 @@ fn tile_palette_ui(
                                 resp.rect,
                                 0.0,
                                 egui::Stroke::new(
-                                    2.0,
+                                    2.0_f32,
                                     egui::Color32::from_rgba_unmultiplied(0, 255, 128, 200),
                                 ),
                                 egui::StrokeKind::Outside,
@@ -399,7 +399,7 @@ fn tile_palette_ui(
                             ui.painter().rect_stroke(
                                 resp.rect,
                                 0.0,
-                                egui::Stroke::new(2.0, egui::Color32::YELLOW),
+                                egui::Stroke::new(2.0_f32, egui::Color32::YELLOW),
                                 egui::StrokeKind::Outside,
                             );
                         }

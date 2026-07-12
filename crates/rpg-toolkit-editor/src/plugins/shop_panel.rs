@@ -249,7 +249,7 @@ fn shop_panel_ui(
                                         .get(&entry.item_id)
                                         .map(|item| item.display_name.clone())
                                         .unwrap_or_else(|| {
-                                            format!("[Missing: {}]", &entry.item_id)
+                                            format!("[Missing: {}]", entry.item_id)
                                         });
                                     (
                                         entry.item_id.clone(),
