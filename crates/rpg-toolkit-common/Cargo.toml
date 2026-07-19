@@ -7,13 +7,13 @@ edition = "2024"
 bevy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tempfile = "3"
 thiserror = { workspace = true }
 uuid = { workspace = true }
 zip = { version = "0.6", features = ["deflate"] }
 
 [dev-dependencies]
 proptest = { workspace = true }
-tempfile = "3"
 
 [[test]]
 name = "ability_category_filter"
@@ -46,3 +46,7 @@ path = "tests/properties/shop_invariants.rs"
 [[test]]
 name = "shop_round_trip"
 path = "tests/properties/shop_round_trip.rs"
+
+[[test]]
+name = "asset_registry_round_trip"
+path = "tests/properties/asset_registry_round_trip.rs"

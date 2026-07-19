@@ -1,5 +1,6 @@
 use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
+use rpg_toolkit_common::asset::{AssetManager, ProjectSource};
 use rpg_toolkit_common::{AppPhase, ProjectFile};
 use rpg_toolkit_renderer::{
     DialogTextRegistry, PixelScaleConfig, PixelScaleMode, ProjectRendererPlugin,
@@ -72,121 +73,28 @@ fn parse_save_arg(args: &[String]) -> Option<String> {
     None
 }
 
-/// Detect project format from a path.
-enum ProjectSource {
-    Directory(std::path::PathBuf),
-    Zip(std::path::PathBuf),
-    LegacyJson(std::path::PathBuf),
-}
-
-fn detect_project_source(path: &Path) -> Result<ProjectSource, String> {
-    if path.is_dir() {
-        if !path.join("manifest.json").exists() {
-            return Err(format!(
-                "directory '{}' does not contain manifest.json",
-                path.display()
-            ));
-        }
-        Ok(ProjectSource::Directory(path.to_path_buf()))
-    } else if path.extension().is_some_and(|e| e == "rpg") {
-        Ok(ProjectSource::Zip(path.to_path_buf()))
-    } else if path.extension().is_some_and(|e| e == "json") {
-        Ok(ProjectSource::LegacyJson(path.to_path_buf()))
-    } else {
-        Err(format!(
-            "unsupported project format: {}. Expected .rpg or .json",
-            path.display()
-        ))
-    }
-}
-
-/// Load a project from a directory-based format.
-fn load_from_dir(
-    path: &Path,
-) -> Result<(ProjectFile, HashMap<String, std::path::PathBuf>), String> {
-    let mut project_file = ProjectFile::deserialize_from_dir(path)
-        .map_err(|e| format!("failed to load project: {}", e))?;
-    let project_dir = path
-        .canonicalize()
-        .map_err(|e| format!("could not canonicalize path: {}", e))?;
-    let tileset_paths: HashMap<String, std::path::PathBuf> = project_file
+/// Resolve tileset and spritesheet paths to absolute paths for the renderer.
+fn resolve_asset_paths(
+    project_file: &mut ProjectFile,
+    project_root: &Path,
+) -> HashMap<String, PathBuf> {
+    let tileset_paths: HashMap<String, PathBuf> = project_file
         .tilesets
         .iter()
-        .map(|(id, meta)| (id.clone(), project_dir.join(&meta.file_path)))
+        .map(|(id, meta)| (id.clone(), project_root.join(&meta.file_path)))
         .collect();
+
     // Resolve spritesheet paths to absolute so the renderer can load them
     for ss in project_file.spritesheets.values_mut() {
         if !ss.file_path.is_empty() && !Path::new(&ss.file_path).is_absolute() {
-            ss.file_path = project_dir
+            ss.file_path = project_root
                 .join(&ss.file_path)
                 .to_string_lossy()
                 .to_string();
         }
     }
-    Ok((project_file, tileset_paths))
-}
 
-/// Load a project from a ZIP archive, extracting to a temp directory.
-fn load_from_zip(
-    path: &Path,
-) -> Result<
-    (
-        ProjectFile,
-        HashMap<String, std::path::PathBuf>,
-        tempfile::TempDir,
-    ),
-    String,
-> {
-    let zip_data = std::fs::read(path).map_err(|e| format!("could not read zip file: {}", e))?;
-    let temp_dir =
-        tempfile::tempdir().map_err(|e| format!("could not create temp directory: {}", e))?;
-    let mut project_file = ProjectFile::deserialize_from_zip(&zip_data, temp_dir.path())
-        .map_err(|e| format!("failed to load project from zip: {}", e))?;
-    let tileset_paths: HashMap<String, std::path::PathBuf> = project_file
-        .tilesets
-        .iter()
-        .map(|(id, meta)| (id.clone(), temp_dir.path().join(&meta.file_path)))
-        .collect();
-    // Resolve spritesheet paths to absolute so the renderer can load them
-    for ss in project_file.spritesheets.values_mut() {
-        if !ss.file_path.is_empty() && !Path::new(&ss.file_path).is_absolute() {
-            ss.file_path = temp_dir
-                .path()
-                .join(&ss.file_path)
-                .to_string_lossy()
-                .to_string();
-        }
-    }
-    Ok((project_file, tileset_paths, temp_dir))
-}
-
-/// Load a project from a legacy single-file JSON format.
-fn load_from_legacy_json(
-    path: &Path,
-) -> Result<(ProjectFile, HashMap<String, std::path::PathBuf>), String> {
-    let contents =
-        std::fs::read_to_string(path).map_err(|e| format!("could not read file: {}", e))?;
-    let mut project_file = ProjectFile::deserialize(&contents)
-        .map_err(|e| format!("failed to deserialize project: {}", e))?;
-    let project_dir = path
-        .parent()
-        .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
-    let tileset_paths: HashMap<String, std::path::PathBuf> = project_file
-        .tilesets
-        .iter()
-        .map(|(id, meta)| (id.clone(), project_dir.join(&meta.file_path)))
-        .collect();
-    // Resolve spritesheet paths to absolute so the renderer can load them
-    for ss in project_file.spritesheets.values_mut() {
-        if !ss.file_path.is_empty() && !Path::new(&ss.file_path).is_absolute() {
-            ss.file_path = project_dir
-                .join(&ss.file_path)
-                .to_string_lossy()
-                .to_string();
-        }
-    }
-    Ok((project_file, tileset_paths))
+    tileset_paths
 }
 
 fn main() {
@@ -197,6 +105,10 @@ fn main() {
         let mut i = 1;
         while i < args.len() {
             if args[i] == "--scale" {
+                i += 2;
+                continue;
+            }
+            if args[i] == "--save" {
                 i += 2;
                 continue;
             }
@@ -217,47 +129,92 @@ fn main() {
     let save_path_arg = parse_save_arg(&args);
     let project_path = Path::new(&project_path_str);
 
-    let source = detect_project_source(project_path).unwrap_or_else(|e| {
+    // Reject legacy JSON format before attempting detection
+    if project_path.extension().is_some_and(|e| e == "json") {
+        eprintln!(
+            "Error: legacy JSON format is no longer supported. Please convert your project to directory or .rpg ZIP format."
+        );
+        std::process::exit(1);
+    }
+
+    let source = AssetManager::detect_source(project_path).unwrap_or_else(|e| {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     });
 
     let (project_file, tileset_paths, temp_dir, save_path) = match source {
-        ProjectSource::Directory(dir) => {
-            let (pf, tp) = load_from_dir(&dir).unwrap_or_else(|e| {
+        ProjectSource::Directory(ref dir) => {
+            let (pf, validation_errors) = AssetManager::load_project(dir).unwrap_or_else(|e| {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             });
+
+            for err in &validation_errors {
+                eprintln!(
+                    "Warning: missing asset '{}' ({}): {}",
+                    err.asset_id,
+                    err.category,
+                    err.resolved_path.display()
+                );
+            }
+
+            let project_dir = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+            let mut pf = pf;
+            let tp = resolve_asset_paths(&mut pf, &project_dir);
             let save_path = save_path_arg
                 .map(PathBuf::from)
                 .unwrap_or_else(|| dir.join("save.json"));
             (pf, tp, None, save_path)
         }
-        ProjectSource::Zip(zip_path) => {
-            let (pf, tp, td) = load_from_zip(&zip_path).unwrap_or_else(|e| {
-                eprintln!("Error: {}", e);
+        ProjectSource::Zip(ref zip_path) => {
+            // For ZIP sources, the launcher must manage the temp directory lifetime
+            // so that Bevy can access extracted asset files asynchronously.
+            let zip_data = std::fs::read(zip_path).unwrap_or_else(|e| {
+                eprintln!("Error: could not read zip file: {}", e);
                 std::process::exit(1);
             });
+
+            let temp_dir = tempfile::tempdir().unwrap_or_else(|e| {
+                eprintln!("Error: could not create temp directory: {}", e);
+                std::process::exit(1);
+            });
+
+            let mut archive =
+                zip::ZipArchive::new(std::io::Cursor::new(&zip_data)).unwrap_or_else(|e| {
+                    eprintln!("Error: failed to open zip archive: {}", e);
+                    std::process::exit(1);
+                });
+
+            archive.extract(temp_dir.path()).unwrap_or_else(|e| {
+                eprintln!("Error: failed to extract zip archive: {}", e);
+                std::process::exit(1);
+            });
+
+            // Load from the extracted directory using AssetManager
+            let (pf, validation_errors) = AssetManager::load_project(temp_dir.path())
+                .unwrap_or_else(|e| {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                });
+
+            for err in &validation_errors {
+                eprintln!(
+                    "Warning: missing asset '{}' ({}): {}",
+                    err.asset_id,
+                    err.category,
+                    err.resolved_path.display()
+                );
+            }
+
+            let mut pf = pf;
+            let tp = resolve_asset_paths(&mut pf, temp_dir.path());
             let save_path = save_path_arg.map(PathBuf::from).unwrap_or_else(|| {
                 zip_path
                     .parent()
                     .map(|p| p.join("save.json"))
                     .unwrap_or_else(|| PathBuf::from("save.json"))
             });
-            (pf, tp, Some(td), save_path)
-        }
-        ProjectSource::LegacyJson(json_path) => {
-            let (pf, tp) = load_from_legacy_json(&json_path).unwrap_or_else(|e| {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            });
-            let save_path = save_path_arg.map(PathBuf::from).unwrap_or_else(|| {
-                json_path
-                    .parent()
-                    .map(|p| p.join("save.json"))
-                    .unwrap_or_else(|| PathBuf::from("save.json"))
-            });
-            (pf, tp, None, save_path)
+            (pf, tp, Some(temp_dir), save_path)
         }
     };
 

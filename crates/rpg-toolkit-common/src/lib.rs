@@ -1,6 +1,7 @@
 pub mod ability;
 pub mod animation;
 pub mod app_phase;
+pub mod asset;
 pub mod character;
 pub mod condition;
 pub mod element;
@@ -22,6 +23,10 @@ pub use animation::{
     AnimationFrame, TileAnimation, compute_animation_frame_index, validate_tile_animation,
 };
 pub use app_phase::AppPhase;
+pub use asset::{
+    AssetCategory, AssetManager, AssetReference, AssetRegistry, AssetValidationError, AssetWarning,
+    CATEGORY_FACE_PORTRAIT, CATEGORY_SPRITESHEET, CATEGORY_TILESET, ProjectSource,
+};
 pub use character::{
     Character, CharacterId, CharacterRegistry, LearnableAbility, OPTIONAL_STATS, REQUIRED_STATS,
     Stat, VisualAssetType,
