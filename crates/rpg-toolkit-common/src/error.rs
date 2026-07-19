@@ -28,4 +28,10 @@ pub enum CommonError {
     EnemyValidationError(String),
     #[error("Shop validation error: {0}")]
     ShopValidationError(String),
+    #[error("Asset registry error: {0}")]
+    AssetRegistryError(String),
+    #[error("Asset path resolution error: {0}")]
+    AssetPathError(String),
+    #[error("Unsupported project format: {0}")]
+    UnsupportedFormat(String),
 }
