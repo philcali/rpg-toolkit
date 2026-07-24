@@ -1031,6 +1031,7 @@ mod tests {
             stack_limit,
             stat_modifiers: vec![],
             granted_abilities: vec![],
+            graphics: Default::default(),
         }
     }
 

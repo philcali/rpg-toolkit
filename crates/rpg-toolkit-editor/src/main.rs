@@ -62,6 +62,7 @@ fn main() {
         .add_plugins(EnemyPanelPlugin)
         .add_plugins(ShopPanelPlugin)
         .init_resource::<data::Project>()
+        .init_resource::<plugins::thumbnail::ThumbnailCache>()
         .init_resource::<TextIdIndex>()
         .init_resource::<systems::input::CursorWorldState>()
         .init_resource::<systems::render::EditorAnimationTick>()

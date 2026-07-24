@@ -7,8 +7,10 @@ use rpg_toolkit_common::{
 };
 
 use crate::data::AppEditorMode;
+use crate::data::EditorState;
 use crate::data::EditorUiSet;
 use crate::plugins::searchable_combobox::searchable_combobox;
+use crate::plugins::thumbnail::ThumbnailCache;
 
 /// Plugin that provides the Character Editor panel UI.
 pub struct CharacterPanelPlugin;
@@ -88,6 +90,8 @@ fn character_panel_ui(
     mut contexts: EguiContexts,
     mut panel_state: ResMut<CharacterPanelState>,
     mut project: ResMut<crate::data::Project>,
+    mut thumbnail_cache: ResMut<ThumbnailCache>,
+    editor_state: Res<EditorState>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -628,6 +632,28 @@ fn character_panel_ui(
                             project.has_unsaved_character_changes = true;
                         }
                     });
+
+                    // Render thumbnail preview if the asset path is set
+                    let current_path =
+                        project
+                            .characters
+                            .characters
+                            .get(&selected_id)
+                            .and_then(|c| match asset_type {
+                                VisualAssetType::Spritesheet => c.visual_assets.spritesheet.clone(),
+                                VisualAssetType::FacePortrait => {
+                                    c.visual_assets.face_portrait.clone()
+                                }
+                                VisualAssetType::StatusPortrait => {
+                                    c.visual_assets.status_portrait.clone()
+                                }
+                            });
+
+                    if let Some(ref path) = current_path
+                        && let Some(ref project_root) = editor_state.current_save_path
+                    {
+                        thumbnail_cache.render_thumbnail(ui, project_root, path, 64);
+                    }
 
                     ui.separator();
                 }

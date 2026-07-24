@@ -198,6 +198,7 @@ fn arb_item(index: usize) -> impl Strategy<Value = (ItemId, Item)> {
                     stack_limit,
                     stat_modifiers,
                     granted_abilities: Vec::new(),
+                    graphics: Default::default(),
                 };
                 (id, item)
             },

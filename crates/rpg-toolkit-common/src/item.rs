@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::ability::AbilityId;
 use crate::error::CommonError;
+use crate::graphics::EntityGraphics;
 
 pub type ItemId = String;
 
@@ -127,6 +128,8 @@ pub struct Item {
     pub stat_modifiers: Vec<StatModifier>,
     #[serde(default)]
     pub granted_abilities: Vec<AbilityId>,
+    #[serde(default)]
+    pub graphics: EntityGraphics,
 }
 
 impl Item {
@@ -215,6 +218,7 @@ impl ItemRegistry {
             stack_limit,
             stat_modifiers: Vec::new(),
             granted_abilities: Vec::new(),
+            graphics: EntityGraphics::default(),
         };
 
         self.items.insert(id.clone(), item);
@@ -229,6 +233,23 @@ impl ItemRegistry {
                 id
             )));
         }
+        Ok(())
+    }
+
+    /// Sets the icon graphic for an item via its EntityGraphics field.
+    pub fn set_icon(&mut self, id: &ItemId, path: &str) -> Result<(), CommonError> {
+        let item = self.items.get_mut(id).ok_or_else(|| {
+            CommonError::ItemValidationError(format!("Item with id '{}' not found", id))
+        })?;
+        item.graphics.set_icon(path)
+    }
+
+    /// Clears the icon graphic for an item.
+    pub fn clear_icon(&mut self, id: &ItemId) -> Result<(), CommonError> {
+        let item = self.items.get_mut(id).ok_or_else(|| {
+            CommonError::ItemValidationError(format!("Item with id '{}' not found", id))
+        })?;
+        item.graphics.clear_icon();
         Ok(())
     }
 
@@ -667,5 +688,81 @@ pub fn format_modifier_value(value: i32) -> String {
         format!("+{}", value)
     } else {
         format!("{}", value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_set_icon_on_item() {
+        let mut registry = ItemRegistry::default();
+        let id = registry.create_item("Sword", ItemCategory::Weapon).unwrap();
+        assert!(registry.set_icon(&id, "icons/sword.png").is_ok());
+        let item = registry.items.get(&id).unwrap();
+        assert_eq!(item.graphics.icon, Some("icons/sword.png".to_string()));
+    }
+
+    #[test]
+    fn test_clear_icon_on_item() {
+        let mut registry = ItemRegistry::default();
+        let id = registry
+            .create_item("Potion", ItemCategory::Consumable)
+            .unwrap();
+        registry.set_icon(&id, "icons/potion.png").unwrap();
+        assert!(registry.clear_icon(&id).is_ok());
+        let item = registry.items.get(&id).unwrap();
+        assert!(item.graphics.icon.is_none());
+    }
+
+    #[test]
+    fn test_set_icon_item_not_found() {
+        let mut registry = ItemRegistry::default();
+        let result = registry.set_icon(&"nonexistent".to_string(), "icons/sword.png");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_clear_icon_item_not_found() {
+        let mut registry = ItemRegistry::default();
+        let result = registry.clear_icon(&"nonexistent".to_string());
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_item_serde_backward_compat_missing_graphics() {
+        // Simulate JSON from before the graphics field existed
+        let json = r#"{
+            "id": "test-id",
+            "display_name": "Old Sword",
+            "description": "A rusty blade",
+            "category_data": {"category": "Weapon", "attack_power": 5, "equipment_slot": "MainHand"},
+            "value": 10,
+            "rarity": "Common",
+            "stackable": false,
+            "stack_limit": 1,
+            "stat_modifiers": [],
+            "granted_abilities": []
+        }"#;
+        let item: Item = serde_json::from_str(json).unwrap();
+        assert_eq!(item.id, "test-id");
+        assert_eq!(item.display_name, "Old Sword");
+        // graphics should default to EntityGraphics::default() (no icon)
+        assert_eq!(item.graphics, EntityGraphics::default());
+        assert!(item.graphics.icon.is_none());
+    }
+
+    #[test]
+    fn test_create_item_initializes_default_graphics() {
+        let mut registry = ItemRegistry::default();
+        let id = registry.create_item("Shield", ItemCategory::Armor).unwrap();
+        let item = registry.items.get(&id).unwrap();
+        assert_eq!(item.graphics, EntityGraphics::default());
+        assert!(!item.graphics.has_icon());
     }
 }
