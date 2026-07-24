@@ -8,6 +8,7 @@ use proptest::prelude::*;
 use rpg_toolkit_common::ability::{
     Ability, AbilityCategory, AbilityRegistry, AbilitySource, CostType, TargetType,
 };
+use rpg_toolkit_common::graphics::EntityGraphics;
 
 /// Strategy for generating a valid AbilityCategory.
 fn arb_category() -> impl Strategy<Value = AbilityCategory> {
@@ -100,6 +101,7 @@ fn arb_ability() -> impl Strategy<Value = Ability> {
                     power,
                     target_type,
                     sources,
+                    graphics: EntityGraphics::default(),
                 }
             },
         )
@@ -138,6 +140,7 @@ fn arb_ability_with_category(category: AbilityCategory) -> impl Strategy<Value =
                     power,
                     target_type,
                     sources,
+                    graphics: EntityGraphics::default(),
                 }
             },
         )

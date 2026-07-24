@@ -7,9 +7,9 @@ use rpg_toolkit_common::{
     format_modifier_value,
 };
 
-use crate::data::AppEditorMode;
-use crate::data::EditorUiSet;
+use crate::data::{AppEditorMode, EditorState, EditorUiSet};
 use crate::plugins::searchable_combobox::searchable_combobox;
+use crate::plugins::thumbnail::ThumbnailCache;
 
 /// Plugin that provides the Item Editor panel UI.
 pub struct ItemPanelPlugin;
@@ -113,6 +113,8 @@ fn item_panel_ui(
     mut contexts: EguiContexts,
     mut panel_state: ResMut<ItemPanelState>,
     mut _project: ResMut<crate::data::Project>,
+    mut thumbnail_cache: ResMut<ThumbnailCache>,
+    editor_state: Res<EditorState>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -1148,6 +1150,67 @@ fn item_panel_ui(
                                 ui.colored_label(egui::Color32::RED, error);
                             }
                         }
+                    }
+
+                    // --- Icon Section ---
+                    ui.separator();
+                    ui.heading("Icon");
+                    {
+                        let icon_path = _project
+                            .items
+                            .items
+                            .get(&selected_id)
+                            .and_then(|i| i.graphics.icon.clone());
+
+                        match &icon_path {
+                            None => {
+                                ui.label("No icon assigned");
+                            }
+                            Some(path) => {
+                                if let Some(ref project_root) = editor_state.current_save_path {
+                                    thumbnail_cache.render_thumbnail(ui, project_root, path, 64);
+                                }
+                                // Show just the filename
+                                let display_name = std::path::Path::new(path)
+                                    .file_name()
+                                    .and_then(|s| s.to_str())
+                                    .unwrap_or(path);
+                                ui.label(display_name);
+                            }
+                        }
+
+                        ui.horizontal(|ui| {
+                            // Browse... button
+                            if ui.button("Browse...").clicked() {
+                                let file = rfd::FileDialog::new()
+                                    .add_filter("Images", &["png", "jpg", "jpeg"])
+                                    .pick_file();
+
+                                if let Some(selected_path) = file {
+                                    let path_str = selected_path.display().to_string();
+                                    // Truncate to 260 characters
+                                    let truncated: String = path_str.chars().take(260).collect();
+
+                                    // Invalidate old cache entry if icon was previously set
+                                    if let Some(ref old_path) = icon_path {
+                                        thumbnail_cache.invalidate(old_path);
+                                    }
+
+                                    // Commit to the item model
+                                    let _ = _project.items.set_icon(&selected_id, &truncated);
+                                    _project.has_unsaved_item_changes = true;
+                                }
+                            }
+
+                            // Clear button
+                            if ui.button("Clear").clicked() {
+                                if let Some(ref old_path) = icon_path {
+                                    thumbnail_cache.invalidate(old_path);
+                                }
+                                let _ = _project.items.clear_icon(&selected_id);
+                                _project.has_unsaved_item_changes = true;
+                            }
+                        });
                     }
                 });
             } else {

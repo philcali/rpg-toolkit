@@ -311,6 +311,30 @@ fn build_project_file_for_save(project: &Project) -> ProjectFile {
         })
         .collect();
 
+    // Normalize item icon paths to relative
+    let mut items = project.items.clone();
+    for item in items.items.values_mut() {
+        if let Some(ref icon_path) = item.graphics.icon {
+            let name = std::path::Path::new(icon_path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown.png");
+            item.graphics.icon = Some(format!("data/{}", name));
+        }
+    }
+
+    // Normalize ability icon paths to relative
+    let mut abilities = project.abilities.clone();
+    for ability in abilities.abilities.values_mut() {
+        if let Some(ref icon_path) = ability.graphics.icon {
+            let name = std::path::Path::new(icon_path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown.png");
+            ability.graphics.icon = Some(format!("data/{}", name));
+        }
+    }
+
     ProjectFile::new(
         project.maps.clone(),
         tilesets_meta,
@@ -320,8 +344,8 @@ fn build_project_file_for_save(project: &Project) -> ProjectFile {
         project.dialog_texts.clone(),
         project.face_portraits.clone(),
         project.characters.clone(),
-        project.items.clone(),
-        project.abilities.clone(),
+        items,
+        abilities,
         project.enemies.clone(),
         project.shops.clone(),
     )
@@ -367,6 +391,44 @@ fn copy_assets_to_source_dir(project: &Project, target_dir: &std::path::Path) {
             && let Ok(data) = std::fs::read(current_path)
         {
             std::fs::write(&dest, data).ok();
+        }
+    }
+
+    // Copy item icon files
+    for item in project.items.items.values() {
+        if let Some(ref icon_path) = item.graphics.icon {
+            if icon_path.is_empty() {
+                continue;
+            }
+            let name = std::path::Path::new(icon_path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown.png");
+            let dest = data_dir.join(name);
+            if !dest.exists()
+                && let Ok(data) = std::fs::read(icon_path)
+            {
+                std::fs::write(&dest, data).ok();
+            }
+        }
+    }
+
+    // Copy ability icon files
+    for ability in project.abilities.abilities.values() {
+        if let Some(ref icon_path) = ability.graphics.icon {
+            if icon_path.is_empty() {
+                continue;
+            }
+            let name = std::path::Path::new(icon_path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown.png");
+            let dest = data_dir.join(name);
+            if !dest.exists()
+                && let Ok(data) = std::fs::read(icon_path)
+            {
+                std::fs::write(&dest, data).ok();
+            }
         }
     }
 }

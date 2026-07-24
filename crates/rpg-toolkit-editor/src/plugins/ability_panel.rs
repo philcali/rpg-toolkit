@@ -4,7 +4,9 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use rpg_toolkit_common::{AbilityCategory, AbilityId, AbilitySource, CostType, TargetType};
 
 use crate::data::AppEditorMode;
+use crate::data::EditorState;
 use crate::data::EditorUiSet;
+use crate::plugins::thumbnail::ThumbnailCache;
 
 /// Plugin that provides the Ability Editor panel UI.
 pub struct AbilityPanelPlugin;
@@ -106,6 +108,8 @@ fn ability_panel_ui(
     mut contexts: EguiContexts,
     mut panel_state: ResMut<AbilityPanelState>,
     mut _project: ResMut<crate::data::Project>,
+    mut thumbnail_cache: ResMut<ThumbnailCache>,
+    editor_state: Res<EditorState>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -566,6 +570,60 @@ fn ability_panel_ui(
                             panel_state.add_source_item_id_buffer.clear();
                             panel_state.add_source_error = None;
                         }
+                    }
+
+                    ui.separator();
+
+                    // --- Icon Section ---
+                    ui.heading("Icon");
+                    {
+                        let current_icon = _project
+                            .abilities
+                            .abilities
+                            .get(&selected_id)
+                            .and_then(|a| a.graphics.icon.clone());
+
+                        if current_icon.is_none() {
+                            ui.label("No icon assigned");
+                        } else if let Some(ref icon_path) = current_icon {
+                            // Render thumbnail preview
+                            if let Some(ref project_root) = editor_state.current_save_path {
+                                thumbnail_cache.render_thumbnail(ui, project_root, icon_path, 64);
+                            }
+                            // Show just the filename
+                            let display_name = std::path::Path::new(icon_path)
+                                .file_name()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or(icon_path);
+                            ui.label(display_name);
+                        }
+
+                        ui.horizontal(|ui| {
+                            // Browse... button
+                            if ui.button("Browse...").clicked() {
+                                let file = rfd::FileDialog::new()
+                                    .add_filter("Images", &["png", "jpg", "jpeg"])
+                                    .pick_file();
+
+                                if let Some(path) = file {
+                                    let path_str = path.display().to_string();
+                                    // Truncate to 260 characters
+                                    let truncated: String = path_str.chars().take(260).collect();
+
+                                    let _ = _project.abilities.set_icon(&selected_id, &truncated);
+                                    _project.has_unsaved_ability_changes = true;
+                                }
+                            }
+
+                            // Clear button
+                            if ui.button("Clear").clicked() {
+                                if let Some(ref old_icon) = current_icon {
+                                    thumbnail_cache.invalidate(old_icon);
+                                }
+                                let _ = _project.abilities.clear_icon(&selected_id);
+                                _project.has_unsaved_ability_changes = true;
+                            }
+                        });
                     }
                 });
             } else {

@@ -12,6 +12,7 @@ pub mod searchable_combobox;
 pub mod serialization;
 pub mod shop_panel;
 pub mod spritesheet;
+pub mod thumbnail;
 pub mod tile_palette;
 pub mod toolbar;
 pub mod undo_redo;

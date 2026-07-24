@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::CommonError;
+use crate::graphics::EntityGraphics;
 use crate::item::ItemId;
 
 pub type AbilityId = String;
@@ -51,6 +52,8 @@ pub struct Ability {
     pub power: u32,
     pub target_type: TargetType,
     pub sources: Vec<AbilitySource>,
+    #[serde(default)]
+    pub graphics: EntityGraphics,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,6 +121,7 @@ impl AbilityRegistry {
             power: 0,
             target_type: TargetType::SingleEnemy,
             sources: vec![],
+            graphics: EntityGraphics::default(),
         };
 
         self.abilities.insert(id.clone(), ability);
@@ -246,6 +250,23 @@ impl AbilityRegistry {
         Ok(())
     }
 
+    /// Sets the icon graphic for an ability via its EntityGraphics field.
+    pub fn set_icon(&mut self, id: &AbilityId, path: &str) -> Result<(), CommonError> {
+        let ability = self.abilities.get_mut(id).ok_or_else(|| {
+            CommonError::AbilityValidationError(format!("Ability with id '{}' not found", id))
+        })?;
+        ability.graphics.set_icon(path)
+    }
+
+    /// Clears the icon graphic for an ability.
+    pub fn clear_icon(&mut self, id: &AbilityId) -> Result<(), CommonError> {
+        let ability = self.abilities.get_mut(id).ok_or_else(|| {
+            CommonError::AbilityValidationError(format!("Ability with id '{}' not found", id))
+        })?;
+        ability.graphics.clear_icon();
+        Ok(())
+    }
+
     /// Returns abilities filtered by category (or all if None), sorted case-insensitively by display_name.
     pub fn filtered_abilities(&self, category: Option<AbilityCategory>) -> Vec<&Ability> {
         let mut results: Vec<&Ability> = self
@@ -364,6 +385,7 @@ mod tests {
                         power,
                         target_type,
                         sources,
+                        graphics: EntityGraphics::default(),
                     }
                 },
             )
@@ -392,5 +414,88 @@ mod tests {
                 .expect("deserialization should not fail for valid JSON");
             prop_assert_eq!(registry, deserialized);
         }
+    }
+
+    #[test]
+    fn test_set_icon_on_ability() {
+        let mut registry = AbilityRegistry::default();
+        let id = registry
+            .create_ability("Fireball", AbilityCategory::Spell)
+            .unwrap();
+        assert!(registry.set_icon(&id, "icons/fireball.png").is_ok());
+        let ability = registry.abilities.get(&id).unwrap();
+        assert_eq!(
+            ability.graphics.icon,
+            Some("icons/fireball.png".to_string())
+        );
+    }
+
+    #[test]
+    fn test_clear_icon_on_ability() {
+        let mut registry = AbilityRegistry::default();
+        let id = registry
+            .create_ability("Heal", AbilityCategory::Spell)
+            .unwrap();
+        registry.set_icon(&id, "icons/heal.png").unwrap();
+        assert!(registry.clear_icon(&id).is_ok());
+        let ability = registry.abilities.get(&id).unwrap();
+        assert!(ability.graphics.icon.is_none());
+    }
+
+    #[test]
+    fn test_set_icon_ability_not_found() {
+        let mut registry = AbilityRegistry::default();
+        let result = registry.set_icon(&"nonexistent-id".to_string(), "icons/spell.png");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("not found"),
+            "Expected not found error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_clear_icon_ability_not_found() {
+        let mut registry = AbilityRegistry::default();
+        let result = registry.clear_icon(&"nonexistent-id".to_string());
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("not found"),
+            "Expected not found error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_ability_backward_compat_serde_missing_graphics() {
+        // Simulate a JSON payload without the graphics field (pre-feature data)
+        let json = r#"{
+            "id": "test-ability-id",
+            "display_name": "Slash",
+            "description": "A basic attack",
+            "category": "Skill",
+            "cost_type": "MP",
+            "cost_value": 5,
+            "power": 10,
+            "target_type": "SingleEnemy",
+            "sources": []
+        }"#;
+        let ability: Ability =
+            serde_json::from_str(json).expect("should deserialize without graphics field");
+        assert_eq!(ability.graphics, EntityGraphics::default());
+        assert!(ability.graphics.icon.is_none());
+    }
+
+    #[test]
+    fn test_create_ability_initializes_default_graphics() {
+        let mut registry = AbilityRegistry::default();
+        let id = registry
+            .create_ability("Thunder", AbilityCategory::Spell)
+            .unwrap();
+        let ability = registry.abilities.get(&id).unwrap();
+        assert_eq!(ability.graphics, EntityGraphics::default());
+        assert!(!ability.graphics.has_icon());
     }
 }

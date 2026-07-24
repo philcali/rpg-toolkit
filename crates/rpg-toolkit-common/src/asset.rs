@@ -593,6 +593,50 @@ impl AssetManager {
     pub fn category_dirs(&self) -> &HashMap<AssetCategory, String> {
         &self.category_dirs
     }
+
+    /// Checks whether a path points to an existing regular file.
+    pub fn file_exists(path: &Path) -> bool {
+        path.is_file()
+    }
+
+    /// Loads raw bytes from a resolved absolute path.
+    ///
+    /// Returns an error if:
+    /// - The path does not exist
+    /// - The path is a directory
+    /// - The file cannot be read
+    pub fn load_file_bytes(path: &Path) -> Result<Vec<u8>, CommonError> {
+        if !path.exists() {
+            return Err(CommonError::AssetPathError(format!(
+                "file does not exist: {}",
+                path.display()
+            )));
+        }
+        if path.is_dir() {
+            return Err(CommonError::AssetPathError(format!(
+                "path is a directory, not a file: {}",
+                path.display()
+            )));
+        }
+        std::fs::read(path).map_err(|e| {
+            CommonError::AssetPathError(format!("failed to read file {}: {}", path.display(), e))
+        })
+    }
+
+    /// Convenience method: trims a relative path, resolves it against root,
+    /// validates the target is a regular file, and loads its bytes.
+    ///
+    /// Combines trim → resolve_path → file validation → read in one call.
+    pub fn resolve_and_load(root: &Path, relative_path: &str) -> Result<Vec<u8>, CommonError> {
+        let trimmed = relative_path.trim();
+        if trimmed.is_empty() {
+            return Err(CommonError::AssetPathError(
+                "file path is empty or whitespace-only".to_string(),
+            ));
+        }
+        let resolved = Self::resolve_path(root, trimmed)?;
+        Self::load_file_bytes(&resolved)
+    }
 }
 
 impl Default for AssetManager {
@@ -1957,5 +2001,117 @@ mod tests {
 
         // The asset file should NOT be in the archive
         assert!(archive.by_name("tilesets/ghost.png").is_err());
+    }
+
+    // --- AssetManager::file_exists tests ---
+
+    #[test]
+    fn test_file_exists_with_existing_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("test.txt");
+        std::fs::write(&file_path, b"hello").unwrap();
+        assert!(AssetManager::file_exists(&file_path));
+    }
+
+    #[test]
+    fn test_file_exists_with_missing_path() {
+        let path = Path::new("/tmp/nonexistent_file_12345.txt");
+        assert!(!AssetManager::file_exists(path));
+    }
+
+    #[test]
+    fn test_file_exists_with_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(!AssetManager::file_exists(tmp.path()));
+    }
+
+    // --- AssetManager::load_file_bytes tests ---
+
+    #[test]
+    fn test_load_file_bytes_valid_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("data.bin");
+        let content = b"binary content here";
+        std::fs::write(&file_path, content).unwrap();
+
+        let result = AssetManager::load_file_bytes(&file_path);
+        assert_eq!(result.unwrap(), content.to_vec());
+    }
+
+    #[test]
+    fn test_load_file_bytes_directory_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = AssetManager::load_file_bytes(tmp.path());
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, CommonError::AssetPathError(_)));
+        assert!(err.to_string().contains("directory"));
+    }
+
+    #[test]
+    fn test_load_file_bytes_missing_file() {
+        let path = Path::new("/tmp/nonexistent_load_test_12345.bin");
+        let result = AssetManager::load_file_bytes(path);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, CommonError::AssetPathError(_)));
+        assert!(err.to_string().contains("does not exist"));
+    }
+
+    // --- AssetManager::resolve_and_load tests ---
+
+    #[test]
+    fn test_resolve_and_load_valid_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let subdir = root.join("images");
+        std::fs::create_dir_all(&subdir).unwrap();
+        let file_path = subdir.join("icon.png");
+        let content = b"png bytes";
+        std::fs::write(&file_path, content).unwrap();
+
+        let result = AssetManager::resolve_and_load(root, "images/icon.png");
+        assert_eq!(result.unwrap(), content.to_vec());
+    }
+
+    #[test]
+    fn test_resolve_and_load_empty_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = AssetManager::resolve_and_load(tmp.path(), "");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, CommonError::AssetPathError(_)));
+        assert!(err.to_string().contains("empty or whitespace-only"));
+    }
+
+    #[test]
+    fn test_resolve_and_load_whitespace_only_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = AssetManager::resolve_and_load(tmp.path(), "   \t  ");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, CommonError::AssetPathError(_)));
+        assert!(err.to_string().contains("empty or whitespace-only"));
+    }
+
+    #[test]
+    fn test_resolve_and_load_trims_whitespace() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let file_path = root.join("hello.txt");
+        std::fs::write(&file_path, b"world").unwrap();
+
+        // Path with leading/trailing whitespace should still resolve
+        let result = AssetManager::resolve_and_load(root, "  hello.txt  ");
+        assert_eq!(result.unwrap(), b"world".to_vec());
+    }
+
+    #[test]
+    fn test_resolve_and_load_path_traversal_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = AssetManager::resolve_and_load(tmp.path(), "../etc/passwd");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, CommonError::AssetPathError(_)));
     }
 }

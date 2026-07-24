@@ -7,6 +7,7 @@ pub mod condition;
 pub mod element;
 pub mod enemy;
 pub mod error;
+pub mod graphics;
 pub mod item;
 pub mod manifest;
 pub mod map;
@@ -40,6 +41,7 @@ pub use enemy::{
     ItemDrop,
 };
 pub use error::CommonError;
+pub use graphics::EntityGraphics;
 pub use item::{
     BuffTargetStat, ConsumableEffect, ConsumableEffectType, CureTargetStatus, EquipmentSlot, Item,
     ItemCategory, ItemCategoryData, ItemId, ItemRegistry, Rarity, StatModifier,

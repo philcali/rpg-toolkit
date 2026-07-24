@@ -86,6 +86,7 @@ fn project_data_with_item(id: &str, stackable: bool, stack_limit: u32) -> Render
         stack_limit,
         stat_modifiers: Vec::new(),
         granted_abilities: Vec::new(),
+        graphics: Default::default(),
     };
     data.project_file.items.items.insert(id.to_string(), item);
     data
@@ -104,6 +105,7 @@ fn project_data_with_ability(ability_id: &str) -> RendererProjectData {
         power: 0,
         target_type: TargetType::SelfTarget,
         sources: vec![AbilitySource::LevelUp { required_level: 1 }],
+        graphics: Default::default(),
     };
     data.project_file
         .abilities

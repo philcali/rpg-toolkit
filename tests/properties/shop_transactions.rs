@@ -188,6 +188,7 @@ fn make_test_item(id: &str, value: u32, category_data: ItemCategoryData) -> Item
         stack_limit: 99,
         stat_modifiers: vec![],
         granted_abilities: vec![],
+        graphics: Default::default(),
     }
 }
 

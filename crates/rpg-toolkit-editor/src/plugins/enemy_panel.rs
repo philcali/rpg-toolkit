@@ -3,9 +3,9 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use rpg_toolkit_common::{AbilityCategory, Element, EnemyId};
 
-use crate::data::AppEditorMode;
-use crate::data::EditorUiSet;
+use crate::data::{AppEditorMode, EditorState, EditorUiSet};
 use crate::plugins::searchable_combobox::searchable_combobox;
+use crate::plugins::thumbnail::ThumbnailCache;
 
 /// Plugin that provides the Enemy Editor panel UI.
 pub struct EnemyPanelPlugin;
@@ -73,6 +73,8 @@ fn enemy_panel_ui(
     mut contexts: EguiContexts,
     mut panel_state: ResMut<EnemyPanelState>,
     mut _project: ResMut<crate::data::Project>,
+    mut thumbnail_cache: ResMut<ThumbnailCache>,
+    editor_state: Res<EditorState>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -302,6 +304,15 @@ fn enemy_panel_ui(
                                                 .to_string(),
                                         );
                                         } else {
+                                            // Invalidate old portrait cache entry
+                                            let old_portrait = _project
+                                                .enemies
+                                                .enemies
+                                                .get(&selected_id)
+                                                .and_then(|e| e.portrait.clone());
+                                            if let Some(ref old_path) = old_portrait {
+                                                thumbnail_cache.invalidate(old_path);
+                                            }
                                             match _project
                                                 .enemies
                                                 .set_portrait(&selected_id, &trimmed)
@@ -341,6 +352,15 @@ fn enemy_panel_ui(
                                         .to_string(),
                                 );
                             } else {
+                                // Invalidate old portrait cache entry
+                                let old_portrait = _project
+                                    .enemies
+                                    .enemies
+                                    .get(&selected_id)
+                                    .and_then(|e| e.portrait.clone());
+                                if let Some(ref old_path) = old_portrait {
+                                    thumbnail_cache.invalidate(old_path);
+                                }
                                 match _project.enemies.set_portrait(&selected_id, &trimmed) {
                                     Ok(()) => {
                                         panel_state.portrait_error = None;
@@ -361,10 +381,31 @@ fn enemy_panel_ui(
 
                         // Clear button
                         if ui.button("Clear").clicked() {
+                            // Invalidate old portrait cache entry
+                            let old_portrait = _project
+                                .enemies
+                                .enemies
+                                .get(&selected_id)
+                                .and_then(|e| e.portrait.clone());
+                            if let Some(ref old_path) = old_portrait {
+                                thumbnail_cache.invalidate(old_path);
+                            }
                             let _ = _project.enemies.clear_portrait(&selected_id);
                             panel_state.portrait_buffer.clear();
                             panel_state.portrait_error = None;
                             _project.has_unsaved_enemy_changes = true;
+                        }
+
+                        // Thumbnail preview
+                        let current_portrait = _project
+                            .enemies
+                            .enemies
+                            .get(&selected_id)
+                            .and_then(|e| e.portrait.clone());
+                        if let Some(ref portrait_path) = current_portrait
+                            && let Some(ref project_root) = editor_state.current_save_path
+                        {
+                            thumbnail_cache.render_thumbnail(ui, project_root, portrait_path, 64);
                         }
                     }
 
