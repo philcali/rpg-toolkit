@@ -1,4 +1,9 @@
 use bevy::prelude::*;
+use rpg_toolkit_common::AppPhase;
+
+use crate::dialog::DialogState;
+use crate::resources::ActionQueue;
+use crate::systems::selection::SelectionState;
 
 /// Cardinal movement direction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,4 +33,28 @@ pub fn read_input(keyboard: Res<ButtonInput<KeyCode>>, mut intent: ResMut<Moveme
     } else {
         None
     };
+}
+
+/// Opens the status screen when the player presses Escape during free gameplay.
+/// Does nothing if a dialog, selection, or action queue is currently active.
+pub fn open_status_on_escape(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut next_phase: ResMut<NextState<AppPhase>>,
+    dialog_state: Option<Res<DialogState>>,
+    selection_state: Option<Res<SelectionState>>,
+    action_queue: Option<Res<ActionQueue>>,
+) {
+    // Don't open status if a dialog or selection is active
+    if dialog_state.is_some() || selection_state.is_some() {
+        return;
+    }
+
+    // Don't open status if an action queue is being processed
+    if action_queue.is_some() {
+        return;
+    }
+
+    if keyboard.just_pressed(KeyCode::Escape) {
+        next_phase.set(AppPhase::Status);
+    }
 }
