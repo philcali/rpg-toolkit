@@ -7,8 +7,9 @@ use rpg_toolkit_renderer::{
     RendererProjectData, SavePath,
 };
 use rpg_toolkit_scenes::{
-    CharacterProgressState, CurrencyState, GameState, InventoryState, ItemRegistryRes, PartyState,
-    RendererState, ShopRegistryRes, ShopScenePlugin, TitleScreenConfig, TitleScreenPlugin,
+    AbilityRegistryRes, CharacterProgressState, CharacterRegistryRes, CurrencyState, GameState,
+    InventoryState, ItemRegistryRes, PartyState, RendererState, ShopRegistryRes, ShopScenePlugin,
+    StatusScenePlugin, TitleScreenConfig, TitleScreenPlugin,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -277,6 +278,7 @@ fn main() {
     .add_systems(PreStartup, load_project_resources)
     .add_plugins(TitleScreenPlugin)
     .add_plugins(ShopScenePlugin)
+    .add_plugins(StatusScenePlugin)
     .add_plugins(ProjectRendererPlugin)
     .run();
 }
@@ -326,6 +328,14 @@ fn load_project_resources(
 
     commands.insert_resource(ItemRegistryRes {
         registry: pending.project_file.items.clone(),
+    });
+
+    commands.insert_resource(CharacterRegistryRes {
+        registry: pending.project_file.characters.clone(),
+    });
+
+    commands.insert_resource(AbilityRegistryRes {
+        registry: pending.project_file.abilities.clone(),
     });
 
     commands.insert_resource(DialogTextRegistry::from_map(

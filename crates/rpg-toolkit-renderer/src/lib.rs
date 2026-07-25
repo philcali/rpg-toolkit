@@ -16,7 +16,7 @@ pub use components::{
     NpcSpriteState, PlayerCharacter, PlayerSpriteState, RendererTileSprite,
 };
 pub use events::{MapChanged, PlayerMoved, ShowDialog};
-pub use input::{Direction, MovementIntent, read_input};
+pub use input::{Direction, MovementIntent, open_status_on_escape, read_input};
 pub use resources::{
     ActionQueue, ActiveShopId, AnimationConfig, CharacterProgress, CharacterProgressState,
     CurrencyState, FadeState, GameState, InteractionIntent, InventoryState, MovementConfig,
@@ -139,6 +139,7 @@ impl Plugin for ProjectRendererPlugin {
                     handle_selection_input
                         .after(read_input)
                         .before(player_movement),
+                    open_status_on_escape.after(read_input),
                 )
                     .run_if(in_state(AppPhase::InGame)),
             );
