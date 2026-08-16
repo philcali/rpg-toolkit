@@ -113,7 +113,7 @@ This plan implements a unified asset management layer in `rpg-toolkit-common` th
     - **Property 9: Path normalization**
     - **Validates: Requirements 4.3**
 
-- [~] 6. Checkpoint - Ensure all tests pass
+- [ ] 6. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 7. Implement round-trip property tests
@@ -147,19 +147,19 @@ This plan implements a unified asset management layer in `rpg-toolkit-common` th
     - _Requirements: 5.2, 5.4, 5.6_
 
 - [x] 9. Integrate AssetManager into the Launcher
-  - [~] 9.1 Refactor `crates/rpg-toolkit-launcher/src/main.rs` to use `AssetManager`
+  - [ ] 9.1 Refactor `crates/rpg-toolkit-launcher/src/main.rs` to use `AssetManager`
     - Replace the local `ProjectSource` enum and `detect_project_source` function with `AssetManager::detect_source`
     - Replace `load_from_dir` and `load_from_zip` with calls to `AssetManager::load_project`
     - Remove `load_from_legacy_json` function entirely
     - _Requirements: 2.3, 3.2, 3.3, 3.5_
 
-  - [~] 9.2 Remove legacy JSON support from the Launcher
+  - [ ] 9.2 Remove legacy JSON support from the Launcher
     - Remove `LegacyJson` variant handling from `main()`
     - When a `.json` path is provided, print error to stderr: "Error: legacy JSON format is no longer supported. Please convert your project to directory or .rpg ZIP format."
     - Exit with non-zero exit code (1)
     - _Requirements: 5.3, 5.5_
 
-- [~] 10. Final checkpoint - Ensure all tests pass
+- [ ] 10. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

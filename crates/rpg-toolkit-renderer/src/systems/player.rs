@@ -5,8 +5,8 @@ use crate::dialog::DialogState;
 use crate::events::PlayerMoved;
 use crate::input::{Direction, MovementIntent};
 use crate::resources::{
-    MovementConfig, NpcCollisionEvent, NpcPositions, PlayerVisual, RendererProjectData,
-    RendererState,
+    IntroEventsActive, MovementConfig, NpcCollisionEvent, NpcPositions, PlayerVisual,
+    RendererProjectData, RendererState,
 };
 use crate::systems::collision::is_tile_blocked;
 use crate::systems::selection::SelectionState;
@@ -133,6 +133,7 @@ pub fn spawn_player(
 #[allow(clippy::too_many_arguments)]
 pub fn player_movement(
     intent: Res<MovementIntent>,
+    intro_active: Option<Res<IntroEventsActive>>,
     dialog_state: Option<Res<DialogState>>,
     selection_state: Option<Res<SelectionState>>,
     project_data: Res<RendererProjectData>,
@@ -144,6 +145,11 @@ pub fn player_movement(
 ) {
     // Reset collision event each frame
     collision_event.npc_index = None;
+
+    // Block movement while intro events are playing
+    if intro_active.is_some() {
+        return;
+    }
 
     // Block movement if a selection prompt is active
     if selection_state.is_some() {

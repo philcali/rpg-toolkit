@@ -253,6 +253,8 @@ fn apply_loaded_project(
         has_unsaved_enemy_changes: false,
         shops: project_file.shops.clone(),
         has_unsaved_shop_changes: false,
+        intro_events: project_file.intro_events.clone(),
+        has_unsaved_intro_events_changes: false,
     };
 
     **text_id_index = rebuild_text_id_index(&project.maps);
@@ -335,7 +337,7 @@ fn build_project_file_for_save(project: &Project) -> ProjectFile {
         }
     }
 
-    ProjectFile::new(
+    let mut project_file = ProjectFile::new(
         project.maps.clone(),
         tilesets_meta,
         project.spawn_point.clone(),
@@ -348,7 +350,9 @@ fn build_project_file_for_save(project: &Project) -> ProjectFile {
         abilities,
         project.enemies.clone(),
         project.shops.clone(),
-    )
+    );
+    project_file.intro_events = project.intro_events.clone();
+    project_file
 }
 
 /// Copy asset files from their current (possibly absolute) paths to the proper

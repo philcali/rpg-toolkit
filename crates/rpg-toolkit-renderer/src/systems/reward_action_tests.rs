@@ -13,7 +13,7 @@ use std::collections::{HashMap, VecDeque};
 use crate::events::{MapChanged, PlayerMoved, ShowDialog};
 use crate::resources::{
     ActionQueue, CharacterProgress, CharacterProgressState, CurrencyState, GameState,
-    InventoryState, PartyState, RendererProjectData, RendererState, WaitingFor,
+    InventoryState, NpcPositions, PartyState, RendererProjectData, RendererState, WaitingFor,
 };
 use crate::systems::triggers::advance_action_queue;
 
@@ -40,6 +40,7 @@ fn test_app() -> App {
     app.init_resource::<InventoryState>();
     app.init_resource::<CharacterProgressState>();
     app.init_resource::<PartyState>();
+    app.init_resource::<NpcPositions>();
 
     // Add the system under test
     app.add_systems(Update, advance_action_queue);

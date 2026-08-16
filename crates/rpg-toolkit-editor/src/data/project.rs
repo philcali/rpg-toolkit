@@ -6,8 +6,8 @@ use bevy::prelude::*;
 pub use rpg_toolkit_common::ProjectFile;
 
 use rpg_toolkit_common::{
-    AbilityRegistry, CharacterRegistry, CharacterSpritesheet, EnemyRegistry, ItemRegistry, MapData,
-    MapId, ShopRegistry, SpawnPoint, SpritesheetId, TilesetId,
+    AbilityRegistry, CharacterRegistry, CharacterSpritesheet, EnemyRegistry, EventAction,
+    ItemRegistry, MapData, MapId, ShopRegistry, SpawnPoint, SpritesheetId, TilesetId,
 };
 
 use super::state::EditorError;
@@ -50,6 +50,10 @@ pub struct Project {
     pub shops: ShopRegistry,
     /// Whether shop data has been modified since the last save.
     pub has_unsaved_shop_changes: bool,
+    /// Intro events: actions to execute when a new game starts.
+    pub intro_events: Option<Vec<EventAction>>,
+    /// Whether intro events data has been modified since the last save.
+    pub has_unsaved_intro_events_changes: bool,
 }
 
 impl Project {

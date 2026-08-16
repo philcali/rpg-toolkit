@@ -1,8 +1,14 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use rpg_toolkit_common::EntityTarget;
 
-use crate::components::{GameCamera, PlayerCharacter};
-use crate::resources::{PixelScaleConfig, PixelScaleMode, RendererProjectData, RendererState};
+use crate::components::{GameCamera, NpcSprite, NpcSpriteState, PlayerCharacter};
+use crate::resources::{
+    CameraFollowTarget, CameraPanState, PixelScaleConfig, PixelScaleMode, RendererProjectData,
+    RendererState,
+};
+
+use super::player::grid_to_world;
 
 /// Startup system: spawns a 2D camera with the `GameCamera` marker.
 pub fn spawn_camera(mut commands: Commands) {
@@ -61,23 +67,33 @@ pub fn apply_pixel_scale(
     }
 }
 
-/// Update system: follows the player character and clamps to map bounds
-/// so the viewport doesn't show areas outside the map.
+/// Update system: positions the camera based on priority:
+/// 1. CameraPanState active → skip (pan system handles positioning)
+/// 2. CameraFollowTarget exists → track that entity
+/// 3. Default → follow the player character
+///
+/// Clamps the camera to map bounds so the viewport doesn't show areas outside the map.
+#[allow(clippy::too_many_arguments)]
 pub fn update_camera(
     project_data: Res<RendererProjectData>,
     renderer_state: Res<RendererState>,
     pixel_scale: Res<PixelScaleConfig>,
+    pan_state: Option<Res<CameraPanState>>,
+    follow_target: Option<Res<CameraFollowTarget>>,
     player_query: Query<&Transform, (With<PlayerCharacter>, Without<GameCamera>)>,
+    npc_query: Query<(&NpcSprite, &NpcSpriteState)>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut camera_query: Query<&mut Transform, (With<GameCamera>, Without<PlayerCharacter>)>,
 ) {
+    // Priority 1: If CameraPanState exists, the pan system handles camera positioning.
+    if pan_state.is_some() {
+        return;
+    }
+
     let Some(map_id) = &renderer_state.active_map_id else {
         return;
     };
     let Some(map) = project_data.project_file.maps.get(map_id) else {
-        return;
-    };
-    let Ok(player_tf) = player_query.single() else {
         return;
     };
     let Ok(mut cam_tf) = camera_query.single_mut() else {
@@ -87,15 +103,66 @@ pub fn update_camera(
         return;
     };
 
+    // Determine the focus position based on follow target priority.
+    let focus_pos = if let Some(ref target_res) = follow_target {
+        match &target_res.target {
+            EntityTarget::Player => {
+                // Follow the player transform
+                let Ok(player_tf) = player_query.single() else {
+                    return;
+                };
+                Vec2::new(player_tf.translation.x, player_tf.translation.y)
+            }
+            EntityTarget::Npc { npc_id } => {
+                // Find the NPC by matching npc_index against map.npcs[i].spritesheet_id
+                let mut found = None;
+                for (npc_sprite, npc_state) in npc_query.iter() {
+                    if let Some(npc_instance) = map.npcs.get(npc_sprite.npc_index)
+                        && npc_instance.spritesheet_id == *npc_id
+                    {
+                        // Use the NPC's grid position converted to world coords
+                        found = Some(grid_to_world(
+                            npc_state.grid_x,
+                            npc_state.grid_y,
+                            map.tile_width,
+                            map.tile_height,
+                        ));
+                        break;
+                    }
+                }
+                match found {
+                    Some(pos) => pos,
+                    None => {
+                        // NPC not found — log warning and fall back to player tracking
+                        warn!(
+                            "CameraFollowTarget references NPC '{}' which was not found on the current map",
+                            npc_id
+                        );
+                        let Ok(player_tf) = player_query.single() else {
+                            return;
+                        };
+                        Vec2::new(player_tf.translation.x, player_tf.translation.y)
+                    }
+                }
+            }
+        }
+    } else {
+        // Priority 3: Default — follow the player
+        let Ok(player_tf) = player_query.single() else {
+            return;
+        };
+        Vec2::new(player_tf.translation.x, player_tf.translation.y)
+    };
+
+    // Apply map bounds clamping
     let scale = pixel_scale.effective_scale as f32;
     let map_pixel_w = map.width as f32 * map.tile_width as f32;
     let map_pixel_h = map.height as f32 * map.tile_height as f32;
     let half_vp_w = window.width() / scale / 2.0;
     let half_vp_h = window.height() / scale / 2.0;
 
-    // Start at the player's position
-    let mut cam_x = player_tf.translation.x;
-    let mut cam_y = player_tf.translation.y;
+    let mut cam_x = focus_pos.x;
+    let mut cam_y = focus_pos.y;
 
     // Map spans x: [0, map_pixel_w], y: [-map_pixel_h, 0]
     if map_pixel_w <= window.width() / scale {

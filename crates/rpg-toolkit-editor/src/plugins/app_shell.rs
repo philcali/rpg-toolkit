@@ -224,6 +224,16 @@ fn app_shell_ui(
                     *app_editor_mode = AppEditorMode::Shop;
                     ui.close();
                 }
+                if ui
+                    .selectable_label(
+                        *app_editor_mode == AppEditorMode::ProjectSettings,
+                        "⚙ Project Settings",
+                    )
+                    .clicked()
+                {
+                    *app_editor_mode = AppEditorMode::ProjectSettings;
+                    ui.close();
+                }
             });
         });
     });

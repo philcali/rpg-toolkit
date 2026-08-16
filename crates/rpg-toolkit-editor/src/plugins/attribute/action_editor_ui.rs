@@ -178,6 +178,40 @@ pub fn render_action_editor(
                 EventAction::OpenShop { shop_id } => {
                     format!("{}. OpenShop — {}", i + 1, shop_id)
                 }
+                EventAction::MoveEntity {
+                    target,
+                    target_x,
+                    target_y,
+                    speed,
+                } => {
+                    format!(
+                        "{}. MoveEntity — {:?} → ({}, {}) @{}",
+                        i + 1,
+                        target,
+                        target_x,
+                        target_y,
+                        speed
+                    )
+                }
+                EventAction::CameraFollow { target } => {
+                    format!("{}. CameraFollow — {:?}", i + 1, target)
+                }
+                EventAction::CameraPan {
+                    target_x,
+                    target_y,
+                    duration,
+                } => {
+                    format!(
+                        "{}. CameraPan → ({}, {}) over {}s",
+                        i + 1,
+                        target_x,
+                        target_y,
+                        duration
+                    )
+                }
+                EventAction::Wait { duration } => {
+                    format!("{}. Wait — {}s", i + 1, duration)
+                }
             };
             if is_being_edited {
                 ui.label(
@@ -269,6 +303,10 @@ pub fn render_action_editor(
             ActionType::SaveGame => "SaveGame",
             ActionType::ChangePhase => "ChangePhase",
             ActionType::OpenShop => "OpenShop",
+            ActionType::MoveEntity => "MoveEntity",
+            ActionType::CameraFollow => "CameraFollow",
+            ActionType::CameraPan => "CameraPan",
+            ActionType::Wait => "Wait",
         };
         egui::ComboBox::from_id_salt(format!("{}_action_type", id_salt))
             .selected_text(action_type_text)
@@ -369,6 +407,23 @@ pub fn render_action_editor(
                 } else if response.clicked() {
                     editor_state.action_type = ActionType::OpenShop;
                 }
+                // Cinematic action types
+                ui.selectable_value(
+                    &mut editor_state.action_type,
+                    ActionType::MoveEntity,
+                    "MoveEntity",
+                );
+                ui.selectable_value(
+                    &mut editor_state.action_type,
+                    ActionType::CameraFollow,
+                    "CameraFollow",
+                );
+                ui.selectable_value(
+                    &mut editor_state.action_type,
+                    ActionType::CameraPan,
+                    "CameraPan",
+                );
+                ui.selectable_value(&mut editor_state.action_type, ActionType::Wait, "Wait");
             });
     });
 
@@ -569,6 +624,18 @@ pub fn render_action_editor(
                 }
                 editor_state.reset();
             }
+        }
+        ActionType::MoveEntity => {
+            action_editor_forms::render_move_entity_form(ui, actions, editor_state, id_salt);
+        }
+        ActionType::CameraFollow => {
+            action_editor_forms::render_camera_follow_form(ui, actions, editor_state, id_salt);
+        }
+        ActionType::CameraPan => {
+            action_editor_forms::render_camera_pan_form(ui, actions, editor_state, id_salt);
+        }
+        ActionType::Wait => {
+            action_editor_forms::render_wait_form(ui, actions, editor_state, id_salt);
         }
     }
 

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rpg_toolkit_common::{
-    AppPhase, DialogTextData, EventAction, FadeType, PlayerAppearance, ScreenShakeMode,
-    TransferDirection,
+    AppPhase, DialogTextData, EntityTarget, EventAction, FadeType, NewGameFlag, PlayerAppearance,
+    ScreenShakeMode, TransferDirection,
 };
 use std::collections::VecDeque;
 
@@ -14,8 +14,10 @@ use crate::effects::{
 };
 use crate::events::{MapChanged, PlayerMoved, ShowDialog};
 use crate::resources::{
-    ActionQueue, CharacterProgressState, CurrencyState, FadeState, GameState, InventoryState,
-    PartyState, RendererProjectData, RendererState, SavePath, ScreenShakeState, WaitingFor,
+    ActionQueue, CameraFollowTarget, CameraPanState, CharacterProgressState, CurrencyState,
+    EntityMoveState, FadeState, GameState, IntroEventsActive, InventoryState, NpcPositions,
+    PartyState, RendererProjectData, RendererState, SavePath, ScreenShakeState, WaitState,
+    WaitingFor,
 };
 use crate::systems::player::grid_to_world;
 use crate::systems::selection::{ResolvedChoice, SelectionState};
@@ -143,6 +145,7 @@ pub fn advance_action_queue(
         Res<State<AppPhase>>,
         ResMut<NextState<AppPhase>>,
         Query<Entity, With<FadeOverlay>>,
+        Res<NpcPositions>,
     ),
 ) {
     // Destructure reward state tuple for convenient access
@@ -154,8 +157,14 @@ pub fn advance_action_queue(
     ) = reward_state;
 
     // Destructure save/phase state tuple
-    let (save_path_res, player_pos_query, app_phase_state, mut next_app_phase, fade_overlay_query) =
-        save_phase_state;
+    let (
+        save_path_res,
+        player_pos_query,
+        app_phase_state,
+        mut next_app_phase,
+        fade_overlay_query,
+        npc_positions,
+    ) = save_phase_state;
 
     let Some(mut queue) = action_queue else {
         return;
@@ -192,6 +201,12 @@ pub fn advance_action_queue(
             queue.waiting_for = WaitingFor::Nothing;
             queue.actions.pop_front();
         }
+        WaitingFor::EntityMove | WaitingFor::CameraPan | WaitingFor::Wait => {
+            // These blocking states are resolved by their respective systems
+            // (entity_move_system, camera_pan_system, wait_system) which reset
+            // waiting_for to Nothing and pop the action when complete.
+            return;
+        }
         WaitingFor::Nothing => {}
     }
 
@@ -199,6 +214,7 @@ pub fn advance_action_queue(
     'action_loop: loop {
         if queue.actions.is_empty() {
             commands.remove_resource::<ActionQueue>();
+            commands.remove_resource::<IntroEventsActive>();
             return;
         }
 
@@ -912,6 +928,157 @@ pub fn advance_action_queue(
                 queue.actions.pop_front();
                 return; // Stop processing this frame
             }
+            // CameraFollow: non-blocking — immediately switch camera target
+            EventAction::CameraFollow { target } => {
+                commands.insert_resource(CameraFollowTarget {
+                    target: target.clone(),
+                });
+                commands.remove_resource::<CameraPanState>();
+                queue.actions.pop_front();
+                continue;
+            }
+            // CameraPan: blocking — record start, insert state, wait for pan system
+            EventAction::CameraPan {
+                target_x,
+                target_y,
+                duration,
+            } => {
+                let Some(ref pd) = project_data else {
+                    queue.actions.pop_front();
+                    continue;
+                };
+                let Some(map_id) = &renderer_state.active_map_id else {
+                    queue.actions.pop_front();
+                    continue;
+                };
+                let Some(map) = pd.project_file.maps.get(map_id) else {
+                    queue.actions.pop_front();
+                    continue;
+                };
+
+                // Clamp target to map bounds, warn if out of bounds
+                let clamped_x = if target_x >= map.width {
+                    warn!(
+                        "CameraPan target_x {} exceeds map width {}; clamping",
+                        target_x, map.width
+                    );
+                    map.width.saturating_sub(1)
+                } else {
+                    target_x
+                };
+                let clamped_y = if target_y >= map.height {
+                    warn!(
+                        "CameraPan target_y {} exceeds map height {}; clamping",
+                        target_y, map.height
+                    );
+                    map.height.saturating_sub(1)
+                } else {
+                    target_y
+                };
+
+                // Convert grid target to world coordinates
+                let tw = map.tile_width as f32;
+                let th = map.tile_height as f32;
+                let world_target_x = clamped_x as f32 * tw + tw / 2.0;
+                let world_target_y = -(clamped_y as f32 * th + th / 2.0);
+
+                // Record current camera position as start
+                let (start_x, start_y) = if let Ok(cam_tf) = camera_query.single() {
+                    (cam_tf.translation.x, cam_tf.translation.y)
+                } else {
+                    (world_target_x, world_target_y)
+                };
+
+                commands.insert_resource(CameraPanState {
+                    start_x,
+                    start_y,
+                    target_x: world_target_x,
+                    target_y: world_target_y,
+                    duration,
+                    elapsed: 0.0,
+                });
+                // Remove CameraFollowTarget so pan is not overridden by follow logic
+                commands.remove_resource::<CameraFollowTarget>();
+                queue.waiting_for = WaitingFor::CameraPan;
+                return;
+            }
+            // Wait action: insert WaitState resource and block until wait_system completes
+            EventAction::Wait { duration } => {
+                if duration <= 0.0 {
+                    queue.actions.pop_front();
+                    continue;
+                }
+                commands.insert_resource(WaitState {
+                    duration,
+                    elapsed: 0.0,
+                });
+                queue.waiting_for = WaitingFor::Wait;
+                return;
+            }
+            // MoveEntity: find entity, insert EntityMoveState, block on WaitingFor::EntityMove
+            EventAction::MoveEntity {
+                target,
+                target_x,
+                target_y,
+                speed,
+            } => {
+                let Some(ref pd) = project_data else {
+                    queue.actions.pop_front();
+                    continue;
+                };
+                let Some(map_id) = &renderer_state.active_map_id else {
+                    queue.actions.pop_front();
+                    continue;
+                };
+                let Some(map) = pd.project_file.maps.get(map_id) else {
+                    queue.actions.pop_front();
+                    continue;
+                };
+
+                // Determine the entity's current grid position
+                let grid_pos: Option<(u32, u32)> = match &target {
+                    EntityTarget::Player => player_pos_query
+                        .single()
+                        .ok()
+                        .map(|pc| (pc.grid_x, pc.grid_y)),
+                    EntityTarget::Npc { npc_id } => {
+                        // Find the NPC by matching npc_id against spritesheet_id
+                        let npc_index = map
+                            .npcs
+                            .iter()
+                            .position(|npc| &npc.spritesheet_id == npc_id);
+                        match npc_index {
+                            Some(idx) => npc_positions.positions.get(idx).map(|&(x, y, _)| (x, y)),
+                            None => {
+                                warn!(
+                                    "MoveEntity: NPC with spritesheet_id '{}' not found on map; skipping action",
+                                    npc_id
+                                );
+                                queue.actions.pop_front();
+                                continue;
+                            }
+                        }
+                    }
+                };
+
+                let Some((grid_x, grid_y)) = grid_pos else {
+                    warn!("MoveEntity: could not determine entity position; skipping action");
+                    queue.actions.pop_front();
+                    continue;
+                };
+
+                commands.insert_resource(EntityMoveState {
+                    target,
+                    target_x,
+                    target_y,
+                    speed,
+                    current_x: grid_x as f32,
+                    current_y: grid_y as f32,
+                    complete: false,
+                });
+                queue.waiting_for = WaitingFor::EntityMove;
+                return;
+            }
         }
     }
 }
@@ -1235,4 +1402,115 @@ pub fn fade_system(
             }
         }
     }
+}
+
+/// Runs each frame while `CameraPanState` is present.
+/// Increments elapsed time, interpolates camera position (linear lerp),
+/// and handles completion by removing state and unblocking the queue.
+pub fn camera_pan_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut pan_state: Option<ResMut<CameraPanState>>,
+    mut action_queue: Option<ResMut<ActionQueue>>,
+    mut camera_query: Query<&mut Transform, With<GameCamera>>,
+) {
+    let Some(ref mut state) = pan_state else {
+        return;
+    };
+
+    state.elapsed += time.delta_secs();
+
+    // Compute interpolation factor (clamped 0..1)
+    let t = (state.elapsed / state.duration).clamp(0.0, 1.0);
+
+    // Linear interpolation from start to target
+    let cam_x = state.start_x + (state.target_x - state.start_x) * t;
+    let cam_y = state.start_y + (state.target_y - state.start_y) * t;
+
+    // Apply interpolated position to camera
+    if let Ok(mut cam_tf) = camera_query.single_mut() {
+        cam_tf.translation.x = cam_x;
+        cam_tf.translation.y = cam_y;
+    }
+
+    // Check if pan is complete
+    if state.elapsed >= state.duration {
+        // Snap to final position
+        if let Ok(mut cam_tf) = camera_query.single_mut() {
+            cam_tf.translation.x = state.target_x;
+            cam_tf.translation.y = state.target_y;
+        }
+
+        // Remove pan state
+        commands.remove_resource::<CameraPanState>();
+
+        // Unblock the action queue
+        if let Some(ref mut queue) = action_queue {
+            queue.waiting_for = WaitingFor::Nothing;
+            queue.actions.pop_front();
+        }
+    }
+}
+
+/// Runs each frame while `WaitState` is present and `WaitingFor::Wait` is active.
+/// Increments elapsed time and handles completion by removing state and unblocking the queue.
+pub fn wait_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut wait_state: Option<ResMut<WaitState>>,
+    mut action_queue: Option<ResMut<ActionQueue>>,
+) {
+    let Some(ref mut state) = wait_state else {
+        return;
+    };
+    let Some(ref mut queue) = action_queue else {
+        return;
+    };
+
+    if queue.waiting_for != WaitingFor::Wait {
+        return;
+    }
+
+    state.elapsed += time.delta_secs();
+
+    if state.elapsed >= state.duration {
+        commands.remove_resource::<WaitState>();
+        queue.waiting_for = WaitingFor::Nothing;
+        queue.actions.pop_front();
+    }
+}
+
+/// Fires once when a new game starts: populates the ActionQueue with intro_events
+/// from the project manifest if present and non-empty, then removes the NewGameFlag.
+/// If intro_events is None or empty, simply removes NewGameFlag without inserting a queue.
+pub fn trigger_intro_events(
+    mut commands: Commands,
+    project_data: Res<RendererProjectData>,
+    new_game_flag: Option<Res<NewGameFlag>>,
+    action_queue: Option<Res<ActionQueue>>,
+) {
+    // Only fire when NewGameFlag is present
+    let Some(_) = new_game_flag else {
+        return;
+    };
+
+    // Don't override an existing action queue
+    if action_queue.is_some() {
+        commands.remove_resource::<NewGameFlag>();
+        return;
+    }
+
+    // Check for intro_events on the project file
+    if let Some(ref events) = project_data.project_file.intro_events
+        && !events.is_empty()
+    {
+        commands.insert_resource(ActionQueue {
+            actions: VecDeque::from(events.clone()),
+            waiting_for: WaitingFor::Nothing,
+        });
+        commands.insert_resource(IntroEventsActive);
+    }
+
+    // Always remove NewGameFlag
+    commands.remove_resource::<NewGameFlag>();
 }

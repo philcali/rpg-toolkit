@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use rpg_toolkit_common::AppPhase;
+pub use rpg_toolkit_common::NewGameFlag;
 
 pub mod components;
 pub mod dialog;
@@ -16,16 +17,18 @@ pub use components::{
     NpcSpriteState, PlayerCharacter, PlayerSpriteState, RendererTileSprite,
 };
 pub use events::{MapChanged, PlayerMoved, ShowDialog};
-pub use input::{Direction, MovementIntent, open_status_on_escape, read_input};
+pub use input::{Direction, MovementIntent, handle_intro_skip, open_status_on_escape, read_input};
 pub use resources::{
-    ActionQueue, ActiveShopId, AnimationConfig, CharacterProgress, CharacterProgressState,
-    CurrencyState, FadeState, GameState, InteractionIntent, InventoryState, MovementConfig,
+    ActionQueue, ActiveShopId, AnimationConfig, CameraFollowTarget, CameraPanState,
+    CharacterProgress, CharacterProgressState, CurrencyState, EntityMoveState, FadeState,
+    GameState, InteractionIntent, IntroEventsActive, InventoryState, MovementConfig,
     NpcCollisionEvent, NpcPositions, PartyState, PixelScaleConfig, PixelScaleMode,
     PlayerAppearanceState, PlayerVisual, RendererProjectData, RendererState, ScreenShakeState,
-    WaitingFor,
+    WaitState, WaitingFor,
 };
 pub use systems::camera::{apply_pixel_scale, compute_zoom_to_fit, spawn_camera, update_camera};
 pub use systems::collision::is_tile_blocked;
+pub use systems::entity_move::entity_move_system;
 pub use systems::map_render::{
     RendererAnimatedTile, RendererAnimationTick, animate_renderer_tiles, compute_tile_z,
     init_npc_positions, resort_tile_z_on_elevation_change, spawn_npc_sprites, sync_map_sprites,
@@ -39,7 +42,8 @@ pub use systems::player::{
 };
 pub use systems::spritesheet::{build_spritesheet_atlas, load_spritesheet_assets};
 pub use systems::triggers::{
-    advance_action_queue, check_triggers, fade_system, handle_map_change, screen_shake_system,
+    advance_action_queue, camera_pan_system, check_triggers, fade_system, handle_map_change,
+    screen_shake_system, trigger_intro_events, wait_system,
 };
 
 pub use effects::{
@@ -130,8 +134,12 @@ impl Plugin for ProjectRendererPlugin {
             .add_systems(
                 Update,
                 (
+                    trigger_intro_events.before(check_triggers),
                     screen_shake_system.after(update_camera),
+                    entity_move_system.after(advance_action_queue),
+                    camera_pan_system.after(advance_action_queue),
                     fade_system.after(advance_action_queue),
+                    wait_system.after(advance_action_queue),
                     handle_dialog_event.after(advance_action_queue),
                     detect_overflow.after(handle_dialog_event),
                     update_dialog_typewriter.after(handle_dialog_event),
@@ -139,6 +147,9 @@ impl Plugin for ProjectRendererPlugin {
                     handle_selection_input
                         .after(read_input)
                         .before(player_movement),
+                    handle_intro_skip
+                        .after(read_input)
+                        .before(open_status_on_escape),
                     open_status_on_escape.after(read_input),
                 )
                     .run_if(in_state(AppPhase::InGame)),

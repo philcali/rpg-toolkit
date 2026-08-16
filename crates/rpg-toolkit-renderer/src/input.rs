@@ -1,8 +1,10 @@
 use bevy::prelude::*;
-use rpg_toolkit_common::AppPhase;
+use rpg_toolkit_common::{AppPhase, EntityTarget};
 
 use crate::dialog::DialogState;
-use crate::resources::ActionQueue;
+use crate::resources::{
+    ActionQueue, CameraFollowTarget, CameraPanState, EntityMoveState, IntroEventsActive, WaitState,
+};
 use crate::systems::selection::SelectionState;
 
 /// Cardinal movement direction.
@@ -33,6 +35,32 @@ pub fn read_input(keyboard: Res<ButtonInput<KeyCode>>, mut intent: ResMut<Moveme
     } else {
         None
     };
+}
+
+/// Skips the intro sequence when the player presses Escape while `IntroEventsActive` is present.
+/// Drains the action queue, removes all active action states, and resets the camera to follow the player.
+pub fn handle_intro_skip(
+    mut commands: Commands,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    intro_active: Option<Res<IntroEventsActive>>,
+) {
+    // Only process if intro is active and Escape was just pressed
+    if intro_active.is_none() || !keyboard.just_pressed(KeyCode::Escape) {
+        return;
+    }
+
+    // Drain action queue
+    commands.remove_resource::<ActionQueue>();
+    // Remove intro marker (restores player control)
+    commands.remove_resource::<IntroEventsActive>();
+    // Clean up any active action states
+    commands.remove_resource::<CameraPanState>();
+    commands.remove_resource::<EntityMoveState>();
+    commands.remove_resource::<WaitState>();
+    // Reset camera to follow player
+    commands.insert_resource(CameraFollowTarget {
+        target: EntityTarget::Player,
+    });
 }
 
 /// Opens the status screen when the player presses Escape during free gameplay.

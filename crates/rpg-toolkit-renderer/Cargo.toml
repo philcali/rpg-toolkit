@@ -11,3 +11,11 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[[test]]
+name = "intro_blocking_classification"
+path = "tests/properties/intro_blocking_classification.rs"
+
+[[test]]
+name = "camera_pan_interpolation"
+path = "tests/properties/camera_pan_interpolation.rs"

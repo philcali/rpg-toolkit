@@ -160,7 +160,7 @@ Implements the `StatusScenePlugin` in the `rpg-toolkit-scenes` crate following t
     - On item highlight change: update inventory detail panel text
     - _Requirements: 2.7, 2.8, 4.5, 4.6, 5.1, 5.2, 5.3, 5.4_
 
-- [~] 7. Final checkpoint - Ensure all tests pass
+- [ ] 7. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

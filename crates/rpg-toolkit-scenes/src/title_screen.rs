@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use rpg_toolkit_common::{AppPhase, SaveFile, SpawnPoint};
+use rpg_toolkit_common::{AppPhase, NewGameFlag, SaveFile, SpawnPoint};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -240,6 +240,7 @@ fn despawn_title_screen(mut commands: Commands, query: Query<Entity, With<TitleS
 
 #[allow(clippy::too_many_arguments)]
 fn title_screen_input(
+    mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<TitleScreenState>,
     config: Res<TitleScreenConfig>,
@@ -274,6 +275,7 @@ fn title_screen_input(
             0 => {
                 // New Game
                 handle_new_game(
+                    &mut commands,
                     &config,
                     &mut next_phase,
                     &mut game_state,
@@ -349,6 +351,7 @@ fn update_selection_visuals(
 
 #[allow(clippy::too_many_arguments)]
 fn handle_new_game(
+    commands: &mut Commands,
     config: &TitleScreenConfig,
     next_phase: &mut ResMut<NextState<AppPhase>>,
     game_state: &mut ResMut<GameState>,
@@ -376,6 +379,9 @@ fn handle_new_game(
     renderer_state.pending_map_change = None;
     renderer_state.pending_target_coords = Some((spawn_point.x, spawn_point.y));
     renderer_state.pending_target_elevation = Some(0);
+
+    // Signal that this is a fresh new game (used by intro event system)
+    commands.insert_resource(NewGameFlag);
 
     next_phase.set(AppPhase::InGame);
 }

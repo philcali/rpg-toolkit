@@ -1639,3 +1639,218 @@ pub fn render_change_phase_form(
         editor_state.editing_index = None;
     }
 }
+
+pub fn render_move_entity_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    _id_salt: &str,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit MoveEntity Action:"
+    } else {
+        "Add MoveEntity Action:"
+    };
+    ui.label(form_label);
+
+    // Entity target selector
+    ui.horizontal(|ui| {
+        ui.label("Target:");
+        ui.radio_value(
+            &mut editor_state.move_entity_target_is_player,
+            true,
+            "Player",
+        );
+        ui.radio_value(&mut editor_state.move_entity_target_is_player, false, "NPC");
+    });
+
+    if !editor_state.move_entity_target_is_player {
+        ui.horizontal(|ui| {
+            ui.label("NPC ID:");
+            ui.text_edit_singleline(&mut editor_state.move_entity_npc_id);
+        });
+    }
+
+    ui.horizontal(|ui| {
+        ui.label("Target X:");
+        ui.text_edit_singleline(&mut editor_state.move_target_x);
+        ui.label("Target Y:");
+        ui.text_edit_singleline(&mut editor_state.move_target_y);
+    });
+
+    ui.horizontal(|ui| {
+        ui.label("Speed (tiles/sec):");
+        ui.add(egui::Slider::new(&mut editor_state.move_speed, 0.1..=10.0));
+    });
+
+    let is_editing = editor_state.editing_index.is_some();
+    let btn_label = if is_editing {
+        "Update MoveEntity"
+    } else {
+        "Add MoveEntity"
+    };
+
+    if ui.button(btn_label).clicked()
+        && let Some(action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            actions[idx] = action;
+        } else {
+            actions.push(action);
+        }
+        editor_state.reset();
+    }
+    if is_editing && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+    }
+}
+
+pub fn render_camera_follow_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    _id_salt: &str,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit CameraFollow Action:"
+    } else {
+        "Add CameraFollow Action:"
+    };
+    ui.label(form_label);
+
+    // Entity target selector
+    ui.horizontal(|ui| {
+        ui.label("Target:");
+        ui.radio_value(
+            &mut editor_state.camera_follow_target_is_player,
+            true,
+            "Player",
+        );
+        ui.radio_value(
+            &mut editor_state.camera_follow_target_is_player,
+            false,
+            "NPC",
+        );
+    });
+
+    if !editor_state.camera_follow_target_is_player {
+        ui.horizontal(|ui| {
+            ui.label("NPC ID:");
+            ui.text_edit_singleline(&mut editor_state.camera_follow_npc_id);
+        });
+    }
+
+    let is_editing = editor_state.editing_index.is_some();
+    let btn_label = if is_editing {
+        "Update CameraFollow"
+    } else {
+        "Add CameraFollow"
+    };
+
+    if ui.button(btn_label).clicked()
+        && let Some(action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            actions[idx] = action;
+        } else {
+            actions.push(action);
+        }
+        editor_state.reset();
+    }
+    if is_editing && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+    }
+}
+
+pub fn render_camera_pan_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    _id_salt: &str,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit CameraPan Action:"
+    } else {
+        "Add CameraPan Action:"
+    };
+    ui.label(form_label);
+
+    ui.horizontal(|ui| {
+        ui.label("Target X:");
+        ui.text_edit_singleline(&mut editor_state.camera_pan_target_x);
+        ui.label("Target Y:");
+        ui.text_edit_singleline(&mut editor_state.camera_pan_target_y);
+    });
+
+    ui.horizontal(|ui| {
+        ui.label("Duration (seconds):");
+        ui.add(egui::Slider::new(
+            &mut editor_state.camera_pan_duration,
+            0.1..=10.0,
+        ));
+    });
+
+    let is_editing = editor_state.editing_index.is_some();
+    let btn_label = if is_editing {
+        "Update CameraPan"
+    } else {
+        "Add CameraPan"
+    };
+
+    if ui.button(btn_label).clicked()
+        && let Some(action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            actions[idx] = action;
+        } else {
+            actions.push(action);
+        }
+        editor_state.reset();
+    }
+    if is_editing && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+    }
+}
+
+pub fn render_wait_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    _id_salt: &str,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit Wait Action:"
+    } else {
+        "Add Wait Action:"
+    };
+    ui.label(form_label);
+
+    ui.horizontal(|ui| {
+        ui.label("Duration (seconds):");
+        ui.add(egui::Slider::new(
+            &mut editor_state.wait_duration,
+            0.1..=30.0,
+        ));
+    });
+
+    let is_editing = editor_state.editing_index.is_some();
+    let btn_label = if is_editing {
+        "Update Wait"
+    } else {
+        "Add Wait"
+    };
+
+    if ui.button(btn_label).clicked()
+        && let Some(action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            actions[idx] = action;
+        } else {
+            actions.push(action);
+        }
+        editor_state.reset();
+    }
+    if is_editing && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+    }
+}

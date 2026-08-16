@@ -95,6 +95,7 @@ pub enum AppEditorMode {
     Ability,
     Enemy,
     Shop,
+    ProjectSettings,
 }
 
 /// Resource that is `true` whenever any modal dialog window is open.

@@ -53,6 +53,9 @@ pub struct ProjectFile {
     /// Shop registry: all shops defined in this project.
     #[serde(default)]
     pub shops: ShopRegistry,
+    /// Event actions to execute when a new game starts (after player spawns).
+    #[serde(default)]
+    pub intro_events: Option<Vec<EventAction>>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -85,6 +88,7 @@ impl ProjectFile {
             abilities,
             enemies,
             shops,
+            intro_events: None,
         }
     }
 
@@ -333,6 +337,7 @@ impl ProjectFile {
             abilities: self.abilities.clone(),
             enemies: self.enemies.clone(),
             shops: self.shops.clone(),
+            intro_events: self.intro_events.clone(),
         }
     }
 }
