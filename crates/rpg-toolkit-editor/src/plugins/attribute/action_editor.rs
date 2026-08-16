@@ -5,7 +5,7 @@
 use crate::data::map::EventAction;
 use rpg_toolkit_common::{
     AppPhase, BranchCondition, ChoiceData, ConditionCheck, ConditionLogic, DialogConfigData,
-    DialogPositionData, DialogTextData, FadeType, PlayerAppearance, ScreenShakeMode,
+    DialogPositionData, DialogTextData, EntityTarget, FadeType, PlayerAppearance, ScreenShakeMode,
     TransferDirection,
 };
 
@@ -31,6 +31,10 @@ pub enum ActionType {
     SaveGame,
     ChangePhase,
     OpenShop,
+    MoveEntity,
+    CameraFollow,
+    CameraPan,
+    Wait,
 }
 
 /// The text source mode for a ShowDialog action.
@@ -148,6 +152,21 @@ pub struct ActionEditorState {
     // OpenShop fields
     pub open_shop_id: String,
     pub shop_search_buffer: String,
+    // MoveEntity fields
+    pub move_entity_target_is_player: bool,
+    pub move_entity_npc_id: String,
+    pub move_target_x: String,
+    pub move_target_y: String,
+    pub move_speed: f32,
+    // CameraFollow fields
+    pub camera_follow_target_is_player: bool,
+    pub camera_follow_npc_id: String,
+    // CameraPan fields
+    pub camera_pan_target_x: String,
+    pub camera_pan_target_y: String,
+    pub camera_pan_duration: f32,
+    // Wait fields
+    pub wait_duration: f32,
 }
 
 impl Default for ActionEditorState {
@@ -214,6 +233,21 @@ impl Default for ActionEditorState {
             // OpenShop fields
             open_shop_id: String::new(),
             shop_search_buffer: String::new(),
+            // MoveEntity fields
+            move_entity_target_is_player: true,
+            move_entity_npc_id: String::new(),
+            move_target_x: "0".to_string(),
+            move_target_y: "0".to_string(),
+            move_speed: 2.0,
+            // CameraFollow fields
+            camera_follow_target_is_player: true,
+            camera_follow_npc_id: String::new(),
+            // CameraPan fields
+            camera_pan_target_x: "0".to_string(),
+            camera_pan_target_y: "0".to_string(),
+            camera_pan_duration: 1.0,
+            // Wait fields
+            wait_duration: 1.0,
         }
     }
 }
@@ -289,6 +323,21 @@ impl ActionEditorState {
             // OpenShop fields
             open_shop_id: String::new(),
             shop_search_buffer: String::new(),
+            // MoveEntity fields
+            move_entity_target_is_player: true,
+            move_entity_npc_id: String::new(),
+            move_target_x: "0".to_string(),
+            move_target_y: "0".to_string(),
+            move_speed: 2.0,
+            // CameraFollow fields
+            camera_follow_target_is_player: true,
+            camera_follow_npc_id: String::new(),
+            // CameraPan fields
+            camera_pan_target_x: "0".to_string(),
+            camera_pan_target_y: "0".to_string(),
+            camera_pan_duration: 1.0,
+            // Wait fields
+            wait_duration: 1.0,
         }
     }
 
@@ -505,6 +554,55 @@ impl ActionEditorState {
             EventAction::OpenShop { shop_id } => {
                 self.action_type = ActionType::OpenShop;
                 self.open_shop_id = shop_id.clone();
+            }
+            // New cinematic action variants
+            EventAction::MoveEntity {
+                target,
+                target_x,
+                target_y,
+                speed,
+            } => {
+                self.action_type = ActionType::MoveEntity;
+                match target {
+                    EntityTarget::Player => {
+                        self.move_entity_target_is_player = true;
+                        self.move_entity_npc_id.clear();
+                    }
+                    EntityTarget::Npc { npc_id } => {
+                        self.move_entity_target_is_player = false;
+                        self.move_entity_npc_id = npc_id.clone();
+                    }
+                }
+                self.move_target_x = target_x.to_string();
+                self.move_target_y = target_y.to_string();
+                self.move_speed = *speed;
+            }
+            EventAction::CameraFollow { target } => {
+                self.action_type = ActionType::CameraFollow;
+                match target {
+                    EntityTarget::Player => {
+                        self.camera_follow_target_is_player = true;
+                        self.camera_follow_npc_id.clear();
+                    }
+                    EntityTarget::Npc { npc_id } => {
+                        self.camera_follow_target_is_player = false;
+                        self.camera_follow_npc_id = npc_id.clone();
+                    }
+                }
+            }
+            EventAction::CameraPan {
+                target_x,
+                target_y,
+                duration,
+            } => {
+                self.action_type = ActionType::CameraPan;
+                self.camera_pan_target_x = target_x.to_string();
+                self.camera_pan_target_y = target_y.to_string();
+                self.camera_pan_duration = *duration;
+            }
+            EventAction::Wait { duration } => {
+                self.action_type = ActionType::Wait;
+                self.wait_duration = *duration;
             }
         }
         self.editing_index = Some(index);
@@ -790,6 +888,54 @@ impl ActionEditorState {
                 Some(EventAction::OpenShop {
                     shop_id: self.open_shop_id.clone(),
                 })
+            }
+            ActionType::MoveEntity => {
+                let target = if self.move_entity_target_is_player {
+                    EntityTarget::Player
+                } else {
+                    if self.move_entity_npc_id.trim().is_empty() {
+                        return None;
+                    }
+                    EntityTarget::Npc {
+                        npc_id: self.move_entity_npc_id.clone(),
+                    }
+                };
+                let x = self.move_target_x.trim().parse::<u32>().unwrap_or(0);
+                let y = self.move_target_y.trim().parse::<u32>().unwrap_or(0);
+                let speed = self.move_speed.clamp(0.1, 10.0);
+                Some(EventAction::MoveEntity {
+                    target,
+                    target_x: x,
+                    target_y: y,
+                    speed,
+                })
+            }
+            ActionType::CameraFollow => {
+                let target = if self.camera_follow_target_is_player {
+                    EntityTarget::Player
+                } else {
+                    if self.camera_follow_npc_id.trim().is_empty() {
+                        return None;
+                    }
+                    EntityTarget::Npc {
+                        npc_id: self.camera_follow_npc_id.clone(),
+                    }
+                };
+                Some(EventAction::CameraFollow { target })
+            }
+            ActionType::CameraPan => {
+                let x = self.camera_pan_target_x.trim().parse::<u32>().unwrap_or(0);
+                let y = self.camera_pan_target_y.trim().parse::<u32>().unwrap_or(0);
+                let duration = self.camera_pan_duration.clamp(0.1, 10.0);
+                Some(EventAction::CameraPan {
+                    target_x: x,
+                    target_y: y,
+                    duration,
+                })
+            }
+            ActionType::Wait => {
+                let duration = self.wait_duration.clamp(0.1, 30.0);
+                Some(EventAction::Wait { duration })
             }
         }
     }

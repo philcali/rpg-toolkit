@@ -1,9 +1,9 @@
 //! Attribute editing plugin — coordinates overlay rendering, click handling,
 //! and modal dialogs for opacity, event triggers, spawn points, NPCs, and elevation.
 
-mod action_editor;
+pub(crate) mod action_editor;
 mod action_editor_forms;
-mod action_editor_ui;
+pub(crate) mod action_editor_ui;
 mod click;
 mod elevation_dialog;
 mod event_trigger_dialog;

@@ -146,7 +146,7 @@ This plan implements graphics support for game entities in the RPG Toolkit. It e
     - Each slot's preview is independent (changing one does not affect the others)
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6_
 
-- [~] 6. Final checkpoint - Ensure all tests pass
+- [ ] 6. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

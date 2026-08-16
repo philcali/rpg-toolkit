@@ -52,8 +52,14 @@ pub fn is_fade_complete(elapsed: f32, duration: f32) -> bool {
 /// - `ScreenShake` with mode `Timed` and duration > 0
 /// - `FadeTransition` with duration > 0
 /// - `ShowDialog`
+/// - `ShowSelection`
+/// - `MoveEntity`
+/// - `CameraPan`
+/// - `Wait`
 ///
-/// All other actions are non-blocking.
+/// Non-blocking actions execute immediately:
+/// - `CameraFollow`
+/// - All other actions
 pub fn is_blocking_action(action: &EventAction) -> bool {
     match action {
         EventAction::ScreenShake { mode, duration, .. } => {
@@ -61,6 +67,11 @@ pub fn is_blocking_action(action: &EventAction) -> bool {
         }
         EventAction::FadeTransition { duration, .. } => *duration > 0.0,
         EventAction::ShowDialog { .. } => true,
+        EventAction::ShowSelection { .. } => true,
+        EventAction::MoveEntity { .. } => true,
+        EventAction::CameraFollow { .. } => false,
+        EventAction::CameraPan { .. } => true,
+        EventAction::Wait { .. } => true,
         _ => false,
     }
 }

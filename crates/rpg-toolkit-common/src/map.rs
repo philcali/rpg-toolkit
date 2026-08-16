@@ -285,6 +285,80 @@ where
     deserialize_item_quantity(deserializer)
 }
 
+/// Identifies either the player character or a specific NPC as the target
+/// of movement or camera actions.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum EntityTarget {
+    Player,
+    Npc {
+        #[serde(deserialize_with = "deserialize_npc_id")]
+        npc_id: String,
+    },
+}
+
+/// Returns the default movement speed for MoveEntity (2.0 tiles per second).
+fn default_entity_move_speed() -> f32 {
+    2.0
+}
+
+/// Deserializes and validates the entity move speed in the range [0.1, 10.0].
+fn deserialize_entity_move_speed<'de, D>(deserializer: D) -> Result<f32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let speed = f32::deserialize(deserializer)?;
+    if !(0.1..=10.0).contains(&speed) {
+        return Err(serde::de::Error::custom(format!(
+            "speed must be between 0.1 and 10.0 inclusive, got {}",
+            speed
+        )));
+    }
+    Ok(speed)
+}
+
+/// Deserializes and validates the camera pan duration in the range [0.1, 10.0].
+fn deserialize_camera_pan_duration<'de, D>(deserializer: D) -> Result<f32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let duration = f32::deserialize(deserializer)?;
+    if !(0.1..=10.0).contains(&duration) {
+        return Err(serde::de::Error::custom(format!(
+            "duration must be between 0.1 and 10.0 inclusive, got {}",
+            duration
+        )));
+    }
+    Ok(duration)
+}
+
+/// Deserializes and validates the wait duration in the range [0.1, 30.0].
+fn deserialize_wait_duration<'de, D>(deserializer: D) -> Result<f32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let duration = f32::deserialize(deserializer)?;
+    if !(0.1..=30.0).contains(&duration) {
+        return Err(serde::de::Error::custom(format!(
+            "duration must be between 0.1 and 30.0 inclusive, got {}",
+            duration
+        )));
+    }
+    Ok(duration)
+}
+
+/// Deserializes and validates an NPC ID (must be non-empty).
+fn deserialize_npc_id<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        return Err(serde::de::Error::custom("npc_id must not be empty"));
+    }
+    Ok(s)
+}
+
 /// A single action within an event trigger sequence.
 /// Uses `#[serde(tag = "type")]` for clean, forward-compatible JSON.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -420,6 +494,50 @@ pub enum EventAction {
     OpenShop {
         #[serde(deserialize_with = "deserialize_non_empty_string")]
         shop_id: ShopId,
+    },
+    /// Move an entity (player or NPC) to a target grid position with
+    /// tile-by-tile walk animation.
+    /// Blocking: the queue waits until the entity reaches the target.
+    MoveEntity {
+        /// The entity to move — player character or a specific NPC.
+        target: EntityTarget,
+        /// Target grid X coordinate.
+        target_x: u32,
+        /// Target grid Y coordinate.
+        target_y: u32,
+        /// Movement speed in tiles per second (0.1–10.0, default 2.0).
+        #[serde(
+            default = "default_entity_move_speed",
+            deserialize_with = "deserialize_entity_move_speed"
+        )]
+        speed: f32,
+    },
+    /// Switch which entity the camera follows.
+    /// Non-blocking: executes immediately, camera starts tracking the target.
+    /// Sticky: persists until another CameraFollow changes it.
+    CameraFollow {
+        /// The entity the camera should track.
+        target: EntityTarget,
+    },
+    /// Smoothly pan the camera to a static grid position.
+    /// Blocking: the queue waits until the pan completes.
+    /// After completion, the camera remains at the pan target until
+    /// a CameraFollow action redirects it.
+    CameraPan {
+        /// Target grid X coordinate to pan to.
+        target_x: u32,
+        /// Target grid Y coordinate to pan to.
+        target_y: u32,
+        /// Duration of the pan in seconds (0.1–10.0).
+        #[serde(deserialize_with = "deserialize_camera_pan_duration")]
+        duration: f32,
+    },
+    /// Pause the action queue for a specified duration.
+    /// Blocking: the queue waits until the duration elapses.
+    Wait {
+        /// Duration to wait in seconds (0.1–30.0).
+        #[serde(deserialize_with = "deserialize_wait_duration")]
+        duration: f32,
     },
 }
 
@@ -1605,5 +1723,265 @@ mod tests {
                 phase
             );
         }
+    }
+
+    // --- MoveEntity tests ---
+
+    #[test]
+    fn move_entity_player_target_round_trip() {
+        let original = EventAction::MoveEntity {
+            target: EntityTarget::Player,
+            target_x: 10,
+            target_y: 15,
+            speed: 3.5,
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: EventAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn move_entity_npc_target_round_trip() {
+        let original = EventAction::MoveEntity {
+            target: EntityTarget::Npc {
+                npc_id: "elder".to_string(),
+            },
+            target_x: 5,
+            target_y: 8,
+            speed: 1.5,
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: EventAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn move_entity_speed_defaults_to_2() {
+        let json =
+            r#"{"type": "MoveEntity", "target": {"type": "Player"}, "target_x": 3, "target_y": 4}"#;
+        let result: EventAction = serde_json::from_str(json).unwrap();
+        if let EventAction::MoveEntity { speed, .. } = result {
+            assert_eq!(speed, 2.0);
+        } else {
+            panic!("Expected MoveEntity variant");
+        }
+    }
+
+    #[test]
+    fn move_entity_rejects_speed_zero() {
+        let json = r#"{"type": "MoveEntity", "target": {"type": "Player"}, "target_x": 3, "target_y": 4, "speed": 0.0}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "speed=0.0 should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("between 0.1 and 10.0"),
+            "Error should mention range: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn move_entity_rejects_speed_over_max() {
+        let json = r#"{"type": "MoveEntity", "target": {"type": "Player"}, "target_x": 3, "target_y": 4, "speed": 11.0}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "speed=11.0 should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("between 0.1 and 10.0"),
+            "Error should mention range: {}",
+            err
+        );
+    }
+
+    // --- CameraFollow tests ---
+
+    #[test]
+    fn camera_follow_player_round_trip() {
+        let original = EventAction::CameraFollow {
+            target: EntityTarget::Player,
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: EventAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn camera_follow_npc_round_trip() {
+        let original = EventAction::CameraFollow {
+            target: EntityTarget::Npc {
+                npc_id: "guard_01".to_string(),
+            },
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: EventAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    // --- CameraPan tests ---
+
+    #[test]
+    fn camera_pan_round_trip() {
+        let original = EventAction::CameraPan {
+            target_x: 12,
+            target_y: 3,
+            duration: 2.5,
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: EventAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn camera_pan_rejects_duration_zero() {
+        let json = r#"{"type": "CameraPan", "target_x": 5, "target_y": 5, "duration": 0.0}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "duration=0.0 should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("between 0.1 and 10.0"),
+            "Error should mention range: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn camera_pan_rejects_duration_over_max() {
+        let json = r#"{"type": "CameraPan", "target_x": 5, "target_y": 5, "duration": 11.0}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "duration=11.0 should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("between 0.1 and 10.0"),
+            "Error should mention range: {}",
+            err
+        );
+    }
+
+    // --- Wait tests ---
+
+    #[test]
+    fn wait_round_trip() {
+        let original = EventAction::Wait { duration: 1.5 };
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: EventAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn wait_rejects_duration_zero() {
+        let json = r#"{"type": "Wait", "duration": 0.0}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "duration=0.0 should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("between 0.1 and 30.0"),
+            "Error should mention range: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn wait_rejects_duration_over_max() {
+        let json = r#"{"type": "Wait", "duration": 31.0}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "duration=31.0 should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("between 0.1 and 30.0"),
+            "Error should mention range: {}",
+            err
+        );
+    }
+
+    // --- EntityTarget serialization format tests ---
+
+    #[test]
+    fn entity_target_player_serializes_correctly() {
+        let target = EntityTarget::Player;
+        let json = serde_json::to_string(&target).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value, serde_json::json!({"type": "Player"}));
+    }
+
+    #[test]
+    fn entity_target_npc_serializes_correctly() {
+        let target = EntityTarget::Npc {
+            npc_id: "villager_02".to_string(),
+        };
+        let json = serde_json::to_string(&target).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"type": "Npc", "npc_id": "villager_02"})
+        );
+    }
+
+    #[test]
+    fn entity_target_npc_rejects_empty_npc_id() {
+        let json = r#"{"type": "Npc", "npc_id": ""}"#;
+        let result: Result<EntityTarget, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Empty npc_id should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("must not be empty"),
+            "Error should mention empty: {}",
+            err
+        );
+    }
+
+    // --- intro_events manifest tests ---
+
+    #[test]
+    fn intro_events_absent_deserializes_as_none() {
+        let json = r#"{
+            "maps": ["map-1"],
+            "tilesets": {},
+            "spritesheets": {},
+            "dialog_texts": {},
+            "face_portraits": {},
+            "characters": {"characters": {}},
+            "items": {"items": {}},
+            "abilities": {"abilities": {}},
+            "enemies": {"enemies": {}},
+            "shops": {"shops": {}}
+        }"#;
+        let manifest: crate::manifest::ProjectManifest = serde_json::from_str(json).unwrap();
+        assert_eq!(manifest.intro_events, None);
+    }
+
+    #[test]
+    fn intro_events_with_mixed_actions_round_trips() {
+        let json = r#"{
+            "maps": ["map-village"],
+            "tilesets": {},
+            "spritesheets": {},
+            "dialog_texts": {},
+            "face_portraits": {},
+            "characters": {"characters": {}},
+            "items": {"items": {}},
+            "abilities": {"abilities": {}},
+            "enemies": {"enemies": {}},
+            "shops": {"shops": {}},
+            "intro_events": [
+                {"type": "FadeTransition", "fade_type": "FadeIn", "duration": 2.0, "color": [0.0, 0.0, 0.0, 1.0]},
+                {"type": "CameraFollow", "target": {"type": "Npc", "npc_id": "elder"}},
+                {"type": "MoveEntity", "target": {"type": "Npc", "npc_id": "elder"}, "target_x": 6, "target_y": 10, "speed": 1.5},
+                {"type": "CameraPan", "target_x": 12, "target_y": 3, "duration": 2.5},
+                {"type": "Wait", "duration": 1.0},
+                {"type": "CameraFollow", "target": {"type": "Player"}},
+                {"type": "MoveEntity", "target": {"type": "Player"}, "target_x": 7, "target_y": 10},
+                {"type": "SetState", "key": "intro_complete", "value": "true"}
+            ]
+        }"#;
+        let manifest: crate::manifest::ProjectManifest = serde_json::from_str(json).unwrap();
+        assert!(manifest.intro_events.is_some());
+        let events = manifest.intro_events.as_ref().unwrap();
+        assert_eq!(events.len(), 8);
+
+        // Round-trip the whole manifest
+        let serialized = serde_json::to_string(&manifest).unwrap();
+        let deserialized: crate::manifest::ProjectManifest =
+            serde_json::from_str(&serialized).unwrap();
+        assert_eq!(manifest, deserialized);
     }
 }

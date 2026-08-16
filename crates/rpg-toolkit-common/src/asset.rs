@@ -1076,6 +1076,7 @@ mod tests {
             abilities: Default::default(),
             enemies: Default::default(),
             shops: Default::default(),
+            intro_events: None,
         };
 
         // Write manifest
@@ -1134,6 +1135,7 @@ mod tests {
             abilities: Default::default(),
             enemies: Default::default(),
             shops: Default::default(),
+            intro_events: None,
         };
 
         manifest.save_to_dir(root).unwrap();
@@ -1195,6 +1197,7 @@ mod tests {
                 abilities: Default::default(),
                 enemies: Default::default(),
                 shops: Default::default(),
+                intro_events: None,
             };
 
             let manifest_json = serde_json::to_string_pretty(&manifest).unwrap();
@@ -1265,6 +1268,7 @@ mod tests {
                 abilities: Default::default(),
                 enemies: Default::default(),
                 shops: Default::default(),
+                intro_events: None,
             };
 
             let manifest_json = serde_json::to_string_pretty(&manifest).unwrap();

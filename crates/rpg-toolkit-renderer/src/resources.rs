@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rpg_toolkit_common::{
-    AbilityId, CharacterId, EventAction, FadeType, ItemId, MapId, ProjectFile, ScreenShakeMode,
-    SpritesheetId, TilesetId,
+    AbilityId, CharacterId, EntityTarget, EventAction, FadeType, ItemId, MapId, ProjectFile,
+    ScreenShakeMode, SpritesheetId, TilesetId,
 };
 use std::collections::{HashMap, VecDeque};
 
@@ -88,6 +88,9 @@ pub enum WaitingFor {
     Selection,
     ScreenShake,
     Fade,
+    EntityMove,
+    CameraPan,
+    Wait,
 }
 
 /// Tracks the remaining EventActions in the current trigger sequence.
@@ -246,3 +249,43 @@ pub struct PartyState {
 
 // Re-export ActiveShopId from rpg-toolkit-common for backward compatibility.
 pub use rpg_toolkit_common::ActiveShopId;
+
+/// Tracks an active entity forced-move in progress.
+#[derive(Resource)]
+pub struct EntityMoveState {
+    pub target: EntityTarget,
+    pub target_x: u32,
+    pub target_y: u32,
+    pub speed: f32,
+    pub current_x: f32,
+    pub current_y: f32,
+    pub complete: bool,
+}
+
+/// Tracks the current camera follow target.
+#[derive(Resource)]
+pub struct CameraFollowTarget {
+    pub target: EntityTarget,
+}
+
+/// Tracks an active camera pan in progress.
+#[derive(Resource)]
+pub struct CameraPanState {
+    pub start_x: f32,
+    pub start_y: f32,
+    pub target_x: f32,
+    pub target_y: f32,
+    pub duration: f32,
+    pub elapsed: f32,
+}
+
+/// Tracks a Wait action in progress.
+#[derive(Resource)]
+pub struct WaitState {
+    pub duration: f32,
+    pub elapsed: f32,
+}
+
+/// Marker resource indicating that intro events are currently playing.
+#[derive(Resource)]
+pub struct IntroEventsActive;

@@ -2,17 +2,38 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::ability::AbilityRegistry;
 use crate::character::CharacterRegistry;
 use crate::enemy::EnemyRegistry;
 use crate::error::CommonError;
 use crate::item::ItemRegistry;
-use crate::map::{MapData, MapId, SpawnPoint, TilesetId};
+use crate::map::{EventAction, MapData, MapId, SpawnPoint, TilesetId};
 use crate::shop::ShopRegistry;
 use crate::spritesheet::{CharacterSpritesheet, SpritesheetId};
 use crate::tileset::TilesetMeta;
+
+/// Maximum number of intro event actions allowed.
+const MAX_INTRO_EVENTS: usize = 100;
+
+/// Custom deserializer for `intro_events` that enforces the 100-action limit.
+fn deserialize_intro_events<'de, D>(deserializer: D) -> Result<Option<Vec<EventAction>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt = Option::<Vec<EventAction>>::deserialize(deserializer)?;
+    if let Some(ref events) = opt
+        && events.len() > MAX_INTRO_EVENTS
+    {
+        return Err(serde::de::Error::custom(format!(
+            "intro_events must have at most {} actions, got {}",
+            MAX_INTRO_EVENTS,
+            events.len()
+        )));
+    }
+    Ok(opt)
+}
 
 /// On-disk manifest: lightweight summary of project contents.
 /// Maps are stored as IDs only; full map data is loaded lazily from `maps/<id>.json`.
@@ -46,6 +67,9 @@ pub struct ProjectManifest {
     /// Shop registry: all shops defined in this project.
     #[serde(default)]
     pub shops: ShopRegistry,
+    /// Event actions to execute when a new game starts (after player spawns).
+    #[serde(default, deserialize_with = "deserialize_intro_events")]
+    pub intro_events: Option<Vec<EventAction>>,
 }
 
 impl ProjectManifest {
@@ -177,7 +201,7 @@ impl ProjectManifest {
             }
         }
 
-        Ok(crate::ProjectFile::new(
+        let mut project = crate::ProjectFile::new(
             maps,
             self.tilesets,
             self.spawn_point,
@@ -190,7 +214,9 @@ impl ProjectManifest {
             self.abilities,
             self.enemies,
             self.shops,
-        ))
+        );
+        project.intro_events = self.intro_events;
+        Ok(project)
     }
 
     /// Load all map files from `maps/` directory.
@@ -312,6 +338,7 @@ mod tests {
             abilities: AbilityRegistry::default(),
             enemies: EnemyRegistry::default(),
             shops: ShopRegistry::default(),
+            intro_events: None,
         };
 
         let bytes = manifest.to_bytes().unwrap();
@@ -392,6 +419,7 @@ mod tests {
             abilities: AbilityRegistry::default(),
             enemies: EnemyRegistry::default(),
             shops: ShopRegistry::default(),
+            intro_events: None,
         };
 
         let errors = manifest.validate_refs(&tmp);

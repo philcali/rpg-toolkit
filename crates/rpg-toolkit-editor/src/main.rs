@@ -9,8 +9,8 @@ use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use plugins::{
     AbilityPanelPlugin, AppShellPlugin, AttributePlugin, CanvasPlugin, CharacterPanelPlugin,
     DialogTextPanelPlugin, EnemyPanelPlugin, ItemPanelPlugin, LayerPanelPlugin, PaintingPlugin,
-    SerializationPlugin, ShopPanelPlugin, SpritesheetPlugin, TextIdIndex, TilePalettePlugin,
-    ToolbarPlugin, UndoRedoPlugin,
+    ProjectSettingsPanelPlugin, SerializationPlugin, ShopPanelPlugin, SpritesheetPlugin,
+    TextIdIndex, TilePalettePlugin, ToolbarPlugin, UndoRedoPlugin,
 };
 
 fn main() {
@@ -61,6 +61,7 @@ fn main() {
         .add_plugins(AbilityPanelPlugin)
         .add_plugins(EnemyPanelPlugin)
         .add_plugins(ShopPanelPlugin)
+        .add_plugins(ProjectSettingsPanelPlugin)
         .init_resource::<data::Project>()
         .init_resource::<plugins::thumbnail::ThumbnailCache>()
         .init_resource::<TextIdIndex>()

@@ -62,3 +62,7 @@ path = "tests/properties/entity_graphics_trim_truncation.rs"
 [[test]]
 name = "entity_graphics_round_trip"
 path = "tests/properties/entity_graphics_round_trip.rs"
+
+[[test]]
+name = "intro_action_round_trip"
+path = "tests/properties/intro_action_round_trip.rs"

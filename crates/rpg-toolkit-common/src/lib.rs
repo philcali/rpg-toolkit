@@ -23,7 +23,7 @@ pub use ability::{
 pub use animation::{
     AnimationFrame, TileAnimation, compute_animation_frame_index, validate_tile_animation,
 };
-pub use app_phase::AppPhase;
+pub use app_phase::{AppPhase, NewGameFlag};
 pub use asset::{
     AssetCategory, AssetManager, AssetReference, AssetRegistry, AssetValidationError, AssetWarning,
     CATEGORY_FACE_PORTRAIT, CATEGORY_SPRITESHEET, CATEGORY_TILESET, ProjectSource,
@@ -49,9 +49,9 @@ pub use item::{
 };
 pub use manifest::ProjectManifest;
 pub use map::{
-    ChoiceData, DialogConfigData, DialogPositionData, DialogTextData, EventAction, FadeType, Layer,
-    MapData, MapId, PlayerAppearance, ScreenShakeMode, SpawnPoint, TileAttributeLayer,
-    TileAttributes, TileRef, TilesetId, TransferDirection,
+    ChoiceData, DialogConfigData, DialogPositionData, DialogTextData, EntityTarget, EventAction,
+    FadeType, Layer, MapData, MapId, PlayerAppearance, ScreenShakeMode, SpawnPoint,
+    TileAttributeLayer, TileAttributes, TileRef, TilesetId, TransferDirection,
 };
 pub use project::{ProjectFile, SpritesheetReferences};
 pub use save::{CharacterProgressData, SaveFile};
