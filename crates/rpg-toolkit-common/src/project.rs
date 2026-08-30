@@ -1,16 +1,42 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::ability::AbilityRegistry;
 use crate::character::CharacterRegistry;
 use crate::enemy::EnemyRegistry;
 use crate::error::CommonError;
+use crate::hotkey::{HotkeyBinding, deserialize_hotkey_bindings};
 use crate::item::ItemRegistry;
-use crate::map::{DialogTextData, EventAction, MapData, MapId, SpawnPoint, TilesetId};
+use crate::map::{EventAction, MapData, MapId, SpawnPoint, TilesetId};
 use crate::shop::ShopRegistry;
 use crate::spritesheet::{CharacterSpritesheet, SpritesheetId};
 use crate::tileset::TilesetMeta;
+
+/// Custom deserializer that tolerates malformed JSON types for legacy HashMap fields.
+/// If the value is a proper JSON object with string values, it deserializes normally.
+/// For any other type (array, number, boolean, null, or object with non-string values),
+/// it returns an empty HashMap.
+fn deserialize_legacy_hashmap<'de, D>(deserializer: D) -> Result<HashMap<String, String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut result = HashMap::new();
+            for (k, v) in map {
+                if let serde_json::Value::String(s) = v {
+                    result.insert(k, s);
+                }
+                // Non-string values in the map are silently skipped
+            }
+            Ok(result)
+        }
+        // Any non-object type (array, number, string, bool, null) → empty
+        _ => Ok(HashMap::new()),
+    }
+}
 
 /// Describes which entities reference a given spritesheet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -32,12 +58,22 @@ pub struct ProjectFile {
     pub spritesheets: HashMap<SpritesheetId, CharacterSpritesheet>,
     #[serde(default)]
     pub player_spritesheet: Option<SpritesheetId>,
-    /// Dialog text entries: Text_Id → text string.
-    #[serde(default)]
-    pub dialog_texts: HashMap<String, String>,
-    /// Face portrait entries: portrait ID → asset path.
-    #[serde(default)]
-    pub face_portraits: HashMap<String, String>,
+    /// Hidden deserialization sink for legacy dialog_texts field (never serialized).
+    #[serde(
+        default,
+        skip_serializing,
+        rename = "dialog_texts",
+        deserialize_with = "deserialize_legacy_hashmap"
+    )]
+    _legacy_dialog_texts: HashMap<String, String>,
+    /// Hidden deserialization sink for legacy face_portraits field (never serialized).
+    #[serde(
+        default,
+        skip_serializing,
+        rename = "face_portraits",
+        deserialize_with = "deserialize_legacy_hashmap"
+    )]
+    _legacy_face_portraits: HashMap<String, String>,
     /// Character registry: all playable characters defined in this project.
     #[serde(default)]
     pub characters: CharacterRegistry,
@@ -56,6 +92,9 @@ pub struct ProjectFile {
     /// Event actions to execute when a new game starts (after player spawns).
     #[serde(default)]
     pub intro_events: Option<Vec<EventAction>>,
+    /// Hotkey bindings: keyboard shortcuts mapped to event action sequences.
+    #[serde(default, deserialize_with = "deserialize_hotkey_bindings")]
+    pub hotkey_bindings: Vec<HotkeyBinding>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -67,8 +106,6 @@ impl ProjectFile {
         spawn_point: Option<SpawnPoint>,
         spritesheets: HashMap<SpritesheetId, CharacterSpritesheet>,
         player_spritesheet: Option<SpritesheetId>,
-        dialog_texts: HashMap<String, String>,
-        face_portraits: HashMap<String, String>,
         characters: CharacterRegistry,
         items: ItemRegistry,
         abilities: AbilityRegistry,
@@ -81,14 +118,15 @@ impl ProjectFile {
             spawn_point,
             spritesheets,
             player_spritesheet,
-            dialog_texts,
-            face_portraits,
+            _legacy_dialog_texts: HashMap::new(),
+            _legacy_face_portraits: HashMap::new(),
             characters,
             items,
             abilities,
             enemies,
             shops,
             intro_events: None,
+            hotkey_bindings: Vec::new(),
         }
     }
 
@@ -227,15 +265,6 @@ impl ProjectFile {
                                         map_id, layer_idx, x, y, target_map_id
                                     );
                                 }
-                                EventAction::ShowDialog {
-                                    text: DialogTextData::Id(text_id),
-                                    ..
-                                } if !project.dialog_texts.contains_key(text_id) => {
-                                    eprintln!(
-                                        "warning: map '{}' layer {} tile ({},{}) has ShowDialog referencing non-existent text ID '{}'",
-                                        map_id, layer_idx, x, y, text_id
-                                    );
-                                }
                                 _ => {}
                             }
                         }
@@ -330,14 +359,266 @@ impl ProjectFile {
             spawn_point: self.spawn_point.clone(),
             spritesheets: self.spritesheets.clone(),
             player_spritesheet: self.player_spritesheet.clone(),
-            dialog_texts: self.dialog_texts.clone(),
-            face_portraits: self.face_portraits.clone(),
+            dialog_texts: HashMap::new(),
+            face_portraits: HashMap::new(),
             characters: self.characters.clone(),
             items: self.items.clone(),
             abilities: self.abilities.clone(),
             enemies: self.enemies.clone(),
             shops: self.shops.clone(),
             intro_events: self.intro_events.clone(),
+            hotkey_bindings: self.hotkey_bindings.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hotkey_bindings_defaults_to_empty_when_absent() {
+        // A minimal project JSON without the hotkey_bindings field
+        let json = r#"{
+            "maps": {},
+            "tilesets": {}
+        }"#;
+        let project: ProjectFile = serde_json::from_str(json).unwrap();
+        assert!(
+            project.hotkey_bindings.is_empty(),
+            "hotkey_bindings should default to empty Vec when absent from JSON"
+        );
+    }
+
+    #[test]
+    fn project_with_map_defaults_both_parallax_layers_and_hotkey_bindings() {
+        // A project with a map that has no parallax_layers and no hotkey_bindings field.
+        // Verifies both fields default correctly when loaded together.
+        let json = r#"{
+            "maps": {
+                "map-1": {
+                    "name": "Village",
+                    "width": 2,
+                    "height": 2,
+                    "tile_width": 16,
+                    "tile_height": 16,
+                    "layers": [{
+                        "name": "Ground",
+                        "visible": true,
+                        "tiles": [[null, null], [null, null]],
+                        "attributes": {"cells": [[{"opacity": false}, {"opacity": false}], [{"opacity": false}, {"opacity": false}]]}
+                    }],
+                    "active_layer_index": 0
+                }
+            },
+            "tilesets": {}
+        }"#;
+        let project: ProjectFile = serde_json::from_str(json).unwrap();
+        assert!(
+            project.hotkey_bindings.is_empty(),
+            "hotkey_bindings should default to empty Vec when absent"
+        );
+        let map = project.maps.get("map-1").expect("map-1 should exist");
+        assert!(
+            map.parallax_layers.is_empty(),
+            "parallax_layers should default to empty Vec when absent from map"
+        );
+    }
+
+    #[test]
+    fn project_with_only_pre_existing_action_types_deserializes_without_error() {
+        // A project file containing only pre-existing EventAction types (ShowDialog,
+        // JumpTo, SetState, FadeTransition, ScreenShake) verifies backward compatibility.
+        let json = r#"{
+            "maps": {
+                "map-1": {
+                    "name": "Town",
+                    "width": 2,
+                    "height": 2,
+                    "tile_width": 16,
+                    "tile_height": 16,
+                    "layers": [{
+                        "name": "Ground",
+                        "visible": true,
+                        "tiles": [[null, null], [null, null]],
+                        "attributes": {
+                            "cells": [
+                                [
+                                    {
+                                        "opacity": false,
+                                        "event_trigger": [
+                                            {
+                                                "type": "ShowDialog",
+                                                "text": {"type": "Inline", "value": "Hello!"},
+                                                "config": {}
+                                            },
+                                            {
+                                                "type": "SetState",
+                                                "key": "talked",
+                                                "value": "true"
+                                            }
+                                        ]
+                                    },
+                                    {"opacity": false}
+                                ],
+                                [
+                                    {
+                                        "opacity": false,
+                                        "event_trigger": [
+                                            {
+                                                "type": "JumpTo",
+                                                "target_map_id": "map-2",
+                                                "target_x": 5,
+                                                "target_y": 3
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "opacity": false,
+                                        "event_trigger": [
+                                            {
+                                                "type": "FadeTransition",
+                                                "fade_type": "FadeOut",
+                                                "duration": 1.0
+                                            }
+                                        ]
+                                    }
+                                ]
+                            ]
+                        }
+                    }],
+                    "active_layer_index": 0
+                }
+            },
+            "tilesets": {}
+        }"#;
+        let project: ProjectFile = serde_json::from_str(json).unwrap();
+        let map = project.maps.get("map-1").expect("map-1 should exist");
+        // Verify the event triggers deserialized correctly
+        let cell_00 = &map.layers[0].attributes.cells[0][0];
+        assert_eq!(cell_00.event_trigger.len(), 2);
+        let cell_10 = &map.layers[0].attributes.cells[1][0];
+        assert_eq!(cell_10.event_trigger.len(), 1);
+    }
+
+    #[test]
+    fn legacy_dialog_texts_and_face_portraits_absorbed_on_load() {
+        // Legacy project with dialog_texts and face_portraits should deserialize fine
+        let json = r#"{
+            "maps": {},
+            "tilesets": {},
+            "dialog_texts": {"greeting": "Hello there!", "farewell": "Goodbye!"},
+            "face_portraits": {"hero": "assets/hero_face.png"}
+        }"#;
+        let project: ProjectFile = serde_json::from_str(json).unwrap();
+        // Fields are absorbed but not publicly accessible
+        assert!(project.maps.is_empty());
+        assert!(project.tilesets.is_empty());
+    }
+
+    #[test]
+    fn dialog_texts_and_face_portraits_not_serialized() {
+        // A project file should not contain dialog_texts or face_portraits when serialized
+        let project = ProjectFile::new(
+            HashMap::new(),
+            HashMap::new(),
+            None,
+            HashMap::new(),
+            None,
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
+        let json = project.serialize().unwrap();
+        assert!(
+            !json.contains("dialog_texts"),
+            "serialized output should not contain dialog_texts"
+        );
+        assert!(
+            !json.contains("face_portraits"),
+            "serialized output should not contain face_portraits"
+        );
+    }
+
+    #[test]
+    fn malformed_dialog_texts_array_tolerated() {
+        // dialog_texts as a JSON array should not cause a parse error
+        let json = r#"{
+            "maps": {},
+            "tilesets": {},
+            "dialog_texts": [1, 2, 3]
+        }"#;
+        let project: ProjectFile = serde_json::from_str(json).unwrap();
+        assert!(project.maps.is_empty());
+    }
+
+    #[test]
+    fn malformed_dialog_texts_number_tolerated() {
+        // dialog_texts as a number should not cause a parse error
+        let json = r#"{
+            "maps": {},
+            "tilesets": {},
+            "dialog_texts": 42
+        }"#;
+        let project: ProjectFile = serde_json::from_str(json).unwrap();
+        assert!(project.maps.is_empty());
+    }
+
+    #[test]
+    fn malformed_face_portraits_boolean_tolerated() {
+        // face_portraits as a boolean should not cause a parse error
+        let json = r#"{
+            "maps": {},
+            "tilesets": {},
+            "face_portraits": true
+        }"#;
+        let project: ProjectFile = serde_json::from_str(json).unwrap();
+        assert!(project.maps.is_empty());
+    }
+
+    #[test]
+    fn malformed_face_portraits_string_tolerated() {
+        // face_portraits as a bare string should not cause a parse error
+        let json = r#"{
+            "maps": {},
+            "tilesets": {},
+            "face_portraits": "not_an_object"
+        }"#;
+        let project: ProjectFile = serde_json::from_str(json).unwrap();
+        assert!(project.maps.is_empty());
+    }
+
+    #[test]
+    fn malformed_face_portraits_null_tolerated() {
+        // face_portraits as null should not cause a parse error
+        let json = r#"{
+            "maps": {},
+            "tilesets": {},
+            "face_portraits": null
+        }"#;
+        let project: ProjectFile = serde_json::from_str(json).unwrap();
+        assert!(project.maps.is_empty());
+    }
+
+    #[test]
+    fn legacy_project_round_trip_omits_removed_fields() {
+        // Load a legacy project with dialog_texts and face_portraits,
+        // save it, then reload — the removed fields should be gone
+        let json = r#"{
+            "maps": {},
+            "tilesets": {},
+            "dialog_texts": {"key1": "value1"},
+            "face_portraits": {"portrait1": "path/to/portrait.png"}
+        }"#;
+        let project: ProjectFile = serde_json::from_str(json).unwrap();
+        let saved_json = project.serialize().unwrap();
+        assert!(!saved_json.contains("dialog_texts"));
+        assert!(!saved_json.contains("face_portraits"));
+
+        // Reload should work fine
+        let reloaded: ProjectFile = serde_json::from_str(&saved_json).unwrap();
+        assert!(reloaded.maps.is_empty());
     }
 }

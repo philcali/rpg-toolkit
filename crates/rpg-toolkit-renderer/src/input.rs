@@ -57,6 +57,7 @@ pub fn handle_intro_skip(
     commands.remove_resource::<CameraPanState>();
     commands.remove_resource::<EntityMoveState>();
     commands.remove_resource::<WaitState>();
+    commands.remove_resource::<crate::resources::JumpAnimState>();
     // Reset camera to follow player
     commands.insert_resource(CameraFollowTarget {
         target: EntityTarget::Player,

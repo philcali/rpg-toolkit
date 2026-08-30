@@ -136,6 +136,7 @@ pub fn player_movement(
     intro_active: Option<Res<IntroEventsActive>>,
     dialog_state: Option<Res<DialogState>>,
     selection_state: Option<Res<SelectionState>>,
+    jump_state: Option<Res<crate::resources::JumpAnimState>>,
     project_data: Res<RendererProjectData>,
     renderer_state: Res<RendererState>,
     movement_config: Res<MovementConfig>,
@@ -148,6 +149,11 @@ pub fn player_movement(
 
     // Block movement while intro events are playing
     if intro_active.is_some() {
+        return;
+    }
+
+    // Block movement while a jump animation is in progress
+    if jump_state.is_some() {
         return;
     }
 

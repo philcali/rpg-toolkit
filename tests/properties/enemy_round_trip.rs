@@ -224,8 +224,6 @@ proptest! {
             None,           // no spawn point
             HashMap::new(), // no spritesheets
             None,           // no player spritesheet
-            HashMap::new(), // no dialog texts
-            HashMap::new(), // no face portraits
             CharacterRegistry::default(),
             ItemRegistry::default(),
             AbilityRegistry::default(),

@@ -145,7 +145,7 @@ impl AssetManager {
 
     /// Build an AssetRegistry from an existing ProjectFile (migration helper).
     ///
-    /// Iterates tilesets, spritesheets, and face_portraits from the project
+    /// Iterates tilesets and spritesheets from the project
     /// and registers each as an AssetReference. Registration errors (e.g. from
     /// IDs exceeding 128 characters) are silently ignored since project data
     /// is assumed to be valid.
@@ -167,15 +167,6 @@ impl AssetManager {
                 id: spritesheet_id.clone(),
                 relative_path: spritesheet.file_path.clone(),
                 category: CATEGORY_SPRITESHEET.to_string(),
-            });
-        }
-
-        // Register face portraits
-        for (portrait_key, portrait_path) in &project.face_portraits {
-            let _ = registry.register(AssetReference {
-                id: portrait_key.clone(),
-                relative_path: portrait_path.clone(),
-                category: CATEGORY_FACE_PORTRAIT.to_string(),
             });
         }
 
@@ -1077,6 +1068,7 @@ mod tests {
             enemies: Default::default(),
             shops: Default::default(),
             intro_events: None,
+            hotkey_bindings: Vec::new(),
         };
 
         // Write manifest
@@ -1136,6 +1128,7 @@ mod tests {
             enemies: Default::default(),
             shops: Default::default(),
             intro_events: None,
+            hotkey_bindings: Vec::new(),
         };
 
         manifest.save_to_dir(root).unwrap();
@@ -1198,6 +1191,7 @@ mod tests {
                 enemies: Default::default(),
                 shops: Default::default(),
                 intro_events: None,
+                hotkey_bindings: Vec::new(),
             };
 
             let manifest_json = serde_json::to_string_pretty(&manifest).unwrap();
@@ -1269,6 +1263,7 @@ mod tests {
                 enemies: Default::default(),
                 shops: Default::default(),
                 intro_events: None,
+                hotkey_bindings: Vec::new(),
             };
 
             let manifest_json = serde_json::to_string_pretty(&manifest).unwrap();
@@ -1349,8 +1344,6 @@ mod tests {
             None,
             StdHashMap::new(),
             None,
-            StdHashMap::new(),
-            StdHashMap::new(),
             Default::default(),
             Default::default(),
             Default::default(),
@@ -1387,8 +1380,6 @@ mod tests {
             None,
             StdHashMap::new(),
             None,
-            StdHashMap::new(),
-            StdHashMap::new(),
             Default::default(),
             Default::default(),
             Default::default(),
@@ -1435,17 +1426,12 @@ mod tests {
             },
         );
 
-        let mut face_portraits = StdHashMap::new();
-        face_portraits.insert("hero_face".to_string(), "data/hero_face.png".to_string());
-
         let project = ProjectFile::new(
             StdHashMap::new(),
             tilesets,
             None,
             spritesheets,
             None,
-            StdHashMap::new(),
-            face_portraits,
             Default::default(),
             Default::default(),
             Default::default(),
@@ -1454,7 +1440,7 @@ mod tests {
         );
 
         let registry = AssetManager::registry_from_project_file(&project);
-        assert_eq!(registry.len(), 3);
+        assert_eq!(registry.len(), 2);
 
         let tileset_entry = registry.get("dungeon").unwrap();
         assert_eq!(tileset_entry.relative_path, "tilesets/dungeon.png");
@@ -1463,10 +1449,6 @@ mod tests {
         let sprite_entry = registry.get("hero_sprite").unwrap();
         assert_eq!(sprite_entry.relative_path, "data/hero.png");
         assert_eq!(sprite_entry.category, CATEGORY_SPRITESHEET);
-
-        let portrait_entry = registry.get("hero_face").unwrap();
-        assert_eq!(portrait_entry.relative_path, "data/hero_face.png");
-        assert_eq!(portrait_entry.category, CATEGORY_FACE_PORTRAIT);
     }
 
     // --- AssetManager::validate_assets tests ---
@@ -1679,8 +1661,6 @@ mod tests {
             None,
             spritesheets,
             None,
-            StdHashMap::new(),
-            StdHashMap::new(),
             Default::default(),
             Default::default(),
             Default::default(),
@@ -1775,8 +1755,6 @@ mod tests {
             None,
             StdHashMap::new(),
             None,
-            StdHashMap::new(),
-            StdHashMap::new(),
             Default::default(),
             Default::default(),
             Default::default(),
@@ -1879,8 +1857,6 @@ mod tests {
             None,
             StdHashMap::new(),
             None,
-            StdHashMap::new(),
-            StdHashMap::new(),
             Default::default(),
             Default::default(),
             Default::default(),
@@ -1959,8 +1935,6 @@ mod tests {
             None,
             StdHashMap::new(),
             None,
-            StdHashMap::new(),
-            StdHashMap::new(),
             Default::default(),
             Default::default(),
             Default::default(),

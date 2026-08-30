@@ -224,8 +224,6 @@ pub fn process_spritesheet_remove(
             project.spawn_point.clone(),
             project.spritesheets.clone(),
             project.player_spritesheet.clone(),
-            HashMap::new(),
-            HashMap::new(),
             project.characters.clone(),
             project.items.clone(),
             rpg_toolkit_common::AbilityRegistry::default(),

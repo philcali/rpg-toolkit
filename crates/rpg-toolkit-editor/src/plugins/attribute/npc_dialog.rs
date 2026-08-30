@@ -300,6 +300,20 @@ pub fn npc_placement_dialog_ui(
                 .map(|s| (s.id.clone(), s.display_name.clone()))
                 .collect();
 
+            // Build portrait entries from characters with face_portrait set
+            let portrait_entries: Vec<(String, String)> = project
+                .characters
+                .characters
+                .values()
+                .filter_map(|c| {
+                    c.visual_assets
+                        .face_portrait
+                        .as_ref()
+                        .filter(|p| !p.is_empty())
+                        .map(|p| (p.clone(), c.display_name.clone()))
+                })
+                .collect();
+
             // Conditional Triggers section
             ui.separator();
             render_conditional_triggers_panel(
@@ -308,7 +322,7 @@ pub fn npc_placement_dialog_ui(
                 &mut dialog.conditional_trigger_editors,
                 "npc_cond_trig",
                 &map_entries,
-                &project.face_portraits,
+                &portrait_entries,
                 &shops,
             );
 
@@ -322,7 +336,7 @@ pub fn npc_placement_dialog_ui(
                 &mut dialog.action_editor,
                 "npc_event_trigger",
                 &map_entries,
-                &project.face_portraits,
+                &portrait_entries,
                 0,
                 None,
                 &shops,

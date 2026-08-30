@@ -8,6 +8,7 @@ use crate::ability::AbilityRegistry;
 use crate::character::CharacterRegistry;
 use crate::enemy::EnemyRegistry;
 use crate::error::CommonError;
+use crate::hotkey::{HotkeyBinding, deserialize_hotkey_bindings};
 use crate::item::ItemRegistry;
 use crate::map::{EventAction, MapData, MapId, SpawnPoint, TilesetId};
 use crate::shop::ShopRegistry;
@@ -70,6 +71,9 @@ pub struct ProjectManifest {
     /// Event actions to execute when a new game starts (after player spawns).
     #[serde(default, deserialize_with = "deserialize_intro_events")]
     pub intro_events: Option<Vec<EventAction>>,
+    /// Hotkey bindings: keyboard shortcuts mapped to event action sequences.
+    #[serde(default, deserialize_with = "deserialize_hotkey_bindings")]
+    pub hotkey_bindings: Vec<HotkeyBinding>,
 }
 
 impl ProjectManifest {
@@ -184,15 +188,6 @@ impl ProjectManifest {
                                         map_id, layer_idx, x, y, target_map_id
                                     );
                                 }
-                                crate::map::EventAction::ShowDialog {
-                                    text: crate::map::DialogTextData::Id(text_id),
-                                    ..
-                                } if !self.dialog_texts.contains_key(text_id) => {
-                                    eprintln!(
-                                        "warning: map '{}' layer {} tile ({},{}) has ShowDialog referencing non-existent text ID '{}'",
-                                        map_id, layer_idx, x, y, text_id
-                                    );
-                                }
                                 _ => {}
                             }
                         }
@@ -207,8 +202,6 @@ impl ProjectManifest {
             self.spawn_point,
             self.spritesheets,
             self.player_spritesheet,
-            self.dialog_texts,
-            self.face_portraits,
             self.characters,
             self.items,
             self.abilities,
@@ -216,6 +209,7 @@ impl ProjectManifest {
             self.shops,
         );
         project.intro_events = self.intro_events;
+        project.hotkey_bindings = self.hotkey_bindings;
         Ok(project)
     }
 
@@ -339,6 +333,7 @@ mod tests {
             enemies: EnemyRegistry::default(),
             shops: ShopRegistry::default(),
             intro_events: None,
+            hotkey_bindings: Vec::new(),
         };
 
         let bytes = manifest.to_bytes().unwrap();
@@ -361,8 +356,6 @@ mod tests {
             None,
             HashMap::new(),
             None,
-            HashMap::new(),
-            HashMap::new(),
             CharacterRegistry::default(),
             ItemRegistry::default(),
             AbilityRegistry::default(),
@@ -420,6 +413,7 @@ mod tests {
             enemies: EnemyRegistry::default(),
             shops: ShopRegistry::default(),
             intro_events: None,
+            hotkey_bindings: Vec::new(),
         };
 
         let errors = manifest.validate_refs(&tmp);

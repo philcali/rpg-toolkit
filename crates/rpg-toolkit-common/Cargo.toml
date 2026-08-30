@@ -66,3 +66,19 @@ path = "tests/properties/entity_graphics_round_trip.rs"
 [[test]]
 name = "intro_action_round_trip"
 path = "tests/properties/intro_action_round_trip.rs"
+
+[[test]]
+name = "jump_round_trip"
+path = "tests/properties/jump_round_trip.rs"
+
+[[test]]
+name = "hotkey_binding_duplicate_keycode"
+path = "tests/properties/hotkey_binding_duplicate_keycode.rs"
+
+[[test]]
+name = "parallax_layer_invalid_scroll_factor"
+path = "tests/properties/parallax_layer_invalid_scroll_factor.rs"
+
+[[test]]
+name = "parallax_layer_round_trip"
+path = "tests/properties/parallax_layer_round_trip.rs"

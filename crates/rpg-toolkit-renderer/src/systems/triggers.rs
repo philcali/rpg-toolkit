@@ -5,20 +5,19 @@ use rpg_toolkit_common::{
 };
 use std::collections::VecDeque;
 
-use crate::components::{FadeOverlay, GameCamera, PlayerCharacter};
-use crate::dialog::{
-    DialogState, DialogTextRegistry, dialog_config_from_data, dialog_text_from_data,
-};
+use crate::components::{FadeOverlay, GameCamera, PlayerCharacter, PlayerSpriteState};
+use crate::dialog::{DialogState, dialog_config_from_data, dialog_text_from_data};
 use crate::effects::{
     compute_fade_opacity, compute_shake_offset, is_fade_complete, is_shake_complete,
 };
 use crate::events::{MapChanged, PlayerMoved, ShowDialog};
 use crate::resources::{
     ActionQueue, CameraFollowTarget, CameraPanState, CharacterProgressState, CurrencyState,
-    EntityMoveState, FadeState, GameState, IntroEventsActive, InventoryState, NpcPositions,
-    PartyState, RendererProjectData, RendererState, SavePath, ScreenShakeState, WaitState,
-    WaitingFor,
+    EntityMoveState, FadeState, GameState, IntroEventsActive, InventoryState, JumpAnimState,
+    NpcPositions, PartyState, RendererProjectData, RendererState, SavePath, ScreenShakeState,
+    SpeedMultiplier, WaitState, WaitingFor,
 };
+use crate::systems::jump::compute_landing;
 use crate::systems::player::grid_to_world;
 use crate::systems::selection::{ResolvedChoice, SelectionState};
 
@@ -123,7 +122,6 @@ pub fn advance_action_queue(
     action_queue: Option<ResMut<ActionQueue>>,
     dialog_state: Option<Res<DialogState>>,
     selection_state: Option<Res<SelectionState>>,
-    registry: Option<Res<DialogTextRegistry>>,
     shake_state: Option<Res<ScreenShakeState>>,
     fade_state: Option<Res<FadeState>>,
     mut game_state: Option<ResMut<GameState>>,
@@ -138,10 +136,11 @@ pub fn advance_action_queue(
         Option<ResMut<CharacterProgressState>>,
         Option<ResMut<PartyState>>,
         Option<ResMut<InventoryState>>,
+        Option<ResMut<SpeedMultiplier>>,
     ),
     save_phase_state: (
         Option<Res<SavePath>>,
-        Query<&PlayerCharacter, Without<GameCamera>>,
+        Query<(&PlayerCharacter, Option<&PlayerSpriteState>), Without<GameCamera>>,
         Res<State<AppPhase>>,
         ResMut<NextState<AppPhase>>,
         Query<Entity, With<FadeOverlay>>,
@@ -154,6 +153,7 @@ pub fn advance_action_queue(
         ref mut character_progress,
         ref mut party_state,
         ref mut inventory_state,
+        ref mut speed_multiplier,
     ) = reward_state;
 
     // Destructure save/phase state tuple
@@ -207,11 +207,17 @@ pub fn advance_action_queue(
             // waiting_for to Nothing and pop the action when complete.
             return;
         }
+        WaitingFor::Jump => {
+            // Jump animation is in progress. The jump_animation_system removes
+            // JumpAnimState when the animation completes. Once removed, we can
+            // advance the queue.
+            return;
+        }
         WaitingFor::Nothing => {}
     }
 
     // Process actions in a loop to handle non-blocking actions consecutively
-    'action_loop: loop {
+    loop {
         if queue.actions.is_empty() {
             commands.remove_resource::<ActionQueue>();
             commands.remove_resource::<IntroEventsActive>();
@@ -223,18 +229,6 @@ pub fn advance_action_queue(
             EventAction::ShowDialog { text, config } => {
                 let dialog_text = dialog_text_from_data(&text);
                 let dialog_config = dialog_config_from_data(&config);
-
-                if let rpg_toolkit_common::DialogTextData::Id(ref id) = text {
-                    let has_entry = registry.as_ref().is_some_and(|reg| reg.get(id).is_some());
-                    if !has_entry {
-                        warn!(
-                            "ShowDialog text ID '{}' not found in DialogTextRegistry; skipping action",
-                            id
-                        );
-                        queue.actions.pop_front();
-                        continue;
-                    }
-                }
 
                 show_dialog.write(ShowDialog {
                     text: dialog_text,
@@ -467,20 +461,6 @@ pub fn advance_action_queue(
                 // Resolve prompt text
                 let resolved_prompt = match &prompt {
                     DialogTextData::Inline(text) => text.clone(),
-                    DialogTextData::Id(id) => {
-                        let resolved = registry.as_ref().and_then(|reg| reg.get(id));
-                        match resolved {
-                            Some(text) => text.to_string(),
-                            None => {
-                                warn!(
-                                    "ShowSelection prompt ID '{}' not found in DialogTextRegistry; skipping action",
-                                    id
-                                );
-                                queue.actions.pop_front();
-                                continue;
-                            }
-                        }
-                    }
                 };
 
                 // Resolve all choice labels
@@ -488,20 +468,6 @@ pub fn advance_action_queue(
                 for choice in &choices {
                     let label = match &choice.label {
                         DialogTextData::Inline(text) => text.clone(),
-                        DialogTextData::Id(id) => {
-                            let resolved = registry.as_ref().and_then(|reg| reg.get(id));
-                            match resolved {
-                                Some(text) => text.to_string(),
-                                None => {
-                                    warn!(
-                                        "ShowSelection choice label ID '{}' not found in DialogTextRegistry; skipping action",
-                                        id
-                                    );
-                                    queue.actions.pop_front();
-                                    continue 'action_loop;
-                                }
-                            }
-                        }
                     };
                     resolved_choices.push(ResolvedChoice {
                         label,
@@ -511,20 +477,8 @@ pub fn advance_action_queue(
 
                 let choice_count = resolved_choices.len();
 
-                // Resolve face portrait path from project data
-                let resolved_portrait_path = selection_config.face_portrait.as_ref().and_then(|portrait_id| {
-                    let resolved = project_data
-                        .as_ref()
-                        .and_then(|pd| pd.project_file.face_portraits.get(portrait_id))
-                        .cloned();
-                    if resolved.is_none() && !portrait_id.is_empty() {
-                        warn!(
-                            "Face portrait ID '{}' not found in project face_portraits registry; skipping portrait",
-                            portrait_id
-                        );
-                    }
-                    resolved
-                });
+                // face_portrait already contains the direct asset path — no registry lookup needed.
+                let resolved_portrait_path = selection_config.face_portrait.clone();
 
                 // Spawn selection UI
                 spawn_selection_ui(
@@ -869,7 +823,9 @@ pub fn advance_action_queue(
                 let map_id = renderer_state.active_map_id.as_deref();
                 let (pos, elev) = player_pos_query
                     .single()
-                    .map(|player| (Some((player.grid_x, player.grid_y)), Some(player.elevation)))
+                    .map(|(player, _)| {
+                        (Some((player.grid_x, player.grid_y)), Some(player.elevation))
+                    })
                     .unwrap_or((None, None));
 
                 if let Some(ref save_path) = save_path_res {
@@ -1040,7 +996,7 @@ pub fn advance_action_queue(
                     EntityTarget::Player => player_pos_query
                         .single()
                         .ok()
-                        .map(|pc| (pc.grid_x, pc.grid_y)),
+                        .map(|(pc, _)| (pc.grid_x, pc.grid_y)),
                     EntityTarget::Npc { npc_id } => {
                         // Find the NPC by matching npc_id against spritesheet_id
                         let npc_index = map
@@ -1078,6 +1034,68 @@ pub fn advance_action_queue(
                 });
                 queue.waiting_for = WaitingFor::EntityMove;
                 return;
+            }
+            // Jump action: compute landing, insert JumpAnimState, block queue
+            EventAction::Jump { distance } => {
+                // Get player position and facing direction
+                let player_info = player_pos_query.single().ok().map(|(pc, ss)| {
+                    let facing = ss
+                        .map(|s| s.facing)
+                        .unwrap_or(rpg_toolkit_common::FacingDirection::Down);
+                    (pc.grid_x, pc.grid_y, facing)
+                });
+
+                let Some((grid_x, grid_y, facing)) = player_info else {
+                    queue.actions.pop_front();
+                    continue;
+                };
+
+                let Some(ref pd) = project_data else {
+                    queue.actions.pop_front();
+                    continue;
+                };
+                let Some(map_id) = &renderer_state.active_map_id else {
+                    queue.actions.pop_front();
+                    continue;
+                };
+                let Some(map) = pd.project_file.maps.get(map_id) else {
+                    queue.actions.pop_front();
+                    continue;
+                };
+
+                let (landing_x, landing_y) =
+                    compute_landing(grid_x, grid_y, facing, distance, map.width, map.height);
+
+                // Duration scales with distance (same time-per-tile as normal
+                // movement). A distance-0 hop still needs a fixed nonzero
+                // duration so the parabolic arc animates over multiple frames
+                // instead of completing in a single frame.
+                let duration = if distance == 0 {
+                    0.3
+                } else {
+                    0.15 * distance as f32
+                };
+
+                commands.insert_resource(JumpAnimState {
+                    start_x: grid_x,
+                    start_y: grid_y,
+                    landing_x,
+                    landing_y,
+                    distance,
+                    duration,
+                    elapsed: 0.0,
+                });
+
+                queue.waiting_for = WaitingFor::Jump;
+                return;
+            }
+            // SetSpeed: update SpeedMultiplier resource (non-blocking)
+            EventAction::SetSpeed { multiplier } => {
+                if let Some(sm) = speed_multiplier.as_deref_mut() {
+                    sm.value = multiplier;
+                }
+                queue.actions.pop_front();
+                continue;
             }
         }
     }

@@ -86,32 +86,6 @@ pub enum EditCommandKind {
         old_value: Option<u32>,
         new_value: Option<u32>,
     },
-    InsertDialogText {
-        text_id: String,
-        text: String,
-    },
-    UpdateDialogText {
-        text_id: String,
-        old_text: String,
-        new_text: String,
-    },
-    RemoveDialogText {
-        text_id: String,
-        old_text: String,
-    },
-    InsertFacePortrait {
-        id: String,
-        path: String,
-    },
-    UpdateFacePortrait {
-        id: String,
-        old_path: String,
-        new_path: String,
-    },
-    RemoveFacePortrait {
-        id: String,
-        path: String,
-    },
 }
 
 impl EditCommand {
@@ -250,14 +224,6 @@ impl EditCommand {
                 {
                     cell.target_elevation = *new_value;
                 }
-            }
-            EditCommandKind::InsertDialogText { .. }
-            | EditCommandKind::UpdateDialogText { .. }
-            | EditCommandKind::RemoveDialogText { .. }
-            | EditCommandKind::InsertFacePortrait { .. }
-            | EditCommandKind::UpdateFacePortrait { .. }
-            | EditCommandKind::RemoveFacePortrait { .. } => {
-                // No-op on MapData; handled at Project level by undo_redo plugin
             }
         }
     }
@@ -402,14 +368,6 @@ impl EditCommand {
                 {
                     cell.target_elevation = *old_value;
                 }
-            }
-            EditCommandKind::InsertDialogText { .. }
-            | EditCommandKind::UpdateDialogText { .. }
-            | EditCommandKind::RemoveDialogText { .. }
-            | EditCommandKind::InsertFacePortrait { .. }
-            | EditCommandKind::UpdateFacePortrait { .. }
-            | EditCommandKind::RemoveFacePortrait { .. } => {
-                // No-op on MapData; handled at Project level by undo_redo plugin
             }
         }
     }

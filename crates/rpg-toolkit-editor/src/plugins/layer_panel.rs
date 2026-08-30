@@ -4,10 +4,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use crate::data::map::MapId;
 use crate::data::project::Project;
 use crate::data::{AppEditorMode, EditCommand, EditorUiSet, MapDataEditorExt};
-use crate::plugins::dialog_text_panel::{
-    DialogTextPanelState, TextIdIndex, render_dialog_text_modal, render_dialog_text_panel,
-    render_face_portrait_modal,
-};
+use crate::plugins::parallax_panel::render_parallax_panel;
 use crate::plugins::searchable_combobox::filter_items;
 
 /// Plugin that renders the layer management panel and the map browser,
@@ -73,8 +70,6 @@ fn layer_panel_ui(
     mut project: ResMut<Project>,
     mut browser_state: ResMut<MapBrowserState>,
     mut delete_dialog_open: ResMut<MapDeleteDialogOpen>,
-    mut dialog_text_state: ResMut<DialogTextPanelState>,
-    text_id_index: Res<TextIdIndex>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -94,14 +89,6 @@ fn layer_panel_ui(
                 ui.label("No map loaded.");
                 ui.add_space(8.0);
                 render_map_browser(ui, &project, &mut browser_state, &mut browser_actions);
-                ui.add_space(8.0);
-                render_dialog_text_panel(
-                    ui,
-                    &project,
-                    &mut dialog_text_state,
-                    &mut edit_events,
-                    &text_id_index,
-                );
                 return;
             }
 
@@ -189,15 +176,9 @@ fn layer_panel_ui(
             ui.add_space(8.0);
             render_map_browser(ui, &project, &mut browser_state, &mut browser_actions);
 
-            // ── Dialog Text Panel section (below map browser) ──
+            // ── Parallax Layers section (below map browser) ──
             ui.add_space(8.0);
-            render_dialog_text_panel(
-                ui,
-                &project,
-                &mut dialog_text_state,
-                &mut edit_events,
-                &text_id_index,
-            );
+            render_parallax_panel(ui, &mut project);
         });
 
     // Delete confirmation dialog (rendered outside the panel)
@@ -232,12 +213,6 @@ fn layer_panel_ui(
             browser_actions.push(BrowserAction::CancelDelete);
         }
     }
-
-    // Dialog Text add/edit modal (rendered outside the panel)
-    render_dialog_text_modal(ctx, &project, &mut dialog_text_state, &mut edit_events);
-
-    // Face Portrait add/edit modal (rendered outside the panel)
-    render_face_portrait_modal(ctx, &project, &mut dialog_text_state, &mut edit_events);
 
     // Apply deferred browser actions
     for action in browser_actions {
@@ -277,11 +252,6 @@ fn layer_panel_ui(
 
     // Keep the public dialog-open flag in sync
     delete_dialog_open.0 = browser_state.pending_delete.is_some();
-
-    // Handle pending navigation from Dialog Text Panel find-usages
-    if let Some(map_id) = dialog_text_state.pending_navigation.take() {
-        project.open_map_tab(map_id);
-    }
 
     Ok(())
 }

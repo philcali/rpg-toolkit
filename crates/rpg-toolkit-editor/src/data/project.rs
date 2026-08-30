@@ -7,7 +7,8 @@ pub use rpg_toolkit_common::ProjectFile;
 
 use rpg_toolkit_common::{
     AbilityRegistry, CharacterRegistry, CharacterSpritesheet, EnemyRegistry, EventAction,
-    ItemRegistry, MapData, MapId, ShopRegistry, SpawnPoint, SpritesheetId, TilesetId,
+    HotkeyBinding, ItemRegistry, MapData, MapId, ShopRegistry, SpawnPoint, SpritesheetId,
+    TilesetId,
 };
 
 use super::state::EditorError;
@@ -26,10 +27,7 @@ pub struct Project {
     pub spawn_point: Option<SpawnPoint>,
     pub spritesheets: HashMap<SpritesheetId, CharacterSpritesheet>,
     pub player_spritesheet: Option<SpritesheetId>,
-    /// Dialog text entries: Text_Id → text string.
-    pub dialog_texts: HashMap<String, String>,
-    /// Face portrait entries: portrait ID → asset path.
-    pub face_portraits: HashMap<String, String>,
+
     /// Character registry: all playable characters defined in this project.
     pub characters: CharacterRegistry,
     /// Whether character data has been modified since the last save.
@@ -54,6 +52,10 @@ pub struct Project {
     pub intro_events: Option<Vec<EventAction>>,
     /// Whether intro events data has been modified since the last save.
     pub has_unsaved_intro_events_changes: bool,
+    /// Hotkey bindings: keyboard shortcuts that fire event actions during gameplay.
+    pub hotkey_bindings: Vec<HotkeyBinding>,
+    /// Whether hotkey bindings data has been modified since the last save.
+    pub has_unsaved_hotkey_changes: bool,
 }
 
 impl Project {

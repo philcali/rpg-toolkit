@@ -2,22 +2,20 @@ use bevy::prelude::*;
 
 use crate::dialog::{
     DialogBox, DialogConfig, DialogPanel, DialogPosition, DialogState, DialogText, DialogTextNode,
-    DialogTextRegistry, FacePortrait, OverflowIndicator, compute_visible_chars,
+    FacePortrait, OverflowIndicator, compute_visible_chars,
 };
 use crate::events::ShowDialog;
 use crate::markup::{TextStyle, parse_markup};
-use crate::resources::RendererProjectData;
 
 /// Reads `ShowDialog` messages, resolves text, spawns dialog UI, and inserts `DialogState`.
 pub fn handle_dialog_event(
     mut show_dialog: MessageReader<ShowDialog>,
     dialog_state: Option<Res<DialogState>>,
-    registry: Option<Res<DialogTextRegistry>>,
-    project_data: Option<Res<RendererProjectData>>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
-    for event in show_dialog.read() {
+    // Only handle the first event
+    if let Some(event) = show_dialog.read().next() {
         // If a dialog is already active, ignore new events
         if dialog_state.is_some() {
             debug!("Dialog already active, ignoring ShowDialog event");
@@ -28,21 +26,11 @@ pub fn handle_dialog_event(
         let resolved_text = match &event.text {
             DialogText::Inline(text) => text.clone(),
             DialogText::Id(id) => {
-                let Some(reg) = &registry else {
-                    warn!(
-                        "ShowDialog with text ID '{}' but no DialogTextRegistry is present; ignoring",
-                        id
-                    );
-                    continue;
-                };
-                let Some(text) = reg.get(id) else {
-                    warn!(
-                        "ShowDialog text ID '{}' not found in DialogTextRegistry; ignoring",
-                        id
-                    );
-                    continue;
-                };
-                text.to_string()
+                warn!(
+                    "DialogText::Id('{}') encountered at runtime; legacy Id references are no longer supported. Using empty string.",
+                    id
+                );
+                String::new()
             }
         };
 
@@ -50,22 +38,9 @@ pub fn handle_dialog_event(
         let text_speed = event.config.text_speed;
         let fully_revealed = text_speed <= 0.0 || total_chars == 0;
 
-        // Spawn the dialog UI, resolving face portrait ID to file path
-        let mut resolved_config = event.config.clone();
-        if let Some(ref portrait_id) = resolved_config.face_portrait {
-            // Look up the portrait ID in the project's face_portraits registry
-            let resolved_path = project_data
-                .as_ref()
-                .and_then(|pd| pd.project_file.face_portraits.get(portrait_id))
-                .cloned();
-            if resolved_path.is_none() && !portrait_id.is_empty() {
-                warn!(
-                    "Face portrait ID '{}' not found in project face_portraits registry; skipping portrait",
-                    portrait_id
-                );
-            }
-            resolved_config.face_portrait = resolved_path;
-        }
+        // face_portrait already contains the direct asset path — no registry lookup needed.
+        let resolved_config = event.config.clone();
+
         spawn_dialog_ui(
             &mut commands,
             &resolved_text,
@@ -83,9 +58,6 @@ pub fn handle_dialog_event(
             text_speed,
             movement_blocked: event.config.movement_block,
         });
-
-        // Only handle the first event
-        return;
     }
 }
 
@@ -471,9 +443,7 @@ pub fn detect_overflow(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dialog::{
-        DialogConfig, DialogPanel, DialogText, DialogTextRegistry, FacePortrait, OverflowIndicator,
-    };
+    use crate::dialog::{DialogConfig, DialogPanel, DialogText, FacePortrait, OverflowIndicator};
     use crate::events::ShowDialog;
     use bevy::app::App;
     use bevy::asset::AssetPlugin;
@@ -486,7 +456,6 @@ mod tests {
         app.add_plugins(AssetPlugin::default());
         app.init_asset::<Image>();
         app.add_message::<ShowDialog>();
-        app.init_resource::<DialogTextRegistry>();
         app.add_systems(
             Update,
             (
@@ -665,20 +634,13 @@ mod tests {
     fn face_portrait_spawned_when_configured() {
         let mut app = test_app();
 
-        // Insert a RendererProjectData with the portrait ID registered
-        let mut face_portraits = std::collections::HashMap::new();
-        face_portraits.insert(
-            "portraits/hero.png".to_string(),
-            "portraits/hero.png".to_string(),
-        );
+        // Insert a RendererProjectData (portrait path is now stored directly in config)
         let project_file = rpg_toolkit_common::ProjectFile::new(
             std::collections::HashMap::new(),
             std::collections::HashMap::new(),
             None,
             std::collections::HashMap::new(),
             None,
-            std::collections::HashMap::new(),
-            face_portraits,
             rpg_toolkit_common::CharacterRegistry::default(),
             rpg_toolkit_common::ItemRegistry::default(),
             rpg_toolkit_common::AbilityRegistry::default(),
@@ -776,6 +738,68 @@ mod tests {
             indicators.len(),
             0,
             "No OverflowIndicator should exist for short text"
+        );
+    }
+
+    // =========================================================================
+    // 5.1, 5.4 Test graceful degradation for DialogText::Id
+    // =========================================================================
+
+    /// Helper: sends a ShowDialog message with a DialogText::Id variant.
+    fn send_show_dialog_with_id(app: &mut App, id: &str, config: DialogConfig) {
+        let id_owned = id.to_string();
+        let system = move |mut writer: MessageWriter<ShowDialog>| {
+            writer.write(ShowDialog {
+                text: DialogText::Id(id_owned.clone()),
+                config: config.clone(),
+            });
+        };
+        app.world_mut().run_system_once(system).unwrap();
+        app.update();
+    }
+
+    #[test]
+    fn dialog_text_id_resolves_to_empty_string() {
+        let mut app = test_app();
+        send_show_dialog_with_id(&mut app, "foo", DialogConfig::default());
+
+        // DialogState should be inserted with empty text
+        let state = app.world().get_resource::<DialogState>();
+        assert!(
+            state.is_some(),
+            "DialogState should be present after Id variant"
+        );
+        let state = state.unwrap();
+        assert_eq!(
+            state.full_text, "",
+            "DialogText::Id should resolve to empty string"
+        );
+        assert_eq!(state.total_chars, 0);
+    }
+
+    #[test]
+    fn dialog_text_id_spawns_dialog_ui() {
+        let mut app = test_app();
+        send_show_dialog_with_id(&mut app, "nonexistent_id", DialogConfig::default());
+
+        // A DialogBox should still be spawned (with empty text)
+        let mut query = app.world_mut().query_filtered::<Entity, With<DialogBox>>();
+        let boxes: Vec<Entity> = query.iter(app.world()).collect();
+        assert_eq!(
+            boxes.len(),
+            1,
+            "DialogBox entity should be spawned even when DialogText::Id is used"
+        );
+
+        // A DialogTextNode should exist with empty content
+        let mut text_query = app
+            .world_mut()
+            .query_filtered::<&Text, With<DialogTextNode>>();
+        let texts: Vec<&Text> = text_query.iter(app.world()).collect();
+        assert_eq!(texts.len(), 1);
+        assert_eq!(
+            texts[0].0, "",
+            "DialogTextNode text should be empty for Id variant"
         );
     }
 }

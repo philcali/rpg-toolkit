@@ -141,7 +141,6 @@ pub struct FacePortrait;
 pub fn dialog_text_from_data(data: &rpg_toolkit_common::DialogTextData) -> DialogText {
     match data {
         rpg_toolkit_common::DialogTextData::Inline(s) => DialogText::Inline(s.clone()),
-        rpg_toolkit_common::DialogTextData::Id(s) => DialogText::Id(s.clone()),
     }
 }
 

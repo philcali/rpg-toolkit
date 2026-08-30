@@ -10,7 +10,7 @@ use rpg_toolkit_common::{
 };
 
 /// The type of action being added in the Event Trigger Editor.
-#[derive(Default, PartialEq)]
+#[derive(Default, PartialEq, Clone, Copy)]
 pub enum ActionType {
     #[default]
     JumpTo,
@@ -35,21 +35,141 @@ pub enum ActionType {
     CameraFollow,
     CameraPan,
     Wait,
+    Jump,
+    SetSpeed,
 }
 
-/// The text source mode for a ShowDialog action.
-#[derive(Default, PartialEq)]
-pub enum DialogTextMode {
-    #[default]
-    Inline,
-    TextId,
+/// A named grouping of action types for the categorized action-type dropdown.
+///
+/// Each category owns a static list of `(variant, display_name)` pairs. Every
+/// `ActionType` variant belongs to exactly one category (see [`ACTION_CATEGORIES`]).
+pub struct ActionCategory {
+    /// Display name for the category header.
+    pub name: &'static str,
+    /// Action variants belonging to this category, paired with their display names.
+    pub actions: &'static [(ActionType, &'static str)],
+}
+
+/// Static mapping of action types into named categories, per Requirement 10.8.
+///
+/// Every `ActionType` variant appears in exactly one category. The order here
+/// determines the order categories and actions are shown in the dropdown.
+pub const ACTION_CATEGORIES: &[ActionCategory] = &[
+    ActionCategory {
+        name: "Dialog",
+        actions: &[
+            (ActionType::ShowDialog, "Show Dialog"),
+            (ActionType::ShowSelection, "Show Selection"),
+        ],
+    },
+    ActionCategory {
+        name: "Movement",
+        actions: &[
+            (ActionType::JumpTo, "Jump To Map"),
+            (ActionType::Jump, "Jump"),
+            (ActionType::SetSpeed, "Set Speed"),
+            (ActionType::MoveEntity, "Move Entity"),
+        ],
+    },
+    ActionCategory {
+        name: "Camera",
+        actions: &[
+            (ActionType::CameraFollow, "Camera Follow"),
+            (ActionType::CameraPan, "Camera Pan"),
+        ],
+    },
+    ActionCategory {
+        name: "Rewards",
+        actions: &[
+            (ActionType::GiveCurrency, "Give Currency"),
+            (ActionType::GiveExperience, "Give Experience"),
+            (ActionType::GiveItem, "Give Item"),
+            (ActionType::LearnAbility, "Learn Ability"),
+            (ActionType::AddPartyMember, "Add Party Member"),
+        ],
+    },
+    ActionCategory {
+        name: "State",
+        actions: &[
+            (ActionType::SetState, "Set State"),
+            (ActionType::StateCheck, "State Check"),
+            (ActionType::Branch, "Branch"),
+            (ActionType::SaveGame, "Save Game"),
+            (ActionType::ChangePhase, "Change Phase"),
+        ],
+    },
+    ActionCategory {
+        name: "Visual Effects",
+        actions: &[
+            (ActionType::ScreenShake, "Screen Shake"),
+            (ActionType::StopScreenShake, "Stop Screen Shake"),
+            (ActionType::FadeTransition, "Fade Transition"),
+            (ActionType::SetPlayerAppearance, "Set Player Appearance"),
+        ],
+    },
+    ActionCategory {
+        name: "System",
+        actions: &[
+            (ActionType::Wait, "Wait"),
+            (ActionType::OpenShop, "Open Shop"),
+        ],
+    },
+];
+
+/// Returns the display name for an [`ActionType`] from [`ACTION_CATEGORIES`].
+///
+/// Falls back to an empty string if the variant is somehow not present (which
+/// should never happen since every variant is categorized).
+pub fn action_type_display_name(action_type: ActionType) -> &'static str {
+    for category in ACTION_CATEGORIES {
+        for (variant, name) in category.actions {
+            if *variant == action_type {
+                return name;
+            }
+        }
+    }
+    ""
+}
+
+/// Filters [`ACTION_CATEGORIES`] by a case-insensitive substring match against
+/// each action's display name.
+///
+/// - When `filter` is empty, every category is returned with all of its actions.
+/// - When `filter` is non-empty, only actions whose display name contains the
+///   filter (case-insensitive) are kept, and categories with no matching actions
+///   are omitted entirely.
+/// - When `include_predicate` returns `false` for a variant, that action is
+///   excluded regardless of the filter (used to hide `StateCheck`/`Branch` at
+///   nested depths).
+///
+/// Returns a list of `(category_name, matching_actions)` pairs preserving the
+/// declaration order of [`ACTION_CATEGORIES`].
+pub fn filter_action_categories(
+    filter: &str,
+    include_predicate: impl Fn(ActionType) -> bool,
+) -> Vec<(&'static str, Vec<(ActionType, &'static str)>)> {
+    let filter_lower = filter.to_lowercase();
+    let mut result = Vec::new();
+    for category in ACTION_CATEGORIES {
+        let matching: Vec<(ActionType, &'static str)> = category
+            .actions
+            .iter()
+            .filter(|(variant, _)| include_predicate(*variant))
+            .filter(|(_, name)| {
+                filter_lower.is_empty() || name.to_lowercase().contains(&filter_lower)
+            })
+            .map(|(variant, name)| (*variant, *name))
+            .collect();
+        if !matching.is_empty() {
+            result.push((category.name, matching));
+        }
+    }
+    result
 }
 
 /// A single choice in the editor for a ShowSelection action.
 pub struct EditorChoice {
-    pub label_mode: DialogTextMode,
     pub label_text: String,
-    pub label_id: String,
     pub actions: Vec<EventAction>,
     /// Persistent action editor state for this choice's nested action list.
     pub action_editor: ActionEditorState,
@@ -58,9 +178,7 @@ pub struct EditorChoice {
 impl Default for EditorChoice {
     fn default() -> Self {
         Self {
-            label_mode: DialogTextMode::Inline,
             label_text: String::new(),
-            label_id: String::new(),
             actions: Vec::new(),
             // Use new_nested() to avoid recursion (no selection_choices inside)
             action_editor: ActionEditorState::new_nested(),
@@ -83,6 +201,8 @@ pub fn truncate_preview(s: &str, max_len: usize) -> String {
 /// Replaces the duplicated field sets in EventTriggerDialog and NpcPlacementDialog.
 pub struct ActionEditorState {
     pub action_type: ActionType,
+    /// Search filter buffer for the categorized action-type dropdown.
+    pub action_type_search: String,
     pub editing_index: Option<usize>,
     // JumpTo fields
     pub target_map_id: String,
@@ -90,9 +210,7 @@ pub struct ActionEditorState {
     pub target_y: String,
     pub target_elevation: String,
     // ShowDialog fields
-    pub dialog_text_mode: DialogTextMode,
     pub dialog_inline_text: String,
-    pub dialog_text_id: String,
     pub dialog_text_speed: String,
     pub dialog_position: DialogPositionData,
     pub dialog_movement_block: bool,
@@ -122,9 +240,7 @@ pub struct ActionEditorState {
     pub branch_on_true: Vec<EventAction>,
     pub branch_on_false: Vec<EventAction>,
     // ShowSelection fields
-    pub selection_prompt_mode: DialogTextMode,
     pub selection_prompt_text: String,
-    pub selection_prompt_id: String,
     pub selection_position: DialogPositionData,
     pub selection_face_portrait: Option<String>,
     pub selection_choices: Vec<EditorChoice>,
@@ -152,6 +268,8 @@ pub struct ActionEditorState {
     // OpenShop fields
     pub open_shop_id: String,
     pub shop_search_buffer: String,
+    // Portrait search buffer (for ShowDialog and ShowSelection)
+    pub portrait_search_buffer: String,
     // MoveEntity fields
     pub move_entity_target_is_player: bool,
     pub move_entity_npc_id: String,
@@ -167,20 +285,23 @@ pub struct ActionEditorState {
     pub camera_pan_duration: f32,
     // Wait fields
     pub wait_duration: f32,
+    // Jump fields
+    pub jump_distance: String,
+    // SetSpeed fields
+    pub speed_multiplier: f32,
 }
 
 impl Default for ActionEditorState {
     fn default() -> Self {
         Self {
             action_type: ActionType::JumpTo,
+            action_type_search: String::new(),
             editing_index: None,
             target_map_id: String::new(),
             target_x: "0".to_string(),
             target_y: "0".to_string(),
             target_elevation: String::new(),
-            dialog_text_mode: DialogTextMode::Inline,
             dialog_inline_text: String::new(),
-            dialog_text_id: String::new(),
             dialog_text_speed: "30".to_string(),
             dialog_position: DialogPositionData::Bottom,
             dialog_movement_block: true,
@@ -203,9 +324,7 @@ impl Default for ActionEditorState {
             branch_checks: Vec::new(),
             branch_on_true: Vec::new(),
             branch_on_false: Vec::new(),
-            selection_prompt_mode: DialogTextMode::Inline,
             selection_prompt_text: String::new(),
-            selection_prompt_id: String::new(),
             selection_position: DialogPositionData::Bottom,
             selection_face_portrait: None,
             selection_choices: vec![EditorChoice::default(), EditorChoice::default()],
@@ -233,6 +352,8 @@ impl Default for ActionEditorState {
             // OpenShop fields
             open_shop_id: String::new(),
             shop_search_buffer: String::new(),
+            // Portrait search buffer
+            portrait_search_buffer: String::new(),
             // MoveEntity fields
             move_entity_target_is_player: true,
             move_entity_npc_id: String::new(),
@@ -248,6 +369,10 @@ impl Default for ActionEditorState {
             camera_pan_duration: 1.0,
             // Wait fields
             wait_duration: 1.0,
+            // Jump fields
+            jump_distance: "2".to_string(),
+            // SetSpeed fields
+            speed_multiplier: 1.0,
         }
     }
 }
@@ -263,14 +388,13 @@ impl ActionEditorState {
     pub fn new_nested() -> Self {
         Self {
             action_type: ActionType::JumpTo,
+            action_type_search: String::new(),
             editing_index: None,
             target_map_id: String::new(),
             target_x: "0".to_string(),
             target_y: "0".to_string(),
             target_elevation: String::new(),
-            dialog_text_mode: DialogTextMode::Inline,
             dialog_inline_text: String::new(),
-            dialog_text_id: String::new(),
             dialog_text_speed: "30".to_string(),
             dialog_position: DialogPositionData::Bottom,
             dialog_movement_block: true,
@@ -293,9 +417,7 @@ impl ActionEditorState {
             branch_checks: Vec::new(),
             branch_on_true: Vec::new(),
             branch_on_false: Vec::new(),
-            selection_prompt_mode: DialogTextMode::Inline,
             selection_prompt_text: String::new(),
-            selection_prompt_id: String::new(),
             selection_position: DialogPositionData::Bottom,
             selection_face_portrait: None,
             selection_choices: Vec::new(), // Empty — no recursion
@@ -323,6 +445,8 @@ impl ActionEditorState {
             // OpenShop fields
             open_shop_id: String::new(),
             shop_search_buffer: String::new(),
+            // Portrait search buffer
+            portrait_search_buffer: String::new(),
             // MoveEntity fields
             move_entity_target_is_player: true,
             move_entity_npc_id: String::new(),
@@ -338,6 +462,10 @@ impl ActionEditorState {
             camera_pan_duration: 1.0,
             // Wait fields
             wait_duration: 1.0,
+            // Jump fields
+            jump_distance: "2".to_string(),
+            // SetSpeed fields
+            speed_multiplier: 1.0,
         }
     }
 
@@ -361,14 +489,7 @@ impl ActionEditorState {
                 self.action_type = ActionType::ShowDialog;
                 match text {
                     DialogTextData::Inline(s) => {
-                        self.dialog_text_mode = DialogTextMode::Inline;
                         self.dialog_inline_text = s.clone();
-                        self.dialog_text_id.clear();
-                    }
-                    DialogTextData::Id(id) => {
-                        self.dialog_text_mode = DialogTextMode::TextId;
-                        self.dialog_text_id = id.clone();
-                        self.dialog_inline_text.clear();
                     }
                 }
                 self.dialog_text_speed = config.text_speed.to_string();
@@ -444,14 +565,7 @@ impl ActionEditorState {
                 self.action_type = ActionType::ShowSelection;
                 match prompt {
                     DialogTextData::Inline(s) => {
-                        self.selection_prompt_mode = DialogTextMode::Inline;
                         self.selection_prompt_text = s.clone();
-                        self.selection_prompt_id.clear();
-                    }
-                    DialogTextData::Id(id) => {
-                        self.selection_prompt_mode = DialogTextMode::TextId;
-                        self.selection_prompt_id = id.clone();
-                        self.selection_prompt_text.clear();
                     }
                 }
                 self.selection_position = config.position.clone();
@@ -459,18 +573,11 @@ impl ActionEditorState {
                 self.selection_choices = choices
                     .iter()
                     .map(|choice| {
-                        let (label_mode, label_text, label_id) = match &choice.label {
-                            DialogTextData::Inline(s) => {
-                                (DialogTextMode::Inline, s.clone(), String::new())
-                            }
-                            DialogTextData::Id(id) => {
-                                (DialogTextMode::TextId, String::new(), id.clone())
-                            }
+                        let label_text = match &choice.label {
+                            DialogTextData::Inline(s) => s.clone(),
                         };
                         EditorChoice {
-                            label_mode,
                             label_text,
-                            label_id,
                             actions: choice.actions.clone(),
                             action_editor: ActionEditorState::new_nested(),
                         }
@@ -604,6 +711,15 @@ impl ActionEditorState {
                 self.action_type = ActionType::Wait;
                 self.wait_duration = *duration;
             }
+            // Jump and SetSpeed — fully integrated
+            EventAction::Jump { distance } => {
+                self.action_type = ActionType::Jump;
+                self.jump_distance = distance.to_string();
+            }
+            EventAction::SetSpeed { multiplier } => {
+                self.action_type = ActionType::SetSpeed;
+                self.speed_multiplier = *multiplier;
+            }
         }
         self.editing_index = Some(index);
     }
@@ -627,20 +743,10 @@ impl ActionEditorState {
                 })
             }
             ActionType::ShowDialog => {
-                let text = match self.dialog_text_mode {
-                    DialogTextMode::Inline => {
-                        if self.dialog_inline_text.is_empty() {
-                            return None;
-                        }
-                        DialogTextData::Inline(self.dialog_inline_text.clone())
-                    }
-                    DialogTextMode::TextId => {
-                        if self.dialog_text_id.is_empty() {
-                            return None;
-                        }
-                        DialogTextData::Id(self.dialog_text_id.clone())
-                    }
-                };
+                if self.dialog_inline_text.is_empty() {
+                    return None;
+                }
+                let text = DialogTextData::Inline(self.dialog_inline_text.clone());
                 let text_speed = self.dialog_text_speed.trim().parse::<f32>().unwrap_or(30.0);
                 let config = DialogConfigData {
                     text_speed,
@@ -745,34 +851,15 @@ impl ActionEditorState {
                 }
                 // Validate: each choice must have a non-empty label
                 for choice in &self.selection_choices {
-                    match choice.label_mode {
-                        DialogTextMode::Inline => {
-                            if choice.label_text.is_empty() {
-                                return None;
-                            }
-                        }
-                        DialogTextMode::TextId => {
-                            if choice.label_id.is_empty() {
-                                return None;
-                            }
-                        }
+                    if choice.label_text.is_empty() {
+                        return None;
                     }
                 }
                 // Build prompt
-                let prompt = match self.selection_prompt_mode {
-                    DialogTextMode::Inline => {
-                        if self.selection_prompt_text.is_empty() {
-                            return None;
-                        }
-                        DialogTextData::Inline(self.selection_prompt_text.clone())
-                    }
-                    DialogTextMode::TextId => {
-                        if self.selection_prompt_id.is_empty() {
-                            return None;
-                        }
-                        DialogTextData::Id(self.selection_prompt_id.clone())
-                    }
-                };
+                if self.selection_prompt_text.is_empty() {
+                    return None;
+                }
+                let prompt = DialogTextData::Inline(self.selection_prompt_text.clone());
                 // Build config
                 let config = DialogConfigData {
                     text_speed: 30.0,
@@ -786,10 +873,7 @@ impl ActionEditorState {
                     .selection_choices
                     .iter()
                     .map(|ec| {
-                        let label = match ec.label_mode {
-                            DialogTextMode::Inline => DialogTextData::Inline(ec.label_text.clone()),
-                            DialogTextMode::TextId => DialogTextData::Id(ec.label_id.clone()),
-                        };
+                        let label = DialogTextData::Inline(ec.label_text.clone());
                         ChoiceData {
                             label,
                             actions: ec.actions.clone(),
@@ -936,6 +1020,14 @@ impl ActionEditorState {
             ActionType::Wait => {
                 let duration = self.wait_duration.clamp(0.1, 30.0);
                 Some(EventAction::Wait { duration })
+            }
+            ActionType::Jump => {
+                let distance = rpg_toolkit_editor::clamp_jump_distance(&self.jump_distance);
+                Some(EventAction::Jump { distance })
+            }
+            ActionType::SetSpeed => {
+                let multiplier = rpg_toolkit_editor::clamp_speed_multiplier(self.speed_multiplier);
+                Some(EventAction::SetSpeed { multiplier })
             }
         }
     }

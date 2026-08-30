@@ -91,6 +91,7 @@ pub enum WaitingFor {
     EntityMove,
     CameraPan,
     Wait,
+    Jump,
 }
 
 /// Tracks the remaining EventActions in the current trigger sequence.
@@ -286,6 +287,37 @@ pub struct WaitState {
     pub elapsed: f32,
 }
 
+/// Tracks an active jump animation in progress.
+#[derive(Resource)]
+pub struct JumpAnimState {
+    pub start_x: u32,
+    pub start_y: u32,
+    pub landing_x: u32,
+    pub landing_y: u32,
+    pub distance: u32,
+    pub duration: f32,
+    pub elapsed: f32,
+}
+
+/// Speed scaling factor applied to player movement.
+/// Default value is 1.0 (normal walk speed).
+#[derive(Resource)]
+pub struct SpeedMultiplier {
+    pub value: f32,
+}
+
+impl Default for SpeedMultiplier {
+    fn default() -> Self {
+        Self { value: 1.0 }
+    }
+}
+
 /// Marker resource indicating that intro events are currently playing.
 #[derive(Resource)]
 pub struct IntroEventsActive;
+
+/// Tracks the previous frame's camera position for computing parallax deltas.
+#[derive(Resource, Default)]
+pub struct PreviousCameraPosition {
+    pub position: Vec2,
+}

@@ -97,6 +97,15 @@ pub struct NpcPatrolState {
     pub paused: bool,
 }
 
+/// Marker component for parallax layer sprite entities.
+#[derive(Component)]
+pub struct ParallaxSprite {
+    /// How much this layer moves relative to the camera (0.0 = static, 1.0 = camera speed).
+    pub scroll_factor: f32,
+    /// Index of this layer within the map's parallax_layers list.
+    pub layer_index: usize,
+}
+
 /// Per-NPC component tracking facing direction, animation frame, animation timer,
 /// and movement state — analogous to `PlayerSpriteState`.
 #[derive(Component)]

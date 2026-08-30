@@ -8,7 +8,10 @@ use rpg_toolkit_common::{DialogTextData, TransferDirection};
 use crate::data::map::EventAction;
 use crate::plugins::searchable_combobox::searchable_combobox;
 
-use super::action_editor::{ActionEditorState, ActionType, truncate_preview};
+use super::action_editor::{
+    ActionEditorState, ActionType, action_type_display_name, filter_action_categories,
+    truncate_preview,
+};
 use super::action_editor_forms;
 
 /// Context holding registry data and search buffers needed by reward action forms.
@@ -40,7 +43,7 @@ pub fn render_action_editor(
     editor_state: &mut ActionEditorState,
     id_salt: &str,
     map_entries: &[(String, String)],
-    face_portraits: &std::collections::HashMap<String, String>,
+    portrait_entries: &[(String, String)],
     depth: usize,
     reward_ctx: Option<&mut RewardFormContext<'_>>,
     shops: &[(String, String)],
@@ -72,9 +75,6 @@ pub fn render_action_editor(
                 EventAction::ShowDialog { text, .. } => {
                     let preview = match text {
                         DialogTextData::Inline(s) => truncate_preview(s, 40),
-                        DialogTextData::Id(id) => {
-                            format!("ID: {}", id)
-                        }
                     };
                     format!("{}. ShowDialog — {}", i + 1, preview)
                 }
@@ -212,6 +212,12 @@ pub fn render_action_editor(
                 EventAction::Wait { duration } => {
                     format!("{}. Wait — {}s", i + 1, duration)
                 }
+                EventAction::Jump { distance } => {
+                    format!("{}. Jump — {} tiles", i + 1, distance)
+                }
+                EventAction::SetSpeed { multiplier } => {
+                    format!("{}. SetSpeed — {}x", i + 1, multiplier)
+                }
             };
             if is_being_edited {
                 ui.label(
@@ -244,7 +250,7 @@ pub fn render_action_editor(
 
     // Render collapsible nested action editors for Branch and StateCheck items
     if depth == 0 {
-        render_nested_branch_editors(ui, actions, id_salt, map_entries, face_portraits, shops);
+        render_nested_branch_editors(ui, actions, id_salt, map_entries, portrait_entries, shops);
     }
 
     if let Some(idx) = remove_idx {
@@ -284,147 +290,7 @@ pub fn render_action_editor(
 
     ui.horizontal(|ui| {
         ui.label("Action Type:");
-        let action_type_text = match editor_state.action_type {
-            ActionType::JumpTo => "JumpTo",
-            ActionType::ShowDialog => "ShowDialog",
-            ActionType::ShowSelection => "ShowSelection",
-            ActionType::ScreenShake => "ScreenShake",
-            ActionType::StopScreenShake => "StopScreenShake",
-            ActionType::FadeTransition => "FadeTransition",
-            ActionType::SetState => "SetState",
-            ActionType::SetPlayerAppearance => "SetPlayerAppearance",
-            ActionType::StateCheck => "StateCheck",
-            ActionType::Branch => "Branch",
-            ActionType::GiveCurrency => "GiveCurrency",
-            ActionType::GiveExperience => "GiveExperience",
-            ActionType::GiveItem => "GiveItem",
-            ActionType::LearnAbility => "LearnAbility",
-            ActionType::AddPartyMember => "AddPartyMember",
-            ActionType::SaveGame => "SaveGame",
-            ActionType::ChangePhase => "ChangePhase",
-            ActionType::OpenShop => "OpenShop",
-            ActionType::MoveEntity => "MoveEntity",
-            ActionType::CameraFollow => "CameraFollow",
-            ActionType::CameraPan => "CameraPan",
-            ActionType::Wait => "Wait",
-        };
-        egui::ComboBox::from_id_salt(format!("{}_action_type", id_salt))
-            .selected_text(action_type_text)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut editor_state.action_type, ActionType::JumpTo, "JumpTo");
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::ShowDialog,
-                    "ShowDialog",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::ShowSelection,
-                    "ShowSelection",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::ScreenShake,
-                    "ScreenShake",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::StopScreenShake,
-                    "StopScreenShake",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::FadeTransition,
-                    "FadeTransition",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::SetState,
-                    "SetState",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::SetPlayerAppearance,
-                    "SetPlayerAppearance",
-                );
-                // Only show StateCheck and Branch at depth 0
-                if depth == 0 {
-                    ui.selectable_value(
-                        &mut editor_state.action_type,
-                        ActionType::StateCheck,
-                        "StateCheck",
-                    );
-                    ui.selectable_value(
-                        &mut editor_state.action_type,
-                        ActionType::Branch,
-                        "Branch",
-                    );
-                }
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::GiveCurrency,
-                    "GiveCurrency",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::GiveExperience,
-                    "GiveExperience",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::GiveItem,
-                    "GiveItem",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::LearnAbility,
-                    "LearnAbility",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::AddPartyMember,
-                    "AddPartyMember",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::SaveGame,
-                    "Save Game",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::ChangePhase,
-                    "Change Phase",
-                );
-                // OpenShop — disabled with tooltip when no shops exist
-                let shop_disabled = shops.is_empty();
-                let response = ui.add_enabled(
-                    !shop_disabled,
-                    egui::Button::new("Open Shop")
-                        .selected(editor_state.action_type == ActionType::OpenShop),
-                );
-                if shop_disabled {
-                    response.on_disabled_hover_text("Create at least one shop first");
-                } else if response.clicked() {
-                    editor_state.action_type = ActionType::OpenShop;
-                }
-                // Cinematic action types
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::MoveEntity,
-                    "MoveEntity",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::CameraFollow,
-                    "CameraFollow",
-                );
-                ui.selectable_value(
-                    &mut editor_state.action_type,
-                    ActionType::CameraPan,
-                    "CameraPan",
-                );
-                ui.selectable_value(&mut editor_state.action_type, ActionType::Wait, "Wait");
-            });
+        render_action_type_dropdown(ui, editor_state, id_salt, depth, shops);
     });
 
     ui.separator();
@@ -446,7 +312,7 @@ pub fn render_action_editor(
                 actions,
                 editor_state,
                 id_salt,
-                face_portraits,
+                portrait_entries,
             );
         }
         ActionType::ScreenShake => {
@@ -482,7 +348,7 @@ pub fn render_action_editor(
                 editor_state,
                 id_salt,
                 map_entries,
-                face_portraits,
+                portrait_entries,
                 shops,
             );
         }
@@ -637,6 +503,12 @@ pub fn render_action_editor(
         ActionType::Wait => {
             action_editor_forms::render_wait_form(ui, actions, editor_state, id_salt);
         }
+        ActionType::Jump => {
+            action_editor_forms::render_jump_form(ui, actions, editor_state, id_salt);
+        }
+        ActionType::SetSpeed => {
+            action_editor_forms::render_set_speed_form(ui, actions, editor_state, id_salt);
+        }
     }
 
     // Render nested on_success/on_failure editors for reward actions when direction is Take.
@@ -655,11 +527,93 @@ pub fn render_action_editor(
             editor_state,
             id_salt,
             map_entries,
-            face_portraits,
+            portrait_entries,
             depth,
             shops,
         );
     }
+}
+
+/// Renders the categorized, searchable action-type dropdown.
+///
+/// The dropdown contains a text filter at the top followed by one
+/// `CollapsingHeader` per category (per Requirement 10). While a filter is
+/// active, only actions whose display name matches the filter are shown and
+/// empty categories are hidden. With an empty filter, every category is shown
+/// expanded with all of its actions.
+///
+/// `depth` controls nesting: at depth >= 1, `StateCheck` and `Branch` are
+/// excluded to prevent deep nesting. `shops` is used to disable `OpenShop`
+/// when no shops exist.
+fn render_action_type_dropdown(
+    ui: &mut egui::Ui,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+    depth: usize,
+    shops: &[(String, String)],
+) {
+    let selected_text = action_type_display_name(editor_state.action_type);
+    let filter_active = !editor_state.action_type_search.trim().is_empty();
+    let shops_empty = shops.is_empty();
+
+    egui::ComboBox::from_id_salt(format!("{}_action_type", id_salt))
+        .selected_text(selected_text)
+        .show_ui(ui, |ui| {
+            // Search filter input at the top of the dropdown.
+            ui.add(
+                egui::TextEdit::singleline(&mut editor_state.action_type_search)
+                    .hint_text("Filter actions…")
+                    .desired_width(f32::INFINITY),
+            );
+            ui.separator();
+
+            // Exclude StateCheck/Branch at nested depths.
+            let include_predicate = |variant: ActionType| {
+                if depth >= 1 {
+                    !matches!(variant, ActionType::StateCheck | ActionType::Branch)
+                } else {
+                    true
+                }
+            };
+
+            let categories =
+                filter_action_categories(&editor_state.action_type_search, include_predicate);
+
+            if categories.is_empty() {
+                ui.label("No matching actions");
+                return;
+            }
+
+            for (category_name, actions) in categories {
+                // Categories default to expanded; when a filter is active we
+                // force them open so matches are immediately visible.
+                egui::CollapsingHeader::new(category_name)
+                    .id_salt(format!("{}_cat_{}", id_salt, category_name))
+                    .default_open(true)
+                    .open(if filter_active { Some(true) } else { None })
+                    .show(ui, |ui| {
+                        for (variant, display_name) in actions {
+                            // OpenShop is disabled (with a tooltip) when there are no shops.
+                            if variant == ActionType::OpenShop && shops_empty {
+                                ui.add_enabled(
+                                    false,
+                                    egui::Button::selectable(
+                                        editor_state.action_type == variant,
+                                        display_name,
+                                    ),
+                                )
+                                .on_disabled_hover_text("Create at least one shop first");
+                                continue;
+                            }
+
+                            let selected = editor_state.action_type == variant;
+                            if ui.selectable_label(selected, display_name).clicked() {
+                                editor_state.action_type = variant;
+                            }
+                        }
+                    });
+            }
+        });
 }
 
 /// Renders nested on_success/on_failure action editors for the reward action currently being
@@ -669,7 +623,7 @@ fn render_reward_nested_editors(
     editor_state: &mut ActionEditorState,
     id_salt: &str,
     map_entries: &[(String, String)],
-    face_portraits: &std::collections::HashMap<String, String>,
+    portrait_entries: &[(String, String)],
     depth: usize,
     shops: &[(String, String)],
 ) {
@@ -694,7 +648,7 @@ fn render_reward_nested_editors(
                 nested_editor,
                 &nested_salt_success,
                 map_entries,
-                face_portraits,
+                portrait_entries,
                 depth + 1,
                 None,
                 shops,
@@ -721,7 +675,7 @@ fn render_reward_nested_editors(
                 nested_editor,
                 &nested_salt_failure,
                 map_entries,
-                face_portraits,
+                portrait_entries,
                 depth + 1,
                 None,
                 shops,
@@ -737,7 +691,7 @@ fn render_nested_branch_editors(
     actions: &mut [EventAction],
     id_salt: &str,
     map_entries: &[(String, String)],
-    face_portraits: &std::collections::HashMap<String, String>,
+    portrait_entries: &[(String, String)],
     shops: &[(String, String)],
 ) {
     // We need indexed mutable access. Use a simple index loop.
@@ -766,7 +720,7 @@ fn render_nested_branch_editors(
                                     &mut nested_editor,
                                     &nested_salt_true,
                                     map_entries,
-                                    face_portraits,
+                                    portrait_entries,
                                     1,
                                     None,
                                     shops,
@@ -789,7 +743,7 @@ fn render_nested_branch_editors(
                                 &mut nested_editor,
                                 &nested_salt_false,
                                 map_entries,
-                                face_portraits,
+                                portrait_entries,
                                 1,
                                 None,
                                 shops,
@@ -818,7 +772,7 @@ fn render_nested_branch_editors(
                                     &mut nested_editor,
                                     &nested_salt_true,
                                     map_entries,
-                                    face_portraits,
+                                    portrait_entries,
                                     1,
                                     None,
                                     shops,
@@ -840,7 +794,7 @@ fn render_nested_branch_editors(
                                 &mut nested_editor,
                                 &nested_salt_false,
                                 map_entries,
-                                face_portraits,
+                                portrait_entries,
                                 1,
                                 None,
                                 shops,
@@ -870,7 +824,7 @@ fn render_nested_branch_editors(
                                 &mut nested_editor,
                                 &nested_salt_choice,
                                 map_entries,
-                                face_portraits,
+                                portrait_entries,
                                 1,
                                 None,
                                 shops,
@@ -929,7 +883,7 @@ fn render_nested_branch_editors(
                             &mut nested_editor,
                             &nested_salt_success,
                             map_entries,
-                            face_portraits,
+                            portrait_entries,
                             1,
                             None,
                             shops,
@@ -949,7 +903,7 @@ fn render_nested_branch_editors(
                             &mut nested_editor,
                             &nested_salt_failure,
                             map_entries,
-                            face_portraits,
+                            portrait_entries,
                             1,
                             None,
                             shops,

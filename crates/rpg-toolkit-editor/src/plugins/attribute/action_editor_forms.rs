@@ -12,7 +12,7 @@ use rpg_toolkit_common::{
 use crate::data::map::EventAction;
 use crate::plugins::searchable_combobox::searchable_combobox;
 
-use super::action_editor::{ActionEditorState, DialogTextMode, EditorChoice};
+use super::action_editor::{ActionEditorState, EditorChoice};
 
 pub fn render_jumpto_form(
     ui: &mut egui::Ui,
@@ -95,7 +95,7 @@ pub fn render_show_dialog_form(
     actions: &mut Vec<EventAction>,
     editor_state: &mut ActionEditorState,
     id_salt: &str,
-    face_portraits: &std::collections::HashMap<String, String>,
+    portrait_entries: &[(String, String)],
 ) {
     let show_dialog_form_label = if editor_state.editing_index.is_some() {
         "Edit ShowDialog Action:"
@@ -104,33 +104,9 @@ pub fn render_show_dialog_form(
     };
     ui.label(show_dialog_form_label);
 
-    // Text source toggle
-    ui.horizontal(|ui| {
-        ui.label("Text Source:");
-        ui.radio_value(
-            &mut editor_state.dialog_text_mode,
-            DialogTextMode::Inline,
-            "Inline",
-        );
-        ui.radio_value(
-            &mut editor_state.dialog_text_mode,
-            DialogTextMode::TextId,
-            "Text ID",
-        );
-    });
-
-    match editor_state.dialog_text_mode {
-        DialogTextMode::Inline => {
-            ui.label("Dialog Text:");
-            ui.text_edit_multiline(&mut editor_state.dialog_inline_text);
-        }
-        DialogTextMode::TextId => {
-            ui.horizontal(|ui| {
-                ui.label("Text ID:");
-                ui.text_edit_singleline(&mut editor_state.dialog_text_id);
-            });
-        }
-    }
+    // Inline text entry
+    ui.label("Dialog Text:");
+    ui.text_edit_multiline(&mut editor_state.dialog_inline_text);
 
     ui.horizontal(|ui| {
         ui.label("Text Speed:");
@@ -166,32 +142,35 @@ pub fn render_show_dialog_form(
 
     ui.checkbox(&mut editor_state.dialog_movement_block, "Movement Block");
 
-    // Face portrait selector
+    // Face portrait selector (character-based searchable dropdown)
     ui.horizontal(|ui| {
         ui.label("Face Portrait:");
-        let selected_text = match &editor_state.dialog_face_portrait {
-            Some(id) => id.clone(),
+        let current_label = match &editor_state.dialog_face_portrait {
+            Some(path) => portrait_entries
+                .iter()
+                .find(|(id, _)| id == path)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| path.clone()),
             None => "None".to_string(),
         };
-        egui::ComboBox::from_id_salt(format!("{}_face_portrait_select", id_salt))
-            .selected_text(&selected_text)
-            .show_ui(ui, |ui| {
-                if ui
-                    .selectable_label(editor_state.dialog_face_portrait.is_none(), "None")
-                    .clicked()
-                {
-                    editor_state.dialog_face_portrait = None;
-                }
-                let mut portrait_ids: Vec<&String> = face_portraits.keys().collect();
-                portrait_ids.sort();
-                for portrait_id in portrait_ids {
-                    let is_selected =
-                        editor_state.dialog_face_portrait.as_ref() == Some(portrait_id);
-                    if ui.selectable_label(is_selected, portrait_id).clicked() {
-                        editor_state.dialog_face_portrait = Some(portrait_id.clone());
-                    }
-                }
-            });
+
+        // "None" option
+        if ui
+            .selectable_label(editor_state.dialog_face_portrait.is_none(), "Clear")
+            .clicked()
+        {
+            editor_state.dialog_face_portrait = None;
+        }
+
+        if let Some(selected_path) = searchable_combobox(
+            ui,
+            &format!("{}_face_portrait_select", id_salt),
+            &current_label,
+            portrait_entries,
+            &mut editor_state.portrait_search_buffer,
+        ) {
+            editor_state.dialog_face_portrait = Some(selected_path);
+        }
     });
 
     let show_dialog_button_label = if editor_state.editing_index.is_some() {
@@ -212,7 +191,6 @@ pub fn render_show_dialog_form(
         }
         // Reset ShowDialog fields
         editor_state.dialog_inline_text = String::new();
-        editor_state.dialog_text_id = String::new();
         editor_state.dialog_text_speed = "30".to_string();
         editor_state.dialog_position = DialogPositionData::Bottom;
         editor_state.dialog_movement_block = true;
@@ -221,7 +199,6 @@ pub fn render_show_dialog_form(
     if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
         editor_state.editing_index = None;
         editor_state.dialog_inline_text = String::new();
-        editor_state.dialog_text_id = String::new();
         editor_state.dialog_text_speed = "30".to_string();
         editor_state.dialog_position = DialogPositionData::Bottom;
         editor_state.dialog_movement_block = true;
@@ -725,7 +702,7 @@ pub fn render_show_selection_form(
     editor_state: &mut ActionEditorState,
     id_salt: &str,
     map_entries: &[(String, String)],
-    face_portraits: &std::collections::HashMap<String, String>,
+    portrait_entries: &[(String, String)],
     shops: &[(String, String)],
 ) {
     let form_label = if editor_state.editing_index.is_some() {
@@ -736,32 +713,8 @@ pub fn render_show_selection_form(
     ui.label(form_label);
 
     // --- Prompt text section ---
-    ui.horizontal(|ui| {
-        ui.label("Prompt Source:");
-        ui.radio_value(
-            &mut editor_state.selection_prompt_mode,
-            DialogTextMode::Inline,
-            "Inline",
-        );
-        ui.radio_value(
-            &mut editor_state.selection_prompt_mode,
-            DialogTextMode::TextId,
-            "Text ID",
-        );
-    });
-
-    match editor_state.selection_prompt_mode {
-        DialogTextMode::Inline => {
-            ui.label("Prompt Text:");
-            ui.text_edit_multiline(&mut editor_state.selection_prompt_text);
-        }
-        DialogTextMode::TextId => {
-            ui.horizontal(|ui| {
-                ui.label("Prompt Text ID:");
-                ui.text_edit_singleline(&mut editor_state.selection_prompt_id);
-            });
-        }
-    }
+    ui.label("Prompt Text:");
+    ui.text_edit_multiline(&mut editor_state.selection_prompt_text);
 
     // --- Position combo box ---
     ui.horizontal(|ui| {
@@ -791,32 +744,35 @@ pub fn render_show_selection_form(
             });
     });
 
-    // --- Face portrait selector ---
+    // --- Face portrait selector (character-based searchable dropdown) ---
     ui.horizontal(|ui| {
         ui.label("Face Portrait:");
-        let selected_text = match &editor_state.selection_face_portrait {
-            Some(id) => id.clone(),
+        let current_label = match &editor_state.selection_face_portrait {
+            Some(path) => portrait_entries
+                .iter()
+                .find(|(id, _)| id == path)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| path.clone()),
             None => "None".to_string(),
         };
-        egui::ComboBox::from_id_salt(format!("{}_selection_face_portrait_select", id_salt))
-            .selected_text(&selected_text)
-            .show_ui(ui, |ui| {
-                if ui
-                    .selectable_label(editor_state.selection_face_portrait.is_none(), "None")
-                    .clicked()
-                {
-                    editor_state.selection_face_portrait = None;
-                }
-                let mut portrait_ids: Vec<&String> = face_portraits.keys().collect();
-                portrait_ids.sort();
-                for portrait_id in portrait_ids {
-                    let is_selected =
-                        editor_state.selection_face_portrait.as_ref() == Some(portrait_id);
-                    if ui.selectable_label(is_selected, portrait_id).clicked() {
-                        editor_state.selection_face_portrait = Some(portrait_id.clone());
-                    }
-                }
-            });
+
+        // "None/Clear" option
+        if ui
+            .selectable_label(editor_state.selection_face_portrait.is_none(), "Clear")
+            .clicked()
+        {
+            editor_state.selection_face_portrait = None;
+        }
+
+        if let Some(selected_path) = searchable_combobox(
+            ui,
+            &format!("{}_selection_face_portrait_select", id_salt),
+            &current_label,
+            portrait_entries,
+            &mut editor_state.portrait_search_buffer,
+        ) {
+            editor_state.selection_face_portrait = Some(selected_path);
+        }
     });
 
     ui.separator();
@@ -842,45 +798,17 @@ pub fn render_show_selection_form(
             .id_salt(&choice_salt)
             .default_open(true)
             .show(ui, |ui| {
-                // Label mode toggle
+                // Inline label text
                 ui.horizontal(|ui| {
-                    ui.label("Label Source:");
-                    ui.radio_value(
-                        &mut editor_state.selection_choices[i].label_mode,
-                        DialogTextMode::Inline,
-                        "Inline",
-                    );
-                    ui.radio_value(
-                        &mut editor_state.selection_choices[i].label_mode,
-                        DialogTextMode::TextId,
-                        "Text ID",
-                    );
+                    ui.label("Label:");
+                    ui.text_edit_singleline(&mut editor_state.selection_choices[i].label_text);
                 });
-
-                match editor_state.selection_choices[i].label_mode {
-                    DialogTextMode::Inline => {
-                        ui.horizontal(|ui| {
-                            ui.label("Label:");
-                            ui.text_edit_singleline(
-                                &mut editor_state.selection_choices[i].label_text,
-                            );
-                        });
-                        // Inline validation for empty label
-                        if editor_state.selection_choices[i].label_text.is_empty() {
-                            ui.label(
-                                egui::RichText::new("Label must not be empty")
-                                    .color(egui::Color32::from_rgb(220, 50, 50)),
-                            );
-                        }
-                    }
-                    DialogTextMode::TextId => {
-                        ui.horizontal(|ui| {
-                            ui.label("Label Text ID:");
-                            ui.text_edit_singleline(
-                                &mut editor_state.selection_choices[i].label_id,
-                            );
-                        });
-                    }
+                // Inline validation for empty label
+                if editor_state.selection_choices[i].label_text.is_empty() {
+                    ui.label(
+                        egui::RichText::new("Label must not be empty")
+                            .color(egui::Color32::from_rgb(220, 50, 50)),
+                    );
                 }
 
                 // Nested action editor for this choice (uses persistent editor state)
@@ -894,7 +822,7 @@ pub fn render_show_selection_form(
                         &mut choice.action_editor,
                         &nested_salt,
                         map_entries,
-                        face_portraits,
+                        portrait_entries,
                         1,
                         None,
                         shops,
@@ -932,14 +860,8 @@ pub fn render_show_selection_form(
         && editor_state
             .selection_choices
             .iter()
-            .all(|c| match c.label_mode {
-                DialogTextMode::Inline => !c.label_text.is_empty(),
-                DialogTextMode::TextId => !c.label_id.is_empty(),
-            });
-    let has_valid_prompt = match editor_state.selection_prompt_mode {
-        DialogTextMode::Inline => !editor_state.selection_prompt_text.is_empty(),
-        DialogTextMode::TextId => !editor_state.selection_prompt_id.is_empty(),
-    };
+            .all(|c| !c.label_text.is_empty());
+    let has_valid_prompt = !editor_state.selection_prompt_text.is_empty();
     let can_save = has_valid_choices && has_valid_prompt;
 
     let btn_label = if editor_state.editing_index.is_some() {
@@ -961,18 +883,14 @@ pub fn render_show_selection_form(
             actions.push(new_action);
         }
         // Reset ShowSelection fields
-        editor_state.selection_prompt_mode = DialogTextMode::Inline;
         editor_state.selection_prompt_text = String::new();
-        editor_state.selection_prompt_id = String::new();
         editor_state.selection_position = DialogPositionData::Bottom;
         editor_state.selection_face_portrait = None;
         editor_state.selection_choices = vec![EditorChoice::default(), EditorChoice::default()];
     }
     if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
         editor_state.editing_index = None;
-        editor_state.selection_prompt_mode = DialogTextMode::Inline;
         editor_state.selection_prompt_text = String::new();
-        editor_state.selection_prompt_id = String::new();
         editor_state.selection_position = DialogPositionData::Bottom;
         editor_state.selection_face_portrait = None;
         editor_state.selection_choices = vec![EditorChoice::default(), EditorChoice::default()];
@@ -1852,5 +1770,90 @@ pub fn render_wait_form(
     }
     if is_editing && ui.button("Cancel Edit").clicked() {
         editor_state.editing_index = None;
+    }
+}
+
+pub fn render_jump_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    _id_salt: &str,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit Jump Action:"
+    } else {
+        "Add Jump Action:"
+    };
+    ui.label(form_label);
+
+    ui.horizontal(|ui| {
+        ui.label("Distance:");
+        ui.add(egui::TextEdit::singleline(&mut editor_state.jump_distance).desired_width(60.0));
+        ui.label("(0 – 8, 0 = hop in place)");
+    });
+
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update Jump"
+    } else {
+        "Add Jump"
+    };
+    if ui.button(btn_label).clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        editor_state.jump_distance = "2".to_string();
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.jump_distance = "2".to_string();
+    }
+}
+
+pub fn render_set_speed_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    _id_salt: &str,
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit SetSpeed Action:"
+    } else {
+        "Add SetSpeed Action:"
+    };
+    ui.label(form_label);
+
+    ui.horizontal(|ui| {
+        ui.label("Multiplier:");
+        ui.add(egui::Slider::new(&mut editor_state.speed_multiplier, 0.5..=4.0).step_by(0.1));
+    });
+
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update SetSpeed"
+    } else {
+        "Add SetSpeed"
+    };
+    if ui.button(btn_label).clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        editor_state.speed_multiplier = 1.0;
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.speed_multiplier = 1.0;
     }
 }

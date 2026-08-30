@@ -83,10 +83,7 @@ fn arb_dialog_config() -> impl Strategy<Value = DialogConfigData> {
 }
 
 fn arb_dialog_text_data() -> impl Strategy<Value = DialogTextData> {
-    prop_oneof![
-        "[a-z ]{1,20}".prop_map(DialogTextData::Inline),
-        "[a-z\\-]{3,10}".prop_map(DialogTextData::Id),
-    ]
+    "[a-z ]{1,20}".prop_map(DialogTextData::Inline)
 }
 
 fn arb_event_action() -> impl Strategy<Value = EventAction> {
@@ -183,6 +180,7 @@ fn arb_map_data(ss_count: usize) -> impl Strategy<Value = MapData> {
                 layers: vec![layer],
                 active_layer_index: 0,
                 npcs,
+                parallax_layers: Vec::new(),
             }
         })
     })
@@ -229,8 +227,6 @@ fn arb_project_file() -> impl Strategy<Value = ProjectFile> {
                     None,           // no spawn point needed
                     spritesheets,
                     player_spritesheet,
-                    HashMap::new(), // no dialog texts needed for this property
-                    HashMap::new(), // no face portraits needed for this property
                     rpg_toolkit_common::CharacterRegistry::default(),
                     rpg_toolkit_common::ItemRegistry::default(),
                     rpg_toolkit_common::AbilityRegistry::default(),

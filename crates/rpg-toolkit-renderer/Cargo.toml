@@ -19,3 +19,15 @@ path = "tests/properties/intro_blocking_classification.rs"
 [[test]]
 name = "camera_pan_interpolation"
 path = "tests/properties/camera_pan_interpolation.rs"
+
+[[test]]
+name = "jump_arc_offset"
+path = "tests/properties/jump_arc_offset.rs"
+
+[[test]]
+name = "speed_move_duration"
+path = "tests/properties/speed_move_duration.rs"
+
+[[test]]
+name = "parallax_scroll_translation"
+path = "tests/properties/parallax_scroll_translation.rs"

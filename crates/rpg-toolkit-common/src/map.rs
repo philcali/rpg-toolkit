@@ -19,12 +19,32 @@ pub type TilesetId = String;
 const VALID_TILE_SIZES: [u32; 4] = [8, 16, 32, 64];
 
 /// Serialization-compatible dialog text data for EventAction.
-/// Mirrors rpg_toolkit_renderer::dialog::DialogText.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Only the `Inline` variant is supported in new code paths.
+/// Legacy `Id` values are accepted during deserialization but converted to `Inline("")`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", content = "value")]
 pub enum DialogTextData {
     Inline(String),
-    Id(String),
+}
+
+impl<'de> Deserialize<'de> for DialogTextData {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Private helper enum that accepts both legacy "Id" and current "Inline" tags
+        #[derive(Deserialize)]
+        #[serde(tag = "type", content = "value")]
+        enum Raw {
+            Inline(String),
+            #[allow(dead_code)]
+            Id(String),
+        }
+        match Raw::deserialize(deserializer)? {
+            Raw::Inline(s) => Ok(DialogTextData::Inline(s)),
+            Raw::Id(_) => Ok(DialogTextData::Inline(String::new())),
+        }
+    }
 }
 
 /// Serialization-compatible dialog position for EventAction.
@@ -94,16 +114,15 @@ impl TryFrom<RawChoiceData> for ChoiceData {
 
     fn try_from(raw: RawChoiceData) -> Result<Self, Self::Error> {
         // Validate inline label length: must be 1–80 characters
-        if let DialogTextData::Inline(ref text) = raw.label {
-            if text.is_empty() {
-                return Err("choice label must not be empty".to_string());
-            }
-            if text.len() > 80 {
-                return Err(format!(
-                    "choice label must be at most 80 characters, got {}",
-                    text.len()
-                ));
-            }
+        let DialogTextData::Inline(ref text) = raw.label;
+        if text.is_empty() {
+            return Err("choice label must not be empty".to_string());
+        }
+        if text.len() > 80 {
+            return Err(format!(
+                "choice label must be at most 80 characters, got {}",
+                text.len()
+            ));
         }
         // Validate actions count: must be ≤ 20
         if raw.actions.len() > 20 {
@@ -359,6 +378,41 @@ where
     Ok(s)
 }
 
+/// Deserializes and validates a jump distance in the range [0, 8].
+fn deserialize_jump_distance<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = u32::deserialize(deserializer)?;
+    if value > 8 {
+        return Err(serde::de::Error::custom(format!(
+            "distance must be between 0 and 8 inclusive, got {}",
+            value
+        )));
+    }
+    Ok(value)
+}
+
+/// Returns the default speed multiplier of 1.0 for SetSpeed actions.
+fn default_speed_multiplier() -> f32 {
+    1.0
+}
+
+/// Deserializes and validates a speed multiplier in the range [0.5, 4.0].
+fn deserialize_speed_multiplier<'de, D>(deserializer: D) -> Result<f32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = f32::deserialize(deserializer)?;
+    if !(0.5..=4.0).contains(&value) {
+        return Err(serde::de::Error::custom(format!(
+            "multiplier must be between 0.5 and 4.0 inclusive, got {}",
+            value
+        )));
+    }
+    Ok(value)
+}
+
 /// A single action within an event trigger sequence.
 /// Uses `#[serde(tag = "type")]` for clean, forward-compatible JSON.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -539,6 +593,23 @@ pub enum EventAction {
         #[serde(deserialize_with = "deserialize_wait_duration")]
         duration: f32,
     },
+    /// Leap the player forward over tiles in the current facing direction.
+    /// Blocking: the queue waits until the jump animation completes.
+    Jump {
+        /// Number of tiles to leap forward (0–8 inclusive, 0 = hop in place).
+        #[serde(deserialize_with = "deserialize_jump_distance")]
+        distance: u32,
+    },
+    /// Change the player movement speed multiplier.
+    /// Non-blocking: the queue advances immediately.
+    SetSpeed {
+        /// Speed multiplier (0.5–4.0, default 1.0).
+        #[serde(
+            default = "default_speed_multiplier",
+            deserialize_with = "deserialize_speed_multiplier"
+        )]
+        multiplier: f32,
+    },
 }
 
 /// Per-tile attribute data: opacity flag, event trigger list, and elevation.
@@ -606,6 +677,61 @@ pub struct Layer {
     pub attributes: TileAttributeLayer,
 }
 
+/// A parallax background layer that scrolls at a reduced rate relative to the camera.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(try_from = "RawParallaxLayer")]
+pub struct ParallaxLayer {
+    /// Path to the background image asset (1–256 characters).
+    pub image_path: String,
+    /// Scroll factor: 0.0 = fully static, 1.0 = scrolls at camera speed.
+    pub scroll_factor: f32,
+    /// Draw order among parallax layers (lower = further back).
+    pub z_order: i32,
+}
+
+/// Raw helper struct for deserializing `ParallaxLayer` with validation.
+#[derive(Deserialize)]
+struct RawParallaxLayer {
+    image_path: String,
+    scroll_factor: f32,
+    z_order: i32,
+}
+
+impl TryFrom<RawParallaxLayer> for ParallaxLayer {
+    type Error = String;
+
+    fn try_from(raw: RawParallaxLayer) -> Result<Self, Self::Error> {
+        let len = raw.image_path.len();
+        if !(1..=256).contains(&len) {
+            return Err(format!(
+                "image_path must be 1 to 256 characters, got {}",
+                len
+            ));
+        }
+        if !(0.0..=1.0).contains(&raw.scroll_factor) {
+            return Err(format!(
+                "scroll_factor must be between 0.0 and 1.0 inclusive, got {}",
+                raw.scroll_factor
+            ));
+        }
+        Ok(ParallaxLayer {
+            image_path: raw.image_path,
+            scroll_factor: raw.scroll_factor,
+            z_order: raw.z_order,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for ParallaxLayer {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawParallaxLayer::deserialize(deserializer)?;
+        ParallaxLayer::try_from(raw).map_err(serde::de::Error::custom)
+    }
+}
+
 /// The complete map data.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct MapData {
@@ -618,6 +744,8 @@ pub struct MapData {
     pub active_layer_index: usize,
     #[serde(default)]
     pub npcs: Vec<NpcInstance>,
+    #[serde(default)]
+    pub parallax_layers: Vec<ParallaxLayer>,
 }
 
 impl MapData {
@@ -657,6 +785,7 @@ impl MapData {
             layers: vec![ground_layer],
             active_layer_index: 0,
             npcs: Vec::new(),
+            parallax_layers: Vec::new(),
         })
     }
 
@@ -854,14 +983,14 @@ mod tests {
     }
 
     #[test]
-    fn choice_data_accepts_id_label_without_length_check() {
-        // ID labels defer validation to runtime — any length string is accepted
-        let json = r#"{"label": {"type": "Id", "value": ""}, "actions": []}"#;
+    fn choice_data_legacy_id_label_converts_to_empty_inline() {
+        // Legacy Id labels are converted to Inline("") during deserialization
+        let json = r#"{"label": {"type": "Id", "value": "some_id"}, "actions": []}"#;
         let result: Result<ChoiceData, _> = serde_json::from_str(json);
+        // After conversion to Inline(""), the empty label validation rejects it
         assert!(
-            result.is_ok(),
-            "Id labels should not be length-checked: {:?}",
-            result.err()
+            result.is_err(),
+            "Legacy Id converted to empty Inline should be rejected by label validation"
         );
     }
 
@@ -915,7 +1044,7 @@ mod tests {
                     }],
                 },
                 ChoiceData {
-                    label: DialogTextData::Id("flee_label".to_string()),
+                    label: DialogTextData::Inline("Flee".to_string()),
                     actions: vec![],
                 },
             ],
@@ -1983,5 +2112,97 @@ mod tests {
         let deserialized: crate::manifest::ProjectManifest =
             serde_json::from_str(&serialized).unwrap();
         assert_eq!(manifest, deserialized);
+    }
+
+    // --- Jump EventAction tests ---
+
+    #[test]
+    fn jump_missing_distance_returns_error() {
+        let json = r#"{"type": "Jump"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Missing distance field should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("missing field"),
+            "Error should mention missing field: {}",
+            err
+        );
+    }
+
+    // --- SetSpeed EventAction tests ---
+
+    #[test]
+    fn set_speed_multiplier_defaults_to_one_when_absent() {
+        let json = r#"{"type": "SetSpeed"}"#;
+        let action: EventAction = serde_json::from_str(json).unwrap();
+        match action {
+            EventAction::SetSpeed { multiplier } => {
+                assert!(
+                    (multiplier - 1.0).abs() < f32::EPSILON,
+                    "multiplier should default to 1.0, got {}",
+                    multiplier
+                );
+            }
+            _ => panic!("Expected SetSpeed variant"),
+        }
+    }
+
+    // --- ParallaxLayer tests ---
+
+    #[test]
+    fn parallax_layers_defaults_to_empty_vec_when_absent() {
+        let json = r#"{
+            "name": "Test Map",
+            "width": 1,
+            "height": 1,
+            "tile_width": 16,
+            "tile_height": 16,
+            "layers": [{
+                "name": "Ground",
+                "visible": true,
+                "tiles": [[null]],
+                "attributes": {"cells": [[{"opacity": false}]]}
+            }],
+            "active_layer_index": 0
+        }"#;
+        let map: MapData = serde_json::from_str(json).unwrap();
+        assert!(
+            map.parallax_layers.is_empty(),
+            "parallax_layers should default to empty Vec when absent"
+        );
+    }
+
+    // --- Unknown EventAction type tests ---
+
+    #[test]
+    fn unrecognized_event_action_type_returns_deserialization_error() {
+        let json = r#"{"type": "UnknownAction"}"#;
+        let result: Result<EventAction, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "An unrecognized type tag should produce a deserialization error"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("UnknownAction"),
+            "Error should reference the unknown variant name: {}",
+            err
+        );
+    }
+
+    // --- DialogTextData legacy Id deserialization tests ---
+
+    #[test]
+    fn dialog_text_data_id_deserializes_to_inline_empty() {
+        let json = r#"{"type":"Id","value":"foo"}"#;
+        let result: DialogTextData = serde_json::from_str(json).unwrap();
+        assert_eq!(result, DialogTextData::Inline(String::new()));
+    }
+
+    #[test]
+    fn dialog_text_data_inline_deserializes_correctly() {
+        let json = r#"{"type":"Inline","value":"hello"}"#;
+        let result: DialogTextData = serde_json::from_str(json).unwrap();
+        assert_eq!(result, DialogTextData::Inline("hello".to_string()));
     }
 }
