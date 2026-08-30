@@ -8,9 +8,9 @@ use bevy::prelude::*;
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use plugins::{
     AbilityPanelPlugin, AppShellPlugin, AttributePlugin, CanvasPlugin, CharacterPanelPlugin,
-    DialogTextPanelPlugin, EnemyPanelPlugin, ItemPanelPlugin, LayerPanelPlugin, PaintingPlugin,
-    ProjectSettingsPanelPlugin, SerializationPlugin, ShopPanelPlugin, SpritesheetPlugin,
-    TextIdIndex, TilePalettePlugin, ToolbarPlugin, UndoRedoPlugin,
+    EnemyPanelPlugin, HotkeyPanelPlugin, ItemPanelPlugin, LayerPanelPlugin, PaintingPlugin,
+    ParallaxPanelPlugin, ProjectSettingsPanelPlugin, SerializationPlugin, ShopPanelPlugin,
+    SpritesheetPlugin, TilePalettePlugin, ToolbarPlugin, UndoRedoPlugin,
 };
 
 fn main() {
@@ -55,16 +55,16 @@ fn main() {
         .add_plugins(ToolbarPlugin)
         .add_plugins(AttributePlugin)
         .add_plugins(SpritesheetPlugin)
-        .add_plugins(DialogTextPanelPlugin)
         .add_plugins(CharacterPanelPlugin)
         .add_plugins(ItemPanelPlugin)
         .add_plugins(AbilityPanelPlugin)
         .add_plugins(EnemyPanelPlugin)
         .add_plugins(ShopPanelPlugin)
+        .add_plugins(ParallaxPanelPlugin)
         .add_plugins(ProjectSettingsPanelPlugin)
+        .add_plugins(HotkeyPanelPlugin)
         .init_resource::<data::Project>()
         .init_resource::<plugins::thumbnail::ThumbnailCache>()
-        .init_resource::<TextIdIndex>()
         .init_resource::<systems::input::CursorWorldState>()
         .init_resource::<systems::render::EditorAnimationTick>()
         .add_systems(

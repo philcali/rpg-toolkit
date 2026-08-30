@@ -14,21 +14,23 @@ pub mod systems;
 
 pub use components::{
     FadeOverlay, GameCamera, MoveAnimation, NpcMoveAnimation, NpcPatrolState, NpcSprite,
-    NpcSpriteState, PlayerCharacter, PlayerSpriteState, RendererTileSprite,
+    NpcSpriteState, ParallaxSprite, PlayerCharacter, PlayerSpriteState, RendererTileSprite,
 };
 pub use events::{MapChanged, PlayerMoved, ShowDialog};
 pub use input::{Direction, MovementIntent, handle_intro_skip, open_status_on_escape, read_input};
 pub use resources::{
     ActionQueue, ActiveShopId, AnimationConfig, CameraFollowTarget, CameraPanState,
     CharacterProgress, CharacterProgressState, CurrencyState, EntityMoveState, FadeState,
-    GameState, InteractionIntent, IntroEventsActive, InventoryState, MovementConfig,
+    GameState, InteractionIntent, IntroEventsActive, InventoryState, JumpAnimState, MovementConfig,
     NpcCollisionEvent, NpcPositions, PartyState, PixelScaleConfig, PixelScaleMode,
-    PlayerAppearanceState, PlayerVisual, RendererProjectData, RendererState, ScreenShakeState,
-    WaitState, WaitingFor,
+    PlayerAppearanceState, PlayerVisual, PreviousCameraPosition, RendererProjectData,
+    RendererState, ScreenShakeState, SpeedMultiplier, WaitState, WaitingFor,
 };
 pub use systems::camera::{apply_pixel_scale, compute_zoom_to_fit, spawn_camera, update_camera};
 pub use systems::collision::is_tile_blocked;
 pub use systems::entity_move::entity_move_system;
+pub use systems::hotkey::hotkey_input_system;
+pub use systems::jump::{compute_landing, jump_animation_system, jump_arc_offset};
 pub use systems::map_render::{
     RendererAnimatedTile, RendererAnimationTick, animate_renderer_tiles, compute_tile_z,
     init_npc_positions, resort_tile_z_on_elevation_change, spawn_npc_sprites, sync_map_sprites,
@@ -37,9 +39,14 @@ pub use systems::map_render::{
 pub use systems::npc::{
     npc_patrol_animation, npc_patrol_movement, npc_trigger_system, read_interaction_input,
 };
+pub use systems::parallax::{
+    compute_parallax_translation, despawn_parallax_system, spawn_parallax_system,
+    update_parallax_system,
+};
 pub use systems::player::{
     animate_player, animate_player_sprite, grid_to_world, player_movement, spawn_player,
 };
+pub use systems::speed::{apply_speed_multiplier_system, compute_speed_move_duration};
 pub use systems::spritesheet::{build_spritesheet_atlas, load_spritesheet_assets};
 pub use systems::triggers::{
     advance_action_queue, camera_pan_system, check_triggers, fade_system, handle_map_change,
@@ -90,6 +97,8 @@ impl Plugin for ProjectRendererPlugin {
             .init_resource::<CharacterProgressState>()
             .init_resource::<PartyState>()
             .init_resource::<RendererAnimationTick>()
+            .init_resource::<SpeedMultiplier>()
+            .init_resource::<PreviousCameraPosition>()
             // Events
             .add_message::<MapChanged>()
             .add_message::<PlayerMoved>()
@@ -140,11 +149,18 @@ impl Plugin for ProjectRendererPlugin {
                     camera_pan_system.after(advance_action_queue),
                     fade_system.after(advance_action_queue),
                     wait_system.after(advance_action_queue),
+                    jump_animation_system.after(advance_action_queue),
+                    apply_speed_multiplier_system.after(advance_action_queue),
+                    spawn_parallax_system.after(handle_map_change),
+                    update_parallax_system.after(update_camera),
                     handle_dialog_event.after(advance_action_queue),
                     detect_overflow.after(handle_dialog_event),
                     update_dialog_typewriter.after(handle_dialog_event),
                     handle_dialog_input.after(update_dialog_typewriter),
                     handle_selection_input
+                        .after(read_input)
+                        .before(player_movement),
+                    hotkey_input_system
                         .after(read_input)
                         .before(player_movement),
                     handle_intro_skip

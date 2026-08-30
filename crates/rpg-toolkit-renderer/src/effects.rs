@@ -56,9 +56,11 @@ pub fn is_fade_complete(elapsed: f32, duration: f32) -> bool {
 /// - `MoveEntity`
 /// - `CameraPan`
 /// - `Wait`
+/// - `Jump`
 ///
 /// Non-blocking actions execute immediately:
 /// - `CameraFollow`
+/// - `SetSpeed`
 /// - All other actions
 pub fn is_blocking_action(action: &EventAction) -> bool {
     match action {
@@ -72,6 +74,7 @@ pub fn is_blocking_action(action: &EventAction) -> bool {
         EventAction::CameraFollow { .. } => false,
         EventAction::CameraPan { .. } => true,
         EventAction::Wait { .. } => true,
+        EventAction::Jump { .. } => true,
         _ => false,
     }
 }

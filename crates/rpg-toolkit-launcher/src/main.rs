@@ -338,9 +338,7 @@ fn load_project_resources(
         registry: pending.project_file.abilities.clone(),
     });
 
-    commands.insert_resource(DialogTextRegistry::from_map(
-        pending.project_file.dialog_texts.clone(),
-    ));
+    commands.insert_resource(DialogTextRegistry::new());
 
     commands.remove_resource::<PendingProjectLoad>();
 }

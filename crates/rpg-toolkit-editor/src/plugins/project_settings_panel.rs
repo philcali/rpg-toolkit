@@ -1,5 +1,5 @@
 //! Project Settings panel — includes the "Game Start Events" section
-//! for editing `intro_events` on the project manifest.
+//! for editing `intro_events` and the "Hotkey Bindings" section on the project manifest.
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
@@ -8,6 +8,7 @@ use crate::data::project::Project;
 use crate::data::{AppEditorMode, EditorUiSet};
 use crate::plugins::attribute::action_editor::ActionEditorState;
 use crate::plugins::attribute::action_editor_ui;
+use crate::plugins::hotkey_panel::{HotkeyPanelState, render_hotkey_panel};
 
 /// Plugin that provides the project settings panel UI.
 pub struct ProjectSettingsPanelPlugin;
@@ -34,6 +35,7 @@ fn project_settings_panel_ui(
     mut contexts: EguiContexts,
     mut project: ResMut<Project>,
     mut settings_state: ResMut<ProjectSettingsState>,
+    mut hotkey_state: ResMut<HotkeyPanelState>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
 
@@ -48,8 +50,19 @@ fn project_settings_panel_ui(
                 ui.label("Event actions to execute when a new game starts (after player spawns).");
                 ui.separator();
 
-                // Clone face_portraits before taking mutable borrow on intro_events
-                let face_portraits = project.face_portraits.clone();
+                // Build portrait entries from characters with face_portrait set
+                let portrait_entries: Vec<(String, String)> = project
+                    .characters
+                    .characters
+                    .values()
+                    .filter_map(|c| {
+                        c.visual_assets
+                            .face_portrait
+                            .as_ref()
+                            .filter(|p| !p.is_empty())
+                            .map(|p| (p.clone(), c.display_name.clone()))
+                    })
+                    .collect();
 
                 // Get or initialize the intro_events list
                 let intro_events = project.intro_events.get_or_insert_with(Vec::new);
@@ -62,7 +75,7 @@ fn project_settings_panel_ui(
                     &mut settings_state.intro_events_editor,
                     "project_intro_events",
                     &[], // map_entries (not needed for cinematic actions)
-                    &face_portraits,
+                    &portrait_entries,
                     0,    // depth
                     None, // reward_ctx
                     &[],  // shops
@@ -73,6 +86,15 @@ fn project_settings_panel_ui(
                 if current_len != previous_len {
                     project.has_unsaved_intro_events_changes = true;
                 }
+            });
+
+        ui.add_space(16.0);
+
+        // Hotkey Bindings section
+        egui::CollapsingHeader::new("⌨ Hotkey Bindings")
+            .default_open(true)
+            .show(ui, |ui| {
+                render_hotkey_panel(ui, &mut project, &mut hotkey_state);
             });
     });
 

@@ -56,8 +56,6 @@ fn empty_project_data() -> RendererProjectData {
         None,
         HashMap::new(),
         None,
-        HashMap::new(),
-        HashMap::new(),
         CharacterRegistry::default(),
         ItemRegistry::default(),
         AbilityRegistry::default(),

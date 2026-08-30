@@ -73,6 +73,20 @@ pub fn event_trigger_panel_ui(
                 .map(|s| (s.id.clone(), s.display_name.clone()))
                 .collect();
 
+            // Build portrait entries from characters with face_portrait set
+            let portrait_entries: Vec<(String, String)> = project
+                .characters
+                .characters
+                .values()
+                .filter_map(|c| {
+                    c.visual_assets
+                        .face_portrait
+                        .as_ref()
+                        .filter(|p| !p.is_empty())
+                        .map(|p| (p.clone(), c.display_name.clone()))
+                })
+                .collect();
+
             // === Conditional Triggers section ===
             render_conditional_triggers_panel(
                 ui,
@@ -80,7 +94,7 @@ pub fn event_trigger_panel_ui(
                 &mut dialog.conditional_trigger_editors,
                 "evt_cond_trig",
                 &map_entries,
-                &project.face_portraits,
+                &portrait_entries,
                 &shops,
             );
 
@@ -94,7 +108,7 @@ pub fn event_trigger_panel_ui(
                 &mut dialog.action_editor,
                 "event_trigger",
                 &map_entries,
-                &project.face_portraits,
+                &portrait_entries,
                 0,
                 None,
                 &shops,
@@ -171,7 +185,7 @@ pub fn render_conditional_triggers_panel(
     editors: &mut Vec<ActionEditorState>,
     id_salt: &str,
     map_entries: &[(String, String)],
-    face_portraits: &std::collections::HashMap<String, String>,
+    portrait_entries: &[(String, String)],
     shops: &[(String, String)],
 ) {
     ui.label(egui::RichText::new("Conditional Triggers").strong());
@@ -222,7 +236,7 @@ pub fn render_conditional_triggers_panel(
                     &mut editors[i],
                     &format!("{}_actions_{}", id_salt, i),
                     map_entries,
-                    face_portraits,
+                    portrait_entries,
                     1,
                     None,
                     shops,

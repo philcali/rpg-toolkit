@@ -3,6 +3,10 @@ name = "rpg-toolkit-editor"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "rpg_toolkit_editor"
+path = "src/lib.rs"
+
 [[bin]]
 name = "rpg-toolkit-editor"
 path = "src/main.rs"
@@ -23,3 +27,7 @@ tempfile = "3"
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[[test]]
+name = "editor_value_clamping"
+path = "tests/properties/editor_value_clamping.rs"

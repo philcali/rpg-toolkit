@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use crate::data::tileset::TilesetEntry;
 use crate::data::undo::UndoHistory;
 use crate::data::{EditorState, Project, ProjectFile};
-use crate::plugins::dialog_text_panel::{TextIdIndex, rebuild_text_id_index};
 use rpg_toolkit_common::asset::{AssetManager, ProjectSource};
 use rpg_toolkit_common::{CharacterSpritesheet, SpritesheetId};
 
@@ -85,7 +84,6 @@ fn load_project_unified(
     editor_state: &mut ResMut<EditorState>,
     asset_server: &Res<AssetServer>,
     atlas_layouts: &mut ResMut<Assets<TextureAtlasLayout>>,
-    text_id_index: &mut ResMut<TextIdIndex>,
 ) {
     let source = match AssetManager::detect_source(path) {
         Ok(s) => s,
@@ -121,7 +119,6 @@ fn load_project_unified(
                 editor_state,
                 asset_server,
                 atlas_layouts,
-                text_id_index,
             );
 
             editor_state.current_save_path = Some(dir);
@@ -189,7 +186,6 @@ fn load_project_unified(
                 editor_state,
                 asset_server,
                 atlas_layouts,
-                text_id_index,
             );
 
             editor_state.current_save_path = Some(base_dir);
@@ -214,7 +210,6 @@ fn apply_loaded_project(
     _editor_state: &mut ResMut<EditorState>,
     asset_server: &Res<AssetServer>,
     atlas_layouts: &mut ResMut<Assets<TextureAtlasLayout>>,
-    text_id_index: &mut ResMut<TextIdIndex>,
 ) {
     let tilesets = reconstruct_tilesets(project_file, base_dir, asset_server, atlas_layouts);
 
@@ -241,8 +236,6 @@ fn apply_loaded_project(
         spawn_point: project_file.spawn_point.clone(),
         spritesheets,
         player_spritesheet: project_file.player_spritesheet.clone(),
-        dialog_texts: project_file.dialog_texts.clone(),
-        face_portraits: project_file.face_portraits.clone(),
         characters: project_file.characters.clone(),
         has_unsaved_character_changes: false,
         items: project_file.items.clone(),
@@ -255,9 +248,9 @@ fn apply_loaded_project(
         has_unsaved_shop_changes: false,
         intro_events: project_file.intro_events.clone(),
         has_unsaved_intro_events_changes: false,
+        hotkey_bindings: project_file.hotkey_bindings.clone(),
+        has_unsaved_hotkey_changes: false,
     };
-
-    **text_id_index = rebuild_text_id_index(&project.maps);
 }
 
 /// Resolve spritesheet file paths from relative (as stored on disk) to absolute
@@ -343,8 +336,6 @@ fn build_project_file_for_save(project: &Project) -> ProjectFile {
         project.spawn_point.clone(),
         spritesheets,
         project.player_spritesheet.clone(),
-        project.dialog_texts.clone(),
-        project.face_portraits.clone(),
         project.characters.clone(),
         items,
         abilities,
@@ -352,6 +343,7 @@ fn build_project_file_for_save(project: &Project) -> ProjectFile {
         project.shops.clone(),
     );
     project_file.intro_events = project.intro_events.clone();
+    project_file.hotkey_bindings = project.hotkey_bindings.clone();
     project_file
 }
 
@@ -499,7 +491,6 @@ fn handle_serialization_actions(
     asset_server: Res<AssetServer>,
     mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut contexts: EguiContexts,
-    mut text_id_index: ResMut<TextIdIndex>,
 ) -> Result {
     let Some(request) = action.pending.take() else {
         return Ok(());
@@ -538,7 +529,6 @@ fn handle_serialization_actions(
                         &mut editor_state,
                         &asset_server,
                         &mut atlas_layouts,
-                        &mut text_id_index,
                     );
                 }
                 Err(_) => {
@@ -598,6 +588,7 @@ fn save_project_to_path(
                 project.has_unsaved_ability_changes = false;
                 project.has_unsaved_enemy_changes = false;
                 project.has_unsaved_shop_changes = false;
+                project.has_unsaved_hotkey_changes = false;
 
                 if path.is_dir() {
                     editor_state.current_save_path = Some(path.to_path_buf());

@@ -454,3 +454,43 @@ impl CharacterRegistry {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_face_portrait_trims_whitespace() {
+        let mut registry = CharacterRegistry::default();
+        let id = registry.create_character("TestChar").unwrap();
+
+        registry
+            .set_visual_asset(
+                &id,
+                VisualAssetType::FacePortrait,
+                "  /path/to/portrait.png  ",
+            )
+            .unwrap();
+
+        let character = registry.characters.get(&id).unwrap();
+        assert_eq!(
+            character.visual_assets.face_portrait,
+            Some("/path/to/portrait.png".to_string())
+        );
+    }
+
+    #[test]
+    fn set_face_portrait_truncates_to_260_chars() {
+        let mut registry = CharacterRegistry::default();
+        let id = registry.create_character("TestChar").unwrap();
+
+        let long_path = "a".repeat(300);
+        registry
+            .set_visual_asset(&id, VisualAssetType::FacePortrait, &long_path)
+            .unwrap();
+
+        let character = registry.characters.get(&id).unwrap();
+        let stored = character.visual_assets.face_portrait.as_ref().unwrap();
+        assert_eq!(stored.len(), 260);
+    }
+}

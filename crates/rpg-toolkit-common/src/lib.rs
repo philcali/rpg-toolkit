@@ -8,6 +8,7 @@ pub mod element;
 pub mod enemy;
 pub mod error;
 pub mod graphics;
+pub mod hotkey;
 pub mod item;
 pub mod manifest;
 pub mod map;
@@ -42,6 +43,7 @@ pub use enemy::{
 };
 pub use error::CommonError;
 pub use graphics::EntityGraphics;
+pub use hotkey::{HotkeyBinding, deserialize_hotkey_bindings};
 pub use item::{
     BuffTargetStat, ConsumableEffect, ConsumableEffectType, CureTargetStatus, EquipmentSlot, Item,
     ItemCategory, ItemCategoryData, ItemId, ItemRegistry, Rarity, StatModifier,
@@ -50,7 +52,7 @@ pub use item::{
 pub use manifest::ProjectManifest;
 pub use map::{
     ChoiceData, DialogConfigData, DialogPositionData, DialogTextData, EntityTarget, EventAction,
-    FadeType, Layer, MapData, MapId, PlayerAppearance, ScreenShakeMode, SpawnPoint,
+    FadeType, Layer, MapData, MapId, ParallaxLayer, PlayerAppearance, ScreenShakeMode, SpawnPoint,
     TileAttributeLayer, TileAttributes, TileRef, TilesetId, TransferDirection,
 };
 pub use project::{ProjectFile, SpritesheetReferences};

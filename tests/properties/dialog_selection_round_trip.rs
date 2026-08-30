@@ -20,10 +20,7 @@ use rpg_toolkit_common::map::{
 // ---------------------------------------------------------------------------
 
 fn arb_dialog_text_data() -> impl Strategy<Value = DialogTextData> {
-    prop_oneof![
-        "[a-zA-Z ]{1,40}".prop_map(DialogTextData::Inline),
-        "[a-z\\-]{3,15}".prop_map(DialogTextData::Id),
-    ]
+    "[a-zA-Z ]{1,40}".prop_map(DialogTextData::Inline)
 }
 
 fn arb_dialog_position() -> impl Strategy<Value = DialogPositionData> {
@@ -61,10 +58,7 @@ fn arb_dialog_config() -> impl Strategy<Value = DialogConfigData> {
 
 /// Label strategy for choices: inline labels must be 1–80 characters.
 fn arb_choice_label() -> impl Strategy<Value = DialogTextData> {
-    prop_oneof![
-        "[a-zA-Z ]{1,80}".prop_map(DialogTextData::Inline),
-        "[a-z\\-]{3,15}".prop_map(DialogTextData::Id),
-    ]
+    "[a-zA-Z ]{1,80}".prop_map(DialogTextData::Inline)
 }
 
 fn arb_condition_operator() -> impl Strategy<Value = ConditionOperator> {

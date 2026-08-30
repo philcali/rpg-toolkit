@@ -131,8 +131,6 @@ proptest! {
             None,            // spawn_point
             HashMap::new(),  // spritesheets
             None,            // player_spritesheet
-            HashMap::new(),  // dialog_texts
-            HashMap::new(),  // face_portraits
             Default::default(), // characters
             Default::default(), // items
             Default::default(), // abilities
