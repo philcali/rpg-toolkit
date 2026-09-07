@@ -5,6 +5,7 @@ use std::path::Path;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::ability::AbilityRegistry;
+use crate::asset::{MusicLoop, MusicLoopId, SoundEffect, SoundEffectId};
 use crate::character::CharacterRegistry;
 use crate::enemy::EnemyRegistry;
 use crate::error::CommonError;
@@ -68,6 +69,12 @@ pub struct ProjectManifest {
     /// Shop registry: all shops defined in this project.
     #[serde(default)]
     pub shops: ShopRegistry,
+    /// Music loop registry: all music loops defined in this project.
+    #[serde(default)]
+    pub music_loops: HashMap<MusicLoopId, MusicLoop>,
+    /// Sound effect registry: all sound effects defined in this project.
+    #[serde(default)]
+    pub sound_effects: HashMap<SoundEffectId, SoundEffect>,
     /// Event actions to execute when a new game starts (after player spawns).
     #[serde(default, deserialize_with = "deserialize_intro_events")]
     pub intro_events: Option<Vec<EventAction>>,
@@ -133,6 +140,24 @@ impl ProjectManifest {
     pub fn into_project_file(self, root: &Path) -> Result<crate::ProjectFile, CommonError> {
         let maps = self.load_maps(root)?;
 
+        // Validate audio registry keys match their record ids
+        for (key, music_loop) in &self.music_loops {
+            if key != &music_loop.id {
+                return Err(CommonError::ProjectValidationError(format!(
+                    "music_loops registry key '{}' does not match music loop id '{}'",
+                    key, music_loop.id
+                )));
+            }
+        }
+        for (key, sound_effect) in &self.sound_effects {
+            if key != &sound_effect.id {
+                return Err(CommonError::ProjectValidationError(format!(
+                    "sound_effects registry key '{}' does not match sound effect id '{}'",
+                    key, sound_effect.id
+                )));
+            }
+        }
+
         // Validate each map
         for (map_id, map) in &maps {
             map.validate().map_err(|e| {
@@ -196,6 +221,19 @@ impl ProjectManifest {
             }
         }
 
+        // Warn about maps whose default_music_loop references an unregistered music loop
+        // (preserve data, just log — mirrors the JumpTo unknown-map warning above)
+        for map in maps.values() {
+            if let Some(music_loop_id) = &map.default_music_loop
+                && !self.music_loops.contains_key(music_loop_id)
+            {
+                eprintln!(
+                    "warning: map '{}' default_music_loop references non-existent music loop '{}'",
+                    map.name, music_loop_id
+                );
+            }
+        }
+
         let mut project = crate::ProjectFile::new(
             maps,
             self.tilesets,
@@ -208,6 +246,8 @@ impl ProjectManifest {
             self.enemies,
             self.shops,
         );
+        project.music_loops = self.music_loops;
+        project.sound_effects = self.sound_effects;
         project.intro_events = self.intro_events;
         project.hotkey_bindings = self.hotkey_bindings;
         Ok(project)
@@ -332,6 +372,8 @@ mod tests {
             abilities: AbilityRegistry::default(),
             enemies: EnemyRegistry::default(),
             shops: ShopRegistry::default(),
+            music_loops: HashMap::new(),
+            sound_effects: HashMap::new(),
             intro_events: None,
             hotkey_bindings: Vec::new(),
         };
@@ -412,6 +454,8 @@ mod tests {
             abilities: AbilityRegistry::default(),
             enemies: EnemyRegistry::default(),
             shops: ShopRegistry::default(),
+            music_loops: HashMap::new(),
+            sound_effects: HashMap::new(),
             intro_events: None,
             hotkey_bindings: Vec::new(),
         };
@@ -422,5 +466,25 @@ mod tests {
         assert!(errors.iter().any(|e| e.contains("nonexistent")));
 
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn pre_audio_manifest_loads_with_empty_audio_registries() {
+        // A manifest JSON created before the audio feature contains neither a
+        // music_loops nor a sound_effects field; both should default to empty
+        // collections without error. (Requirements 10.3, 11.2)
+        let json = r#"{
+            "maps": ["map-1"],
+            "tilesets": {}
+        }"#;
+        let manifest = ProjectManifest::from_bytes(json.as_bytes()).unwrap();
+        assert!(
+            manifest.music_loops.is_empty(),
+            "music_loops should default to empty when absent from manifest JSON"
+        );
+        assert!(
+            manifest.sound_effects.is_empty(),
+            "sound_effects should default to empty when absent from manifest JSON"
+        );
     }
 }

@@ -12,6 +12,13 @@ pub type AssetCategory = String;
 pub const CATEGORY_TILESET: &str = "tileset";
 pub const CATEGORY_SPRITESHEET: &str = "spritesheet";
 pub const CATEGORY_FACE_PORTRAIT: &str = "face_portrait";
+pub const CATEGORY_MUSIC_LOOP: &str = "music_loop";
+pub const CATEGORY_SOUND_EFFECT: &str = "sound_effect";
+
+/// Identifier for a music loop asset (1–128 characters).
+pub type MusicLoopId = String;
+/// Identifier for a sound effect asset (1–128 characters).
+pub type SoundEffectId = String;
 
 /// A record associating a logical asset identifier with a relative file path
 /// and an asset category.
@@ -23,6 +30,111 @@ pub struct AssetReference {
     pub relative_path: String,
     /// Classification tag (open string set).
     pub category: AssetCategory,
+}
+
+/// Raw helper struct for deserializing audio asset records (`MusicLoop` /
+/// `SoundEffect`) with validation. Mirrors the `AssetReference` field names so
+/// JSON encoding stays consistent; `category` is optional on input because it is
+/// always coerced to the correct well-known constant on conversion.
+#[derive(Deserialize)]
+struct RawAudioAsset {
+    id: String,
+    relative_path: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    category: Option<AssetCategory>,
+}
+
+/// A project asset representing a continuously repeating background audio track.
+///
+/// Mirrors `AssetReference`'s field names (`id`, `relative_path`, `category`) so
+/// JSON encoding is consistent. `category` is always `CATEGORY_MUSIC_LOOP`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawAudioAsset")]
+pub struct MusicLoop {
+    /// Unique identifier (1–128 characters).
+    pub id: MusicLoopId,
+    /// Relative path to the audio file (non-empty after trimming whitespace).
+    pub relative_path: String,
+    /// Classification tag, always `CATEGORY_MUSIC_LOOP`.
+    pub category: AssetCategory,
+}
+
+impl TryFrom<RawAudioAsset> for MusicLoop {
+    type Error = String;
+
+    fn try_from(raw: RawAudioAsset) -> Result<Self, Self::Error> {
+        let id_len = raw.id.chars().count();
+        if !(1..=128).contains(&id_len) {
+            return Err(format!("id must be 1 to 128 characters, got {}", id_len));
+        }
+        if raw.relative_path.trim().is_empty() {
+            return Err("relative_path must not be empty".to_string());
+        }
+        Ok(MusicLoop {
+            id: raw.id,
+            relative_path: raw.relative_path,
+            category: CATEGORY_MUSIC_LOOP.to_string(),
+        })
+    }
+}
+
+impl From<&MusicLoop> for AssetReference {
+    fn from(music_loop: &MusicLoop) -> Self {
+        AssetReference {
+            id: music_loop.id.clone(),
+            relative_path: music_loop.relative_path.clone(),
+            category: CATEGORY_MUSIC_LOOP.to_string(),
+        }
+    }
+}
+
+/// A project asset representing a short, one-shot audio clip.
+///
+/// Mirrors `AssetReference`'s field names (`id`, `relative_path`, `category`) so
+/// JSON encoding is consistent. `category` is always `CATEGORY_SOUND_EFFECT`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawAudioAsset")]
+pub struct SoundEffect {
+    /// Unique identifier (1–128 characters).
+    pub id: SoundEffectId,
+    /// Relative path to the audio file (1–4096 characters).
+    pub relative_path: String,
+    /// Classification tag, always `CATEGORY_SOUND_EFFECT`.
+    pub category: AssetCategory,
+}
+
+impl TryFrom<RawAudioAsset> for SoundEffect {
+    type Error = String;
+
+    fn try_from(raw: RawAudioAsset) -> Result<Self, Self::Error> {
+        let id_len = raw.id.chars().count();
+        if !(1..=128).contains(&id_len) {
+            return Err(format!("id must be 1 to 128 characters, got {}", id_len));
+        }
+        let path_len = raw.relative_path.chars().count();
+        if !(1..=4096).contains(&path_len) {
+            return Err(format!(
+                "relative_path must be 1 to 4096 characters, got {}",
+                path_len
+            ));
+        }
+        Ok(SoundEffect {
+            id: raw.id,
+            relative_path: raw.relative_path,
+            category: CATEGORY_SOUND_EFFECT.to_string(),
+        })
+    }
+}
+
+impl From<&SoundEffect> for AssetReference {
+    fn from(sound_effect: &SoundEffect) -> Self {
+        AssetReference {
+            id: sound_effect.id.clone(),
+            relative_path: sound_effect.relative_path.clone(),
+            category: CATEGORY_SOUND_EFFECT.to_string(),
+        }
+    }
 }
 
 /// Registry of all image-referenced assets in a project, keyed by unique identifier.
@@ -125,11 +237,15 @@ impl AssetManager {
     /// - `tileset` → `tilesets/`
     /// - `spritesheet` → `data/`
     /// - `face_portrait` → `data/`
+    /// - `music_loop` → `audio/music/`
+    /// - `sound_effect` → `audio/sfx/`
     pub fn new() -> Self {
         let mut category_dirs = HashMap::new();
         category_dirs.insert(CATEGORY_TILESET.to_string(), "tilesets/".to_string());
         category_dirs.insert(CATEGORY_SPRITESHEET.to_string(), "data/".to_string());
         category_dirs.insert(CATEGORY_FACE_PORTRAIT.to_string(), "data/".to_string());
+        category_dirs.insert(CATEGORY_MUSIC_LOOP.to_string(), "audio/music/".to_string());
+        category_dirs.insert(CATEGORY_SOUND_EFFECT.to_string(), "audio/sfx/".to_string());
 
         Self {
             registry: AssetRegistry::default(),
@@ -1020,7 +1136,26 @@ mod tests {
         assert_eq!(dirs.get(CATEGORY_TILESET).unwrap(), "tilesets/");
         assert_eq!(dirs.get(CATEGORY_SPRITESHEET).unwrap(), "data/");
         assert_eq!(dirs.get(CATEGORY_FACE_PORTRAIT).unwrap(), "data/");
-        assert_eq!(dirs.len(), 3);
+        assert_eq!(dirs.len(), 5);
+    }
+
+    // --- Audio category mapping tests (subtask 2.1) ---
+
+    #[test]
+    fn test_new_default_audio_category_dirs() {
+        // Req 3.3, 3.4: default constructor maps the two audio categories to
+        // their expected subdirectories.
+        let manager = AssetManager::new();
+        let dirs = manager.category_dirs();
+        assert_eq!(dirs.get(CATEGORY_MUSIC_LOOP).unwrap(), "audio/music/");
+        assert_eq!(dirs.get(CATEGORY_SOUND_EFFECT).unwrap(), "audio/sfx/");
+    }
+
+    #[test]
+    fn test_audio_category_constant_values() {
+        // Req 3.1, 3.2: the category constants carry the exact expected string values.
+        assert_eq!(CATEGORY_MUSIC_LOOP, "music_loop");
+        assert_eq!(CATEGORY_SOUND_EFFECT, "sound_effect");
     }
 
     #[test]
@@ -1067,6 +1202,8 @@ mod tests {
             abilities: Default::default(),
             enemies: Default::default(),
             shops: Default::default(),
+            music_loops: StdHashMap::new(),
+            sound_effects: StdHashMap::new(),
             intro_events: None,
             hotkey_bindings: Vec::new(),
         };
@@ -1127,6 +1264,8 @@ mod tests {
             abilities: Default::default(),
             enemies: Default::default(),
             shops: Default::default(),
+            music_loops: StdHashMap::new(),
+            sound_effects: StdHashMap::new(),
             intro_events: None,
             hotkey_bindings: Vec::new(),
         };
@@ -1190,6 +1329,8 @@ mod tests {
                 abilities: Default::default(),
                 enemies: Default::default(),
                 shops: Default::default(),
+                music_loops: StdHashMap::new(),
+                sound_effects: StdHashMap::new(),
                 intro_events: None,
                 hotkey_bindings: Vec::new(),
             };
@@ -1262,6 +1403,8 @@ mod tests {
                 abilities: Default::default(),
                 enemies: Default::default(),
                 shops: Default::default(),
+                music_loops: StdHashMap::new(),
+                sound_effects: StdHashMap::new(),
                 intro_events: None,
                 hotkey_bindings: Vec::new(),
             };
@@ -1327,8 +1470,8 @@ mod tests {
             manager.category_dirs().get("music").unwrap(),
             "audio/music/"
         );
-        // Existing entries unchanged
-        assert_eq!(manager.category_dirs().len(), 4);
+        // Existing entries unchanged (5 defaults + 1 added)
+        assert_eq!(manager.category_dirs().len(), 6);
     }
 
     // --- AssetManager::registry_from_project_file tests ---
@@ -1979,6 +2122,179 @@ mod tests {
 
         // The asset file should NOT be in the archive
         assert!(archive.by_name("tilesets/ghost.png").is_err());
+    }
+
+    // --- Audio save-to-ZIP placement and missing-source warning tests (subtask 2.4) ---
+
+    #[test]
+    fn test_save_audio_to_zip_written_at_normalized_relative_path() {
+        // Req 3.6: saving to a ZIP target writes each audio asset into the archive
+        // at its normalized relative path.
+        use crate::map::MapData;
+        use std::collections::HashMap as StdHashMap;
+        use std::io::Read;
+
+        let source_tmp = tempfile::tempdir().unwrap();
+        let source_dir = source_tmp.path();
+        let target_tmp = tempfile::tempdir().unwrap();
+        let zip_path = target_tmp.path().join("audio_project.rpg");
+
+        // Create source audio files at their relative paths.
+        let music_dir = source_dir.join("audio/music");
+        std::fs::create_dir_all(&music_dir).unwrap();
+        std::fs::write(music_dir.join("town.ogg"), b"town music bytes").unwrap();
+        let sfx_dir = source_dir.join("audio/sfx");
+        std::fs::create_dir_all(&sfx_dir).unwrap();
+        std::fs::write(sfx_dir.join("door.wav"), b"door sfx bytes").unwrap();
+
+        let mut maps = StdHashMap::new();
+        maps.insert(
+            "town".to_string(),
+            MapData::new("town", 4, 4, 16, 16).unwrap(),
+        );
+
+        let project = crate::ProjectFile::new(
+            maps,
+            StdHashMap::new(),
+            None,
+            StdHashMap::new(),
+            None,
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
+
+        // Register the two audio assets via the audio structs' From conversions.
+        let music = MusicLoop {
+            id: "town_theme".to_string(),
+            relative_path: "audio/music/town.ogg".to_string(),
+            category: CATEGORY_MUSIC_LOOP.to_string(),
+        };
+        let sfx = SoundEffect {
+            id: "door_open".to_string(),
+            relative_path: "audio/sfx/door.wav".to_string(),
+            category: CATEGORY_SOUND_EFFECT.to_string(),
+        };
+
+        let mut registry = AssetRegistry::default();
+        registry.register(AssetReference::from(&music)).unwrap();
+        registry.register(AssetReference::from(&sfx)).unwrap();
+
+        // Use the default constructor so the audio category mappings are present.
+        let mut manager = AssetManager::new();
+        manager.set_registry(registry);
+
+        let warnings = manager
+            .save_project(&project, &zip_path, source_dir)
+            .unwrap();
+        assert!(warnings.is_empty());
+
+        // Verify the audio entries were written at their normalized relative paths.
+        let zip_data = std::fs::read(&zip_path).unwrap();
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip_data)).unwrap();
+
+        let mut music_data = Vec::new();
+        archive
+            .by_name("audio/music/town.ogg")
+            .unwrap()
+            .read_to_end(&mut music_data)
+            .unwrap();
+        assert_eq!(music_data, b"town music bytes");
+
+        let mut sfx_data = Vec::new();
+        archive
+            .by_name("audio/sfx/door.wav")
+            .unwrap()
+            .read_to_end(&mut sfx_data)
+            .unwrap();
+        assert_eq!(sfx_data, b"door sfx bytes");
+    }
+
+    #[test]
+    fn test_save_audio_missing_source_emits_one_warning_and_continues() {
+        // Req 3.7: exactly one AssetWarning per missing source file, remaining
+        // registered assets are still processed (save continues past a missing source).
+        use crate::map::MapData;
+        use std::collections::HashMap as StdHashMap;
+        use std::io::Read;
+
+        let source_tmp = tempfile::tempdir().unwrap();
+        let source_dir = source_tmp.path();
+        let target_tmp = tempfile::tempdir().unwrap();
+        let zip_path = target_tmp.path().join("partial_audio.rpg");
+
+        // Create ONLY the sound effect source file; the music loop source is missing.
+        let sfx_dir = source_dir.join("audio/sfx");
+        std::fs::create_dir_all(&sfx_dir).unwrap();
+        std::fs::write(sfx_dir.join("clash.wav"), b"clash sfx bytes").unwrap();
+
+        let mut maps = StdHashMap::new();
+        maps.insert(
+            "arena".to_string(),
+            MapData::new("arena", 4, 4, 16, 16).unwrap(),
+        );
+
+        let project = crate::ProjectFile::new(
+            maps,
+            StdHashMap::new(),
+            None,
+            StdHashMap::new(),
+            None,
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
+
+        let missing_music = MusicLoop {
+            id: "missing_theme".to_string(),
+            relative_path: "audio/music/missing.ogg".to_string(),
+            category: CATEGORY_MUSIC_LOOP.to_string(),
+        };
+        let present_sfx = SoundEffect {
+            id: "clash".to_string(),
+            relative_path: "audio/sfx/clash.wav".to_string(),
+            category: CATEGORY_SOUND_EFFECT.to_string(),
+        };
+
+        let mut registry = AssetRegistry::default();
+        registry
+            .register(AssetReference::from(&missing_music))
+            .unwrap();
+        registry
+            .register(AssetReference::from(&present_sfx))
+            .unwrap();
+
+        let mut manager = AssetManager::new();
+        manager.set_registry(registry);
+
+        let warnings = manager
+            .save_project(&project, &zip_path, source_dir)
+            .unwrap();
+
+        // Exactly one warning, for the missing music loop.
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].asset_id, "missing_theme");
+        assert_eq!(warnings[0].category, CATEGORY_MUSIC_LOOP);
+        assert!(warnings[0].message.contains("not found"));
+
+        // The remaining (present) asset was still processed and written to the archive.
+        let zip_data = std::fs::read(&zip_path).unwrap();
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip_data)).unwrap();
+
+        let mut sfx_data = Vec::new();
+        archive
+            .by_name("audio/sfx/clash.wav")
+            .unwrap()
+            .read_to_end(&mut sfx_data)
+            .unwrap();
+        assert_eq!(sfx_data, b"clash sfx bytes");
+
+        // The missing music file must NOT be present in the archive.
+        assert!(archive.by_name("audio/music/missing.ogg").is_err());
     }
 
     // --- AssetManager::file_exists tests ---

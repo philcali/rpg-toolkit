@@ -181,6 +181,7 @@ fn arb_map_data(ss_count: usize) -> impl Strategy<Value = MapData> {
                 active_layer_index: 0,
                 npcs,
                 parallax_layers: Vec::new(),
+                default_music_loop: None,
             }
         })
     })

@@ -5,7 +5,7 @@ use crate::data::map::MapId;
 use crate::data::project::Project;
 use crate::data::{AppEditorMode, EditCommand, EditorUiSet, MapDataEditorExt};
 use crate::plugins::parallax_panel::render_parallax_panel;
-use crate::plugins::searchable_combobox::filter_items;
+use crate::plugins::searchable_combobox::{filter_items, searchable_combobox};
 
 /// Plugin that renders the layer management panel and the map browser,
 /// combined into a single left side panel.
@@ -44,6 +44,8 @@ struct MapBrowserState {
     rename_buffer: String,
     pending_delete: Option<MapId>,
     search_buffer: String,
+    /// Search text state for the map default music loop selector.
+    music_loop_search_buffer: String,
 }
 
 /// Whether the map delete confirmation dialog is currently open.
@@ -179,6 +181,14 @@ fn layer_panel_ui(
             // ── Parallax Layers section (below map browser) ──
             ui.add_space(8.0);
             render_parallax_panel(ui, &mut project);
+
+            // ── Map Audio section (below parallax layers) ──
+            ui.add_space(8.0);
+            render_map_audio_panel(
+                ui,
+                &mut project,
+                &mut browser_state.music_loop_search_buffer,
+            );
         });
 
     // Delete confirmation dialog (rendered outside the panel)
@@ -353,4 +363,65 @@ fn render_map_browser(
             actions.push(BrowserAction::CancelRename);
         }
     }
+}
+
+/// Sentinel id used by the default music loop selector to represent the
+/// "None" (no default music) choice. Music loop ids are always at least one
+/// character, so the empty string can never collide with a real id.
+const NONE_MUSIC_LOOP_ID: &str = "";
+
+/// Renders the "Map Audio" section, letting the user pick the active map's
+/// default music loop from the registered music loops (plus a "None" option).
+///
+/// The selector is preselected to "None" when the map's `default_music_loop`
+/// is `None`. Selecting a registered music loop sets `default_music_loop` to
+/// that `MusicLoopId`; selecting "None" clears it.
+fn render_map_audio_panel(
+    ui: &mut egui::Ui,
+    project: &mut ResMut<Project>,
+    search_buffer: &mut String,
+) {
+    ui.heading("Map Audio");
+    ui.separator();
+
+    if project.active_map().is_none() {
+        ui.label("No map loaded.");
+        return;
+    }
+
+    // Build the selector items: a "None" option followed by one entry per
+    // registered music loop. Items are `(id, display_label)` pairs; the
+    // combobox sorts them alphabetically by label.
+    let mut items: Vec<(String, String)> =
+        vec![(NONE_MUSIC_LOOP_ID.to_string(), "None".to_string())];
+    items.extend(
+        project
+            .music_loops
+            .keys()
+            .map(|id| (id.clone(), id.clone())),
+    );
+
+    // Determine the label for the currently selected default music loop.
+    let current_label = project
+        .active_map()
+        .and_then(|m| m.default_music_loop.clone())
+        .unwrap_or_else(|| "None".to_string());
+
+    ui.horizontal(|ui| {
+        ui.label("Default Music:");
+        if let Some(selected_id) = searchable_combobox(
+            ui,
+            "map_default_music_loop",
+            &current_label,
+            &items,
+            search_buffer,
+        ) && let Some(map) = project.active_map_mut()
+        {
+            map.default_music_loop = if selected_id == NONE_MUSIC_LOOP_ID {
+                None
+            } else {
+                Some(selected_id)
+            };
+        }
+    });
 }

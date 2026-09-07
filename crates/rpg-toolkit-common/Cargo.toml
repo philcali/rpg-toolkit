@@ -82,3 +82,15 @@ path = "tests/properties/parallax_layer_invalid_scroll_factor.rs"
 [[test]]
 name = "parallax_layer_round_trip"
 path = "tests/properties/parallax_layer_round_trip.rs"
+
+[[test]]
+name = "audio_asset_round_trip"
+path = "tests/properties/audio_asset_round_trip.rs"
+
+[[test]]
+name = "map_default_music_loop_round_trip"
+path = "tests/properties/map_default_music_loop_round_trip.rs"
+
+[[test]]
+name = "audio_event_action_round_trip"
+path = "tests/properties/audio_event_action_round_trip.rs"

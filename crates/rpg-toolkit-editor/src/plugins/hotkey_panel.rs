@@ -103,6 +103,18 @@ pub fn render_hotkey_panel(
         })
         .collect();
 
+    // Build audio selector entries from the project registries.
+    let music_entries: Vec<(String, String)> = project
+        .music_loops
+        .keys()
+        .map(|id| (id.clone(), id.clone()))
+        .collect();
+    let sfx_entries: Vec<(String, String)> = project
+        .sound_effects
+        .keys()
+        .map(|id| (id.clone(), id.clone()))
+        .collect();
+
     // Track deferred mutations
     let mut remove_index: Option<usize> = None;
     let mut swap: Option<(usize, usize)> = None;
@@ -229,6 +241,8 @@ pub fn render_hotkey_panel(
                             0,    // depth
                             None, // reward_ctx
                             &[],  // shops
+                            &music_entries,
+                            &sfx_entries,
                         );
                     });
 

@@ -2,6 +2,7 @@ pub mod ability;
 pub mod animation;
 pub mod app_phase;
 pub mod asset;
+pub mod audio;
 pub mod character;
 pub mod condition;
 pub mod element;
@@ -27,8 +28,10 @@ pub use animation::{
 pub use app_phase::{AppPhase, NewGameFlag};
 pub use asset::{
     AssetCategory, AssetManager, AssetReference, AssetRegistry, AssetValidationError, AssetWarning,
-    CATEGORY_FACE_PORTRAIT, CATEGORY_SPRITESHEET, CATEGORY_TILESET, ProjectSource,
+    CATEGORY_FACE_PORTRAIT, CATEGORY_MUSIC_LOOP, CATEGORY_SOUND_EFFECT, CATEGORY_SPRITESHEET,
+    CATEGORY_TILESET, MusicLoop, MusicLoopId, ProjectSource, SoundEffect, SoundEffectId,
 };
+pub use audio::{AudioFormat, AudioLoader};
 pub use character::{
     Character, CharacterId, CharacterRegistry, LearnableAbility, OPTIONAL_STATS, REQUIRED_STATS,
     Stat, VisualAssetType,

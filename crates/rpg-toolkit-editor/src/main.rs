@@ -7,10 +7,10 @@ use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use plugins::{
-    AbilityPanelPlugin, AppShellPlugin, AttributePlugin, CanvasPlugin, CharacterPanelPlugin,
-    EnemyPanelPlugin, HotkeyPanelPlugin, ItemPanelPlugin, LayerPanelPlugin, PaintingPlugin,
-    ParallaxPanelPlugin, ProjectSettingsPanelPlugin, SerializationPlugin, ShopPanelPlugin,
-    SpritesheetPlugin, TilePalettePlugin, ToolbarPlugin, UndoRedoPlugin,
+    AbilityPanelPlugin, AppShellPlugin, AttributePlugin, AudioPagePlugin, CanvasPlugin,
+    CharacterPanelPlugin, EnemyPanelPlugin, HotkeyPanelPlugin, ItemPanelPlugin, LayerPanelPlugin,
+    PaintingPlugin, ParallaxPanelPlugin, ProjectSettingsPanelPlugin, SerializationPlugin,
+    ShopPanelPlugin, SpritesheetPlugin, TilePalettePlugin, ToolbarPlugin, UndoRedoPlugin,
 };
 
 fn main() {
@@ -60,6 +60,7 @@ fn main() {
         .add_plugins(AbilityPanelPlugin)
         .add_plugins(EnemyPanelPlugin)
         .add_plugins(ShopPanelPlugin)
+        .add_plugins(AudioPagePlugin)
         .add_plugins(ParallaxPanelPlugin)
         .add_plugins(ProjectSettingsPanelPlugin)
         .add_plugins(HotkeyPanelPlugin)

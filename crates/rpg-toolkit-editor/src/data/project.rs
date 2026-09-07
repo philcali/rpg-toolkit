@@ -7,8 +7,8 @@ pub use rpg_toolkit_common::ProjectFile;
 
 use rpg_toolkit_common::{
     AbilityRegistry, CharacterRegistry, CharacterSpritesheet, EnemyRegistry, EventAction,
-    HotkeyBinding, ItemRegistry, MapData, MapId, ShopRegistry, SpawnPoint, SpritesheetId,
-    TilesetId,
+    HotkeyBinding, ItemRegistry, MapData, MapId, MusicLoop, MusicLoopId, ShopRegistry, SoundEffect,
+    SoundEffectId, SpawnPoint, SpritesheetId, TilesetId,
 };
 
 use super::state::EditorError;
@@ -48,6 +48,12 @@ pub struct Project {
     pub shops: ShopRegistry,
     /// Whether shop data has been modified since the last save.
     pub has_unsaved_shop_changes: bool,
+    /// Music loop registry: all music loops registered in this project.
+    pub music_loops: HashMap<MusicLoopId, MusicLoop>,
+    /// Sound effect registry: all sound effects registered in this project.
+    pub sound_effects: HashMap<SoundEffectId, SoundEffect>,
+    /// Whether audio registry data has been modified since the last save.
+    pub has_unsaved_audio_changes: bool,
     /// Intro events: actions to execute when a new game starts.
     pub intro_events: Option<Vec<EventAction>>,
     /// Whether intro events data has been modified since the last save.
@@ -185,6 +191,66 @@ impl Project {
         Ok(())
     }
 
+    // ── Audio asset registration ──
+
+    /// Registers a music loop under the given `id` referencing `relative_path`.
+    ///
+    /// Validates that the identifier is 1–128 characters inclusive and not
+    /// already present in the music loop registry. On success the entry is
+    /// inserted and `Ok(())` is returned. On failure the existing registry is
+    /// left unchanged and a descriptive [`EditorError`] is returned.
+    pub fn register_music_loop(
+        &mut self,
+        id: impl Into<String>,
+        relative_path: impl Into<String>,
+    ) -> Result<(), EditorError> {
+        let id = id.into();
+        validate_audio_id(&id)?;
+        if self.music_loops.contains_key(&id) {
+            return Err(EditorError::ProjectValidationError(format!(
+                "music loop identifier '{}' is already registered",
+                id
+            )));
+        }
+        let music_loop = MusicLoop {
+            id: id.clone(),
+            relative_path: relative_path.into(),
+            category: rpg_toolkit_common::CATEGORY_MUSIC_LOOP.to_string(),
+        };
+        self.music_loops.insert(id, music_loop);
+        self.has_unsaved_audio_changes = true;
+        Ok(())
+    }
+
+    /// Registers a sound effect under the given `id` referencing `relative_path`.
+    ///
+    /// Validates that the identifier is 1–128 characters inclusive and not
+    /// already present in the sound effect registry. On success the entry is
+    /// inserted and `Ok(())` is returned. On failure the existing registry is
+    /// left unchanged and a descriptive [`EditorError`] is returned.
+    pub fn register_sound_effect(
+        &mut self,
+        id: impl Into<String>,
+        relative_path: impl Into<String>,
+    ) -> Result<(), EditorError> {
+        let id = id.into();
+        validate_audio_id(&id)?;
+        if self.sound_effects.contains_key(&id) {
+            return Err(EditorError::ProjectValidationError(format!(
+                "sound effect identifier '{}' is already registered",
+                id
+            )));
+        }
+        let sound_effect = SoundEffect {
+            id: id.clone(),
+            relative_path: relative_path.into(),
+            category: rpg_toolkit_common::CATEGORY_SOUND_EFFECT.to_string(),
+        };
+        self.sound_effects.insert(id, sound_effect);
+        self.has_unsaved_audio_changes = true;
+        Ok(())
+    }
+
     // ── Tab management ──
 
     /// Opens a map in the tab bar. If already open, just activates it.
@@ -222,5 +288,123 @@ impl Project {
         if idx < self.open_tabs.len() {
             self.active_tab = Some(idx);
         }
+    }
+}
+
+/// Validates an audio asset identifier, requiring 1–128 characters inclusive.
+///
+/// Returns a descriptive [`EditorError`] when the identifier is empty or longer
+/// than 128 characters, matching the AssetRegistry identifier rule.
+fn validate_audio_id(id: &str) -> Result<(), EditorError> {
+    let len = id.chars().count();
+    if len == 0 {
+        return Err(EditorError::ProjectValidationError(
+            "identifier must not be empty".to_string(),
+        ));
+    }
+    if len > 128 {
+        return Err(EditorError::ProjectValidationError(format!(
+            "identifier must be 1 to 128 characters, got {}",
+            len
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod audio_registration_tests {
+    use super::*;
+    use rpg_toolkit_common::{CATEGORY_MUSIC_LOOP, CATEGORY_SOUND_EFFECT};
+
+    // Requirement 12.1: a valid music loop is registered and appears in the registry.
+    #[test]
+    fn register_music_loop_stores_entry_with_category() {
+        let mut project = Project::default();
+        project
+            .register_music_loop("town_theme", "audio/music/town.ogg")
+            .expect("valid music loop should register");
+
+        let entry = project
+            .music_loops
+            .get("town_theme")
+            .expect("registered music loop present");
+        assert_eq!(entry.id, "town_theme");
+        assert_eq!(entry.relative_path, "audio/music/town.ogg");
+        assert_eq!(entry.category, CATEGORY_MUSIC_LOOP);
+        assert!(project.has_unsaved_audio_changes);
+    }
+
+    // Requirement 12.2: a valid sound effect is registered and appears in the registry.
+    #[test]
+    fn register_sound_effect_stores_entry_with_category() {
+        let mut project = Project::default();
+        project
+            .register_sound_effect("door_open", "audio/sfx/door.wav")
+            .expect("valid sound effect should register");
+
+        let entry = project
+            .sound_effects
+            .get("door_open")
+            .expect("registered sound effect present");
+        assert_eq!(entry.id, "door_open");
+        assert_eq!(entry.category, CATEGORY_SOUND_EFFECT);
+    }
+
+    // Requirement 12.11: duplicate identifiers are rejected and leave the existing entry unchanged.
+    #[test]
+    fn duplicate_music_loop_id_rejected_and_leaves_existing_unchanged() {
+        let mut project = Project::default();
+        project
+            .register_music_loop("theme", "audio/music/first.ogg")
+            .unwrap();
+
+        let err = project
+            .register_music_loop("theme", "audio/music/second.ogg")
+            .expect_err("duplicate id should be rejected");
+        assert!(matches!(err, EditorError::ProjectValidationError(_)));
+
+        // Existing entry is unchanged and no duplicate was added.
+        assert_eq!(project.music_loops.len(), 1);
+        assert_eq!(
+            project.music_loops.get("theme").unwrap().relative_path,
+            "audio/music/first.ogg"
+        );
+    }
+
+    // Requirement 12.11: empty identifiers are rejected.
+    #[test]
+    fn empty_id_rejected() {
+        let mut project = Project::default();
+        assert!(
+            project
+                .register_music_loop("", "audio/music/x.ogg")
+                .is_err()
+        );
+        assert!(
+            project
+                .register_sound_effect("", "audio/sfx/x.wav")
+                .is_err()
+        );
+        assert!(project.music_loops.is_empty());
+        assert!(project.sound_effects.is_empty());
+    }
+
+    // Requirement 12.11: identifiers longer than 128 characters are rejected.
+    #[test]
+    fn overlong_id_rejected() {
+        let mut project = Project::default();
+        let long_id: String = "a".repeat(129);
+        assert!(
+            project
+                .register_music_loop(long_id.clone(), "audio/music/x.ogg")
+                .is_err()
+        );
+        // A 128-char id is accepted (boundary).
+        let boundary_id: String = "b".repeat(128);
+        assert!(
+            project
+                .register_sound_effect(boundary_id, "audio/sfx/x.wav")
+                .is_ok()
+        );
     }
 }
