@@ -225,6 +225,13 @@ fn app_shell_ui(
                     ui.close();
                 }
                 if ui
+                    .selectable_label(*app_editor_mode == AppEditorMode::Audio, "🎵 Audio")
+                    .clicked()
+                {
+                    *app_editor_mode = AppEditorMode::Audio;
+                    ui.close();
+                }
+                if ui
                     .selectable_label(
                         *app_editor_mode == AppEditorMode::ProjectSettings,
                         "⚙ Project Settings",

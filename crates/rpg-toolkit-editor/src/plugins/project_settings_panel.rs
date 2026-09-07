@@ -64,6 +64,18 @@ fn project_settings_panel_ui(
                     })
                     .collect();
 
+                // Build audio selector entries from the project registries.
+                let music_entries: Vec<(String, String)> = project
+                    .music_loops
+                    .keys()
+                    .map(|id| (id.clone(), id.clone()))
+                    .collect();
+                let sfx_entries: Vec<(String, String)> = project
+                    .sound_effects
+                    .keys()
+                    .map(|id| (id.clone(), id.clone()))
+                    .collect();
+
                 // Get or initialize the intro_events list
                 let intro_events = project.intro_events.get_or_insert_with(Vec::new);
                 let previous_len = intro_events.len();
@@ -79,6 +91,8 @@ fn project_settings_panel_ui(
                     0,    // depth
                     None, // reward_ctx
                     &[],  // shops
+                    &music_entries,
+                    &sfx_entries,
                 );
 
                 // Detect changes

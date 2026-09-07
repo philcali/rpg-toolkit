@@ -314,6 +314,18 @@ pub fn npc_placement_dialog_ui(
                 })
                 .collect();
 
+            // Build audio selector entries from the project registries.
+            let music_entries: Vec<(String, String)> = project
+                .music_loops
+                .keys()
+                .map(|id| (id.clone(), id.clone()))
+                .collect();
+            let sfx_entries: Vec<(String, String)> = project
+                .sound_effects
+                .keys()
+                .map(|id| (id.clone(), id.clone()))
+                .collect();
+
             // Conditional Triggers section
             ui.separator();
             render_conditional_triggers_panel(
@@ -324,6 +336,8 @@ pub fn npc_placement_dialog_ui(
                 &map_entries,
                 &portrait_entries,
                 &shops,
+                &music_entries,
+                &sfx_entries,
             );
 
             ui.separator();
@@ -340,6 +354,8 @@ pub fn npc_placement_dialog_ui(
                 0,
                 None,
                 &shops,
+                &music_entries,
+                &sfx_entries,
             );
 
             ui.separator();

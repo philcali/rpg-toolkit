@@ -20,11 +20,16 @@ pub use events::{MapChanged, PlayerMoved, ShowDialog};
 pub use input::{Direction, MovementIntent, handle_intro_skip, open_status_on_escape, read_input};
 pub use resources::{
     ActionQueue, ActiveShopId, AnimationConfig, CameraFollowTarget, CameraPanState,
-    CharacterProgress, CharacterProgressState, CurrencyState, EntityMoveState, FadeState,
-    GameState, InteractionIntent, IntroEventsActive, InventoryState, JumpAnimState, MovementConfig,
+    CharacterProgress, CharacterProgressState, CurrencyState, EntityMoveState, FadeRamp, FadeState,
+    FadingTrack, GameState, InteractionIntent, IntroEventsActive, InventoryState, JumpAnimState,
+    MovementConfig, MusicChannel, MusicChannelState, MusicCommand, MusicPlayback,
     NpcCollisionEvent, NpcPositions, PartyState, PixelScaleConfig, PixelScaleMode,
     PlayerAppearanceState, PlayerVisual, PreviousCameraPosition, RendererProjectData,
-    RendererState, ScreenShakeState, SpeedMultiplier, WaitState, WaitingFor,
+    RendererState, ScreenShakeState, SoundEffectChannel, SpeedMultiplier, WaitState, WaitingFor,
+    next_music_command,
+};
+pub use systems::audio::{
+    handle_play_music, handle_play_sound_effect, play_map_default_music, update_music_fades,
 };
 pub use systems::camera::{apply_pixel_scale, compute_zoom_to_fit, spawn_camera, update_camera};
 pub use systems::collision::is_tile_blocked;
@@ -99,6 +104,7 @@ impl Plugin for ProjectRendererPlugin {
             .init_resource::<RendererAnimationTick>()
             .init_resource::<SpeedMultiplier>()
             .init_resource::<PreviousCameraPosition>()
+            .init_resource::<MusicChannelState>()
             // Events
             .add_message::<MapChanged>()
             .add_message::<PlayerMoved>()
@@ -153,6 +159,8 @@ impl Plugin for ProjectRendererPlugin {
                     apply_speed_multiplier_system.after(advance_action_queue),
                     spawn_parallax_system.after(handle_map_change),
                     update_parallax_system.after(update_camera),
+                    play_map_default_music.after(handle_map_change),
+                    update_music_fades.after(advance_action_queue),
                     handle_dialog_event.after(advance_action_queue),
                     detect_overflow.after(handle_dialog_event),
                     update_dialog_typewriter.after(handle_dialog_event),

@@ -1,0 +1,307 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "11.1 Add audio asset registration UI": [
+      {
+        "executionId": "128b1237-f704-43e2-8d37-5e532f06bbd1",
+        "chatSessionId": "sess_30430553-585d-4025-b9f5-5fc20fc74992",
+        "timestamp": 1788476348708
+      },
+      {
+        "executionId": "128b1237-f704-43e2-8d37-5e532f06bbd1",
+        "chatSessionId": "sess_30430553-585d-4025-b9f5-5fc20fc74992",
+        "timestamp": 1788476799440
+      }
+    ],
+    "11.2 Add the map default music loop selector": [
+      {
+        "executionId": "128b1237-f704-43e2-8d37-5e532f06bbd1",
+        "chatSessionId": "sess_30430553-585d-4025-b9f5-5fc20fc74992",
+        "timestamp": 1788476801973
+      },
+      {
+        "executionId": "128b1237-f704-43e2-8d37-5e532f06bbd1",
+        "chatSessionId": "sess_30430553-585d-4025-b9f5-5fc20fc74992",
+        "timestamp": 1788476922158
+      }
+    ],
+    "11.3 Add PlayMusic / PlaySoundEffect to the Event Trigger Editor with clamping": [
+      {
+        "executionId": "128b1237-f704-43e2-8d37-5e532f06bbd1",
+        "chatSessionId": "sess_30430553-585d-4025-b9f5-5fc20fc74992",
+        "timestamp": 1788476925030
+      },
+      {
+        "executionId": "128b1237-f704-43e2-8d37-5e532f06bbd1",
+        "chatSessionId": "sess_30430553-585d-4025-b9f5-5fc20fc74992",
+        "timestamp": 1788477326428
+      }
+    ],
+    "11. Implement editor audio support (rpg-toolkit-editor)": [
+      {
+        "executionId": "128b1237-f704-43e2-8d37-5e532f06bbd1",
+        "chatSessionId": "sess_30430553-585d-4025-b9f5-5fc20fc74992",
+        "timestamp": 1788477326519
+      }
+    ],
+    "6.1 Add `music_loops` / `sound_effects` fields and thread them through construction": [
+      {
+        "executionId": "cbcdef38-4a9d-4bed-b8f0-1b88713e1c99",
+        "chatSessionId": "sess_98b8ee91-57c9-47cc-839e-f919e8ef36fe",
+        "timestamp": 1788627324895
+      },
+      {
+        "executionId": "cbcdef38-4a9d-4bed-b8f0-1b88713e1c99",
+        "chatSessionId": "sess_98b8ee91-57c9-47cc-839e-f919e8ef36fe",
+        "timestamp": 1788627374422
+      }
+    ],
+    "6.2 Add key/id-mismatch validation for audio registries": [
+      {
+        "executionId": "dbd49ed5-703a-4521-a987-98f462c658d1",
+        "chatSessionId": "sess_4d5fd01b-dc05-46d2-9db1-948e66a50c1e",
+        "timestamp": 1788627487274
+      },
+      {
+        "executionId": "dbd49ed5-703a-4521-a987-98f462c658d1",
+        "chatSessionId": "sess_4d5fd01b-dc05-46d2-9db1-948e66a50c1e",
+        "timestamp": 1788627537607
+      }
+    ],
+    "6.3 Add unregistered `default_music_loop` load warning": [
+      {
+        "executionId": "629016b8-a49c-4f73-a8a5-5c2974835792",
+        "chatSessionId": "sess_c6405d01-f4ad-4fae-9c4d-aae069c16ae9",
+        "timestamp": 1788627772967
+      },
+      {
+        "executionId": "629016b8-a49c-4f73-a8a5-5c2974835792",
+        "chatSessionId": "sess_c6405d01-f4ad-4fae-9c4d-aae069c16ae9",
+        "timestamp": 1788627843548
+      }
+    ],
+    "9.1 Add audio resources, components, and the pure music-decision function": [
+      {
+        "executionId": "7e85e8f8-f3b3-4a8d-bb34-3f361869dfce",
+        "chatSessionId": "sess_3ab16aaf-194a-44fc-99d0-662208337f7b",
+        "timestamp": 1788627892815
+      },
+      {
+        "executionId": "7e85e8f8-f3b3-4a8d-bb34-3f361869dfce",
+        "chatSessionId": "sess_3ab16aaf-194a-44fc-99d0-662208337f7b",
+        "timestamp": 1788628703658
+      }
+    ],
+    "5. Checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633531679
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788634673616
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788634749754
+      }
+    ],
+    "6.7 Write unit tests for backward compatibility": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633531756
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788634752599
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788634861713
+      }
+    ],
+    "8. Checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633531830
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788634864907
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788634945316
+      }
+    ],
+    "9.2 Implement PlayMusic / PlaySoundEffect handling in the action queue (non-blocking)": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633531934
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788634950445
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788635251713
+      }
+    ],
+    "9.3 Implement the fade-advancement system and loop counting": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633532006
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788635254608
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788635621064
+      }
+    ],
+    "9.4 Wire map-entry default music and register systems in the renderer plugin": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633532072
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788635624236
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788644706569
+      }
+    ],
+    "10. Checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633532139
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788644709149
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788645063739
+      }
+    ],
+    "12. Final checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633532194
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788645066352
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788645751496
+      }
+    ],
+    "13.1 Add the `Audio` app editor mode and navigation entry": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633532269
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788645758248
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788645846693
+      }
+    ],
+    "13.2 Create the Audio page plugin, state, and two-list layout": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633532327
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788645849473
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788645950252
+      }
+    ],
+    "13.3 Add registration controls to the Audio page": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633532393
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788645952722
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788646099421
+      }
+    ],
+    "13.4 Add preview playback via bevy_audio": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788633532460
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788646103138
+      },
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788647902127
+      }
+    ],
+    "13. Implement the Audio database page (rpg-toolkit-editor)": [
+      {
+        "executionId": "3047a202-5d3a-44ff-bb69-7e3d3b367c90",
+        "chatSessionId": "sess_40b42865-0d2a-4fa3-9230-46df5c4a1aa3",
+        "timestamp": 1788647902275
+      }
+    ]
+  }
+}

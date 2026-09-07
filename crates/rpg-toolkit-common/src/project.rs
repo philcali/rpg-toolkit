@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::ability::AbilityRegistry;
+use crate::asset::{MusicLoop, MusicLoopId, SoundEffect, SoundEffectId};
 use crate::character::CharacterRegistry;
 use crate::enemy::EnemyRegistry;
 use crate::error::CommonError;
@@ -89,6 +90,12 @@ pub struct ProjectFile {
     /// Shop registry: all shops defined in this project.
     #[serde(default)]
     pub shops: ShopRegistry,
+    /// Music loop registry: all music loops defined in this project.
+    #[serde(default)]
+    pub music_loops: HashMap<MusicLoopId, MusicLoop>,
+    /// Sound effect registry: all sound effects defined in this project.
+    #[serde(default)]
+    pub sound_effects: HashMap<SoundEffectId, SoundEffect>,
     /// Event actions to execute when a new game starts (after player spawns).
     #[serde(default)]
     pub intro_events: Option<Vec<EventAction>>,
@@ -125,6 +132,8 @@ impl ProjectFile {
             abilities,
             enemies,
             shops,
+            music_loops: HashMap::new(),
+            sound_effects: HashMap::new(),
             intro_events: None,
             hotkey_bindings: Vec::new(),
         }
@@ -194,6 +203,26 @@ impl ProjectFile {
                 return Err(CommonError::ProjectValidationError(format!(
                     "shop registry key '{}' does not match shop id '{}'",
                     id, shop.id
+                )));
+            }
+        }
+
+        // Validate music loop IDs match their keys in the registry
+        for (id, music_loop) in &project.music_loops {
+            if id != &music_loop.id {
+                return Err(CommonError::ProjectValidationError(format!(
+                    "music_loops registry key '{}' does not match music loop id '{}'",
+                    id, music_loop.id
+                )));
+            }
+        }
+
+        // Validate sound effect IDs match their keys in the registry
+        for (id, sound_effect) in &project.sound_effects {
+            if id != &sound_effect.id {
+                return Err(CommonError::ProjectValidationError(format!(
+                    "sound_effects registry key '{}' does not match sound effect id '{}'",
+                    id, sound_effect.id
                 )));
             }
         }
@@ -270,6 +299,19 @@ impl ProjectFile {
                         }
                     }
                 }
+            }
+        }
+
+        // Warn about maps whose default_music_loop references an unregistered music loop
+        // (preserve data, just log — mirrors the JumpTo unknown-map warning above)
+        for map in project.maps.values() {
+            if let Some(music_loop_id) = &map.default_music_loop
+                && !project.music_loops.contains_key(music_loop_id)
+            {
+                eprintln!(
+                    "warning: map '{}' default_music_loop references non-existent music loop '{}'",
+                    map.name, music_loop_id
+                );
             }
         }
 
@@ -366,6 +408,8 @@ impl ProjectFile {
             abilities: self.abilities.clone(),
             enemies: self.enemies.clone(),
             shops: self.shops.clone(),
+            music_loops: self.music_loops.clone(),
+            sound_effects: self.sound_effects.clone(),
             intro_events: self.intro_events.clone(),
             hotkey_bindings: self.hotkey_bindings.clone(),
         }
@@ -620,5 +664,96 @@ mod tests {
         // Reload should work fine
         let reloaded: ProjectFile = serde_json::from_str(&saved_json).unwrap();
         assert!(reloaded.maps.is_empty());
+    }
+
+    #[test]
+    fn pre_audio_project_loads_with_empty_audio_registries_and_none_map_default() {
+        // A project file created before the audio feature: no music_loops,
+        // no sound_effects, and a map that omits default_music_loop.
+        // (Requirements 11.1, 11.2, 11.3)
+        let json = r#"{
+            "maps": {
+                "map-1": {
+                    "name": "Village",
+                    "width": 2,
+                    "height": 2,
+                    "tile_width": 16,
+                    "tile_height": 16,
+                    "layers": [{
+                        "name": "Ground",
+                        "visible": true,
+                        "tiles": [[null, null], [null, null]],
+                        "attributes": {"cells": [[{"opacity": false}, {"opacity": false}], [{"opacity": false}, {"opacity": false}]]}
+                    }],
+                    "active_layer_index": 0
+                }
+            },
+            "tilesets": {}
+        }"#;
+        let project = ProjectFile::deserialize(json).unwrap();
+
+        // Both audio registries initialize to empty collections (Req 11.2)
+        assert!(
+            project.music_loops.is_empty(),
+            "music_loops should default to empty when absent"
+        );
+        assert!(
+            project.sound_effects.is_empty(),
+            "sound_effects should default to empty when absent"
+        );
+
+        // The map's default_music_loop defaults to None (Req 11.3)
+        let map = project.maps.get("map-1").expect("map-1 should exist");
+        assert_eq!(
+            map.default_music_loop, None,
+            "default_music_loop should default to None when absent from map JSON"
+        );
+    }
+
+    #[test]
+    fn pre_audio_project_preserves_pre_existing_data() {
+        // Pre-existing project data (maps, tilesets) is preserved unchanged when
+        // an old file without any audio fields is loaded. (Requirement 11.1)
+        let json = r#"{
+            "maps": {
+                "map-1": {
+                    "name": "Town",
+                    "width": 3,
+                    "height": 3,
+                    "tile_width": 32,
+                    "tile_height": 32,
+                    "layers": [{
+                        "name": "Ground",
+                        "visible": true,
+                        "tiles": [[null, null, null], [null, null, null], [null, null, null]],
+                        "attributes": {"cells": [
+                            [{"opacity": false}, {"opacity": false}, {"opacity": false}],
+                            [{"opacity": false}, {"opacity": false}, {"opacity": false}],
+                            [{"opacity": false}, {"opacity": false}, {"opacity": false}]
+                        ]}
+                    }],
+                    "active_layer_index": 0
+                }
+            },
+            "tilesets": {}
+        }"#;
+        let project = ProjectFile::deserialize(json).unwrap();
+        let map = project.maps.get("map-1").expect("map-1 should exist");
+        assert_eq!(map.name, "Town");
+        assert_eq!(map.width, 3);
+        assert_eq!(map.height, 3);
+        assert_eq!(map.tile_width, 32);
+    }
+
+    #[test]
+    fn malformed_json_returns_parse_error() {
+        // Input that is not valid JSON should surface a parse error (Req 11.6).
+        let json = "{ this is not valid json ]";
+        let result = ProjectFile::deserialize(json);
+        assert!(
+            matches!(result, Err(CommonError::ProjectParseError(_))),
+            "malformed JSON should produce a ProjectParseError, got {:?}",
+            result
+        );
     }
 }

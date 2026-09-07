@@ -75,6 +75,10 @@ pub fn is_blocking_action(action: &EventAction) -> bool {
         EventAction::CameraPan { .. } => true,
         EventAction::Wait { .. } => true,
         EventAction::Jump { .. } => true,
+        // Audio actions are always non-blocking: the queue advances within the
+        // same processing step (Req 6.11, 8.4).
+        EventAction::PlayMusic { .. } => false,
+        EventAction::PlaySoundEffect { .. } => false,
         _ => false,
     }
 }

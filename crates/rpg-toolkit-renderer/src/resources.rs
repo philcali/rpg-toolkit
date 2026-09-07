@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rpg_toolkit_common::{
-    AbilityId, CharacterId, EntityTarget, EventAction, FadeType, ItemId, MapId, ProjectFile,
-    ScreenShakeMode, SpritesheetId, TilesetId,
+    AbilityId, CharacterId, EntityTarget, EventAction, FadeType, ItemId, MapId, MusicLoopId,
+    ProjectFile, ScreenShakeMode, SpritesheetId, TilesetId,
 };
 use std::collections::{HashMap, VecDeque};
 
@@ -320,4 +320,179 @@ pub struct IntroEventsActive;
 #[derive(Resource, Default)]
 pub struct PreviousCameraPosition {
     pub position: Vec2,
+}
+
+// ---------------------------------------------------------------------------
+// Audio playback
+// ---------------------------------------------------------------------------
+
+/// Marker component for the single active music-channel audio entity.
+///
+/// At most one entity carrying this marker represents the currently playing
+/// music loop; outgoing cross-fade tracks are tracked separately in
+/// [`MusicChannelState::fading_out`].
+#[derive(Component)]
+pub struct MusicChannel;
+
+/// Marker component for a one-shot sound-effect audio entity.
+///
+/// Any number of these may exist concurrently; Bevy plays them in parallel and
+/// despawns them when they finish.
+#[derive(Component)]
+pub struct SoundEffectChannel;
+
+/// Describes an in-progress volume ramp applied to a music-channel sink.
+///
+/// A ramp linearly interpolates the sink volume from `start_volume` to
+/// `end_volume` over `duration` seconds, tracked by `elapsed`. Fades are
+/// advanced by `update_music_fades` each frame independently of the
+/// `ActionQueue`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FadeRamp {
+    /// Starting linear volume (0.0..=1.0).
+    pub start_volume: f32,
+    /// Target linear volume (0.0..=1.0).
+    pub end_volume: f32,
+    /// Total fade duration in seconds (> 0.0).
+    pub duration: f32,
+    /// Seconds elapsed so far.
+    pub elapsed: f32,
+}
+
+impl FadeRamp {
+    /// Creates a new ramp from `start_volume` to `end_volume` over `duration`.
+    pub fn new(start_volume: f32, end_volume: f32, duration: f32) -> Self {
+        Self {
+            start_volume,
+            end_volume,
+            duration,
+            elapsed: 0.0,
+        }
+    }
+
+    /// Returns the interpolated linear volume at the current `elapsed`.
+    pub fn current_volume(&self) -> f32 {
+        if self.duration <= 0.0 {
+            return self.end_volume;
+        }
+        let t = (self.elapsed / self.duration).clamp(0.0, 1.0);
+        self.start_volume + (self.end_volume - self.start_volume) * t
+    }
+
+    /// Returns `true` once the ramp has run for at least its full duration.
+    pub fn is_complete(&self) -> bool {
+        self.elapsed >= self.duration
+    }
+}
+
+/// An outgoing track being cross-faded out and then despawned.
+///
+/// Holds the entity of the outgoing music sink and the ramp driving its volume
+/// to zero.
+pub struct FadingTrack {
+    /// The outgoing music-channel entity.
+    pub entity: Entity,
+    /// The fade-out ramp driving this track's volume to zero.
+    pub ramp: FadeRamp,
+}
+
+/// The currently playing music loop on the music channel.
+pub struct MusicPlayback {
+    /// Identifier of the music loop that is playing.
+    pub music_loop_id: MusicLoopId,
+    /// The audio entity carrying the `MusicChannel` marker.
+    pub entity: Entity,
+    /// A fade-in / cross-fade-in ramp in progress, if any.
+    pub fade_in: Option<FadeRamp>,
+    /// Number of times to play before stopping. `None` = infinite.
+    pub loop_count: Option<u32>,
+    /// Number of loop repetitions completed so far.
+    pub loops_completed: u32,
+    /// Fade-out duration in seconds applied at the end of playback.
+    pub fade_out_duration: f32,
+    /// The end-of-playback fade-out ramp, once it has begun.
+    pub fade_out: Option<FadeRamp>,
+    /// Last observed sink playback position (seconds), used to detect loop
+    /// wrap-around for finite loop counting.
+    pub last_position: f32,
+    /// Best-known loop duration in seconds, learned from the peak playback
+    /// position observed just before a wrap-around. `0.0` until the first
+    /// wrap is observed. Used to begin a finite-loop fade-out early enough that
+    /// it completes as the final repetition ends (Req 6.9).
+    pub loop_duration: f32,
+}
+
+/// Runtime state of the single music channel.
+///
+/// Registered by the renderer plugin. Tracks the current playback (if any) and
+/// any outgoing tracks that are still fading out during a cross-fade.
+#[derive(Resource, Default)]
+pub struct MusicChannelState {
+    /// The currently playing music loop, if any.
+    pub current: Option<MusicPlayback>,
+    /// Outgoing tracks still fading out from a cross-fade.
+    pub fading_out: Vec<FadingTrack>,
+}
+
+/// The decision produced by [`next_music_command`] for a `PlayMusic` request.
+///
+/// This is a pure classification of what the music channel should do; the
+/// action-queue system carries it out against the live Bevy sinks.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MusicCommand {
+    /// Leave the music channel untouched (same id already playing/fading in,
+    /// or the requested id is not registered).
+    NoChange,
+    /// Start the requested loop immediately at full volume, stopping any
+    /// previous track in the same step (no fade).
+    StartImmediate,
+    /// Fade the new loop in from zero to full while fading the previous track
+    /// out to zero over `fade_duration` seconds.
+    CrossFade,
+    /// Fade the new loop in from zero to full over `fade_duration` seconds
+    /// (no previous track playing).
+    FadeIn,
+}
+
+/// Pure decision function for a `PlayMusic` request against the music channel.
+///
+/// Returns [`MusicCommand::NoChange`] when the requested `music_loop_id`:
+/// - is not registered in the project (`registered == false`), or
+/// - equals the id currently playing or currently fading in on the channel.
+///
+/// Otherwise returns the appropriate start decision based on `fade_duration`
+/// and whether a track is already playing:
+/// - `fade_duration == 0.0` → [`MusicCommand::StartImmediate`]
+/// - `fade_duration > 0.0` with a previous track → [`MusicCommand::CrossFade`]
+/// - `fade_duration > 0.0` with no previous track → [`MusicCommand::FadeIn`]
+///
+/// This function performs no I/O and mutates nothing, so it is exercised
+/// directly by property tests.
+pub fn next_music_command(
+    state: &MusicChannelState,
+    requested_id: &str,
+    fade_duration: f32,
+    registered: bool,
+) -> MusicCommand {
+    if !registered {
+        return MusicCommand::NoChange;
+    }
+
+    // A request matching the currently playing (or currently fading-in) id is a
+    // no-op regardless of fade_duration.
+    if let Some(current) = &state.current
+        && current.music_loop_id == requested_id
+    {
+        return MusicCommand::NoChange;
+    }
+
+    if fade_duration > 0.0 {
+        if state.current.is_some() {
+            MusicCommand::CrossFade
+        } else {
+            MusicCommand::FadeIn
+        }
+    } else {
+        MusicCommand::StartImmediate
+    }
 }

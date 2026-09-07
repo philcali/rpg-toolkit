@@ -246,6 +246,9 @@ fn apply_loaded_project(
         has_unsaved_enemy_changes: false,
         shops: project_file.shops.clone(),
         has_unsaved_shop_changes: false,
+        music_loops: project_file.music_loops.clone(),
+        sound_effects: project_file.sound_effects.clone(),
+        has_unsaved_audio_changes: false,
         intro_events: project_file.intro_events.clone(),
         has_unsaved_intro_events_changes: false,
         hotkey_bindings: project_file.hotkey_bindings.clone(),
@@ -344,6 +347,8 @@ fn build_project_file_for_save(project: &Project) -> ProjectFile {
     );
     project_file.intro_events = project.intro_events.clone();
     project_file.hotkey_bindings = project.hotkey_bindings.clone();
+    project_file.music_loops = project.music_loops.clone();
+    project_file.sound_effects = project.sound_effects.clone();
     project_file
 }
 

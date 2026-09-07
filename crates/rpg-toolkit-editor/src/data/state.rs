@@ -95,6 +95,7 @@ pub enum AppEditorMode {
     Ability,
     Enemy,
     Shop,
+    Audio,
     ProjectSettings,
 }
 

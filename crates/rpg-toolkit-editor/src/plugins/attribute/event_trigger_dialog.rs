@@ -87,6 +87,18 @@ pub fn event_trigger_panel_ui(
                 })
                 .collect();
 
+            // Build audio selector entries from the project registries.
+            let music_entries: Vec<(String, String)> = project
+                .music_loops
+                .keys()
+                .map(|id| (id.clone(), id.clone()))
+                .collect();
+            let sfx_entries: Vec<(String, String)> = project
+                .sound_effects
+                .keys()
+                .map(|id| (id.clone(), id.clone()))
+                .collect();
+
             // === Conditional Triggers section ===
             render_conditional_triggers_panel(
                 ui,
@@ -96,6 +108,8 @@ pub fn event_trigger_panel_ui(
                 &map_entries,
                 &portrait_entries,
                 &shops,
+                &music_entries,
+                &sfx_entries,
             );
 
             ui.separator();
@@ -112,6 +126,8 @@ pub fn event_trigger_panel_ui(
                 0,
                 None,
                 &shops,
+                &music_entries,
+                &sfx_entries,
             );
 
             ui.separator();
@@ -179,6 +195,7 @@ pub fn event_trigger_panel_ui(
 
 /// Renders the "Conditional Triggers" panel with add/remove/reorder and inline editors.
 /// Shared between the event trigger dialog and NPC dialog.
+#[allow(clippy::too_many_arguments)]
 pub fn render_conditional_triggers_panel(
     ui: &mut egui::Ui,
     conditional_triggers: &mut Vec<ConditionalTrigger>,
@@ -187,6 +204,8 @@ pub fn render_conditional_triggers_panel(
     map_entries: &[(String, String)],
     portrait_entries: &[(String, String)],
     shops: &[(String, String)],
+    music_entries: &[(String, String)],
+    sfx_entries: &[(String, String)],
 ) {
     ui.label(egui::RichText::new("Conditional Triggers").strong());
     ui.label("First matching condition overrides the default actions:");
@@ -240,6 +259,8 @@ pub fn render_conditional_triggers_panel(
                     1,
                     None,
                     shops,
+                    music_entries,
+                    sfx_entries,
                 );
             });
 

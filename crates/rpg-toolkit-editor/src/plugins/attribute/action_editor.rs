@@ -37,6 +37,8 @@ pub enum ActionType {
     Wait,
     Jump,
     SetSpeed,
+    PlayMusic,
+    PlaySoundEffect,
 }
 
 /// A named grouping of action types for the categorized action-type dropdown.
@@ -105,6 +107,13 @@ pub const ACTION_CATEGORIES: &[ActionCategory] = &[
             (ActionType::StopScreenShake, "Stop Screen Shake"),
             (ActionType::FadeTransition, "Fade Transition"),
             (ActionType::SetPlayerAppearance, "Set Player Appearance"),
+        ],
+    },
+    ActionCategory {
+        name: "Audio",
+        actions: &[
+            (ActionType::PlayMusic, "Play Music"),
+            (ActionType::PlaySoundEffect, "Play Sound Effect"),
         ],
     },
     ActionCategory {
@@ -289,6 +298,18 @@ pub struct ActionEditorState {
     pub jump_distance: String,
     // SetSpeed fields
     pub speed_multiplier: f32,
+    // PlayMusic fields
+    pub music_loop_id: String,
+    pub music_search_buffer: String,
+    pub music_fade_duration: String,
+    /// Whether the loop count is infinite (true = None / infinite).
+    pub music_loop_infinite: bool,
+    pub music_loop_count: String,
+    pub music_fade_out_duration: String,
+    // PlaySoundEffect fields
+    pub sound_effect_id: String,
+    pub sound_effect_search_buffer: String,
+    pub sound_effect_volume: String,
 }
 
 impl Default for ActionEditorState {
@@ -373,6 +394,17 @@ impl Default for ActionEditorState {
             jump_distance: "2".to_string(),
             // SetSpeed fields
             speed_multiplier: 1.0,
+            // PlayMusic fields
+            music_loop_id: String::new(),
+            music_search_buffer: String::new(),
+            music_fade_duration: "0.0".to_string(),
+            music_loop_infinite: true,
+            music_loop_count: "1".to_string(),
+            music_fade_out_duration: "0.0".to_string(),
+            // PlaySoundEffect fields
+            sound_effect_id: String::new(),
+            sound_effect_search_buffer: String::new(),
+            sound_effect_volume: "1.0".to_string(),
         }
     }
 }
@@ -466,6 +498,17 @@ impl ActionEditorState {
             jump_distance: "2".to_string(),
             // SetSpeed fields
             speed_multiplier: 1.0,
+            // PlayMusic fields
+            music_loop_id: String::new(),
+            music_search_buffer: String::new(),
+            music_fade_duration: "0.0".to_string(),
+            music_loop_infinite: true,
+            music_loop_count: "1".to_string(),
+            music_fade_out_duration: "0.0".to_string(),
+            // PlaySoundEffect fields
+            sound_effect_id: String::new(),
+            sound_effect_search_buffer: String::new(),
+            sound_effect_volume: "1.0".to_string(),
         }
     }
 
@@ -719,6 +762,36 @@ impl ActionEditorState {
             EventAction::SetSpeed { multiplier } => {
                 self.action_type = ActionType::SetSpeed;
                 self.speed_multiplier = *multiplier;
+            }
+            // Audio action variants
+            EventAction::PlayMusic {
+                music_loop_id,
+                fade_duration,
+                loop_count,
+                fade_out_duration,
+            } => {
+                self.action_type = ActionType::PlayMusic;
+                self.music_loop_id = music_loop_id.clone();
+                self.music_fade_duration = fade_duration.to_string();
+                match loop_count {
+                    Some(n) => {
+                        self.music_loop_infinite = false;
+                        self.music_loop_count = n.to_string();
+                    }
+                    None => {
+                        self.music_loop_infinite = true;
+                        self.music_loop_count = "1".to_string();
+                    }
+                }
+                self.music_fade_out_duration = fade_out_duration.to_string();
+            }
+            EventAction::PlaySoundEffect {
+                sound_effect_id,
+                volume,
+            } => {
+                self.action_type = ActionType::PlaySoundEffect;
+                self.sound_effect_id = sound_effect_id.clone();
+                self.sound_effect_volume = volume.to_string();
             }
         }
         self.editing_index = Some(index);
@@ -1028,6 +1101,50 @@ impl ActionEditorState {
             ActionType::SetSpeed => {
                 let multiplier = rpg_toolkit_editor::clamp_speed_multiplier(self.speed_multiplier);
                 Some(EventAction::SetSpeed { multiplier })
+            }
+            ActionType::PlayMusic => {
+                if self.music_loop_id.trim().is_empty() {
+                    return None;
+                }
+                let fade_duration = rpg_toolkit_editor::clamp_fade_duration(
+                    self.music_fade_duration
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap_or(0.0),
+                );
+                let fade_out_duration = rpg_toolkit_editor::clamp_fade_duration(
+                    self.music_fade_out_duration
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap_or(0.0),
+                );
+                let loop_count = if self.music_loop_infinite {
+                    None
+                } else {
+                    Some(self.music_loop_count.trim().parse::<u32>().unwrap_or(1))
+                };
+                let loop_count = rpg_toolkit_editor::clamp_loop_count(loop_count);
+                Some(EventAction::PlayMusic {
+                    music_loop_id: self.music_loop_id.clone(),
+                    fade_duration,
+                    loop_count,
+                    fade_out_duration,
+                })
+            }
+            ActionType::PlaySoundEffect => {
+                if self.sound_effect_id.trim().is_empty() {
+                    return None;
+                }
+                let volume = rpg_toolkit_editor::clamp_volume(
+                    self.sound_effect_volume
+                        .trim()
+                        .parse::<f32>()
+                        .unwrap_or(1.0),
+                );
+                Some(EventAction::PlaySoundEffect {
+                    sound_effect_id: self.sound_effect_id.clone(),
+                    volume,
+                })
             }
         }
     }

@@ -47,6 +47,8 @@ pub fn render_action_editor(
     depth: usize,
     reward_ctx: Option<&mut RewardFormContext<'_>>,
     shops: &[(String, String)],
+    music_entries: &[(String, String)],
+    sfx_entries: &[(String, String)],
 ) {
     // Display existing actions with remove/reorder/edit controls
     let mut remove_idx: Option<usize> = None;
@@ -218,6 +220,14 @@ pub fn render_action_editor(
                 EventAction::SetSpeed { multiplier } => {
                     format!("{}. SetSpeed — {}x", i + 1, multiplier)
                 }
+                EventAction::PlayMusic { music_loop_id, .. } => {
+                    format!("{}. PlayMusic → {}", i + 1, music_loop_id)
+                }
+                EventAction::PlaySoundEffect {
+                    sound_effect_id, ..
+                } => {
+                    format!("{}. PlaySoundEffect → {}", i + 1, sound_effect_id)
+                }
             };
             if is_being_edited {
                 ui.label(
@@ -250,7 +260,16 @@ pub fn render_action_editor(
 
     // Render collapsible nested action editors for Branch and StateCheck items
     if depth == 0 {
-        render_nested_branch_editors(ui, actions, id_salt, map_entries, portrait_entries, shops);
+        render_nested_branch_editors(
+            ui,
+            actions,
+            id_salt,
+            map_entries,
+            portrait_entries,
+            shops,
+            music_entries,
+            sfx_entries,
+        );
     }
 
     if let Some(idx) = remove_idx {
@@ -350,6 +369,8 @@ pub fn render_action_editor(
                 map_entries,
                 portrait_entries,
                 shops,
+                music_entries,
+                sfx_entries,
             );
         }
         // Reward action forms
@@ -509,6 +530,24 @@ pub fn render_action_editor(
         ActionType::SetSpeed => {
             action_editor_forms::render_set_speed_form(ui, actions, editor_state, id_salt);
         }
+        ActionType::PlayMusic => {
+            action_editor_forms::render_play_music_form(
+                ui,
+                actions,
+                editor_state,
+                id_salt,
+                music_entries,
+            );
+        }
+        ActionType::PlaySoundEffect => {
+            action_editor_forms::render_play_sound_effect_form(
+                ui,
+                actions,
+                editor_state,
+                id_salt,
+                sfx_entries,
+            );
+        }
     }
 
     // Render nested on_success/on_failure editors for reward actions when direction is Take.
@@ -530,6 +569,8 @@ pub fn render_action_editor(
             portrait_entries,
             depth,
             shops,
+            music_entries,
+            sfx_entries,
         );
     }
 }
@@ -618,6 +659,7 @@ fn render_action_type_dropdown(
 
 /// Renders nested on_success/on_failure action editors for the reward action currently being
 /// configured in the editor state. Shown only when direction is Take.
+#[allow(clippy::too_many_arguments)]
 fn render_reward_nested_editors(
     ui: &mut egui::Ui,
     editor_state: &mut ActionEditorState,
@@ -626,6 +668,8 @@ fn render_reward_nested_editors(
     portrait_entries: &[(String, String)],
     depth: usize,
     shops: &[(String, String)],
+    music_entries: &[(String, String)],
+    sfx_entries: &[(String, String)],
 ) {
     ui.separator();
 
@@ -652,6 +696,8 @@ fn render_reward_nested_editors(
                 depth + 1,
                 None,
                 shops,
+                music_entries,
+                sfx_entries,
             );
         }
     });
@@ -679,6 +725,8 @@ fn render_reward_nested_editors(
                 depth + 1,
                 None,
                 shops,
+                music_entries,
+                sfx_entries,
             );
         }
     });
@@ -686,6 +734,7 @@ fn render_reward_nested_editors(
 
 /// Renders collapsible nested action editors for Branch and StateCheck items in the action list.
 /// This allows visual editing of on_true/on_false branches inline.
+#[allow(clippy::too_many_arguments)]
 fn render_nested_branch_editors(
     ui: &mut egui::Ui,
     actions: &mut [EventAction],
@@ -693,6 +742,8 @@ fn render_nested_branch_editors(
     map_entries: &[(String, String)],
     portrait_entries: &[(String, String)],
     shops: &[(String, String)],
+    music_entries: &[(String, String)],
+    sfx_entries: &[(String, String)],
 ) {
     // We need indexed mutable access. Use a simple index loop.
     let len = actions.len();
@@ -724,6 +775,8 @@ fn render_nested_branch_editors(
                                     1,
                                     None,
                                     shops,
+                                    music_entries,
+                                    sfx_entries,
                                 );
                             }
                         });
@@ -747,6 +800,8 @@ fn render_nested_branch_editors(
                                 1,
                                 None,
                                 shops,
+                                music_entries,
+                                sfx_entries,
                             );
                         }
                     });
@@ -776,6 +831,8 @@ fn render_nested_branch_editors(
                                     1,
                                     None,
                                     shops,
+                                    music_entries,
+                                    sfx_entries,
                                 );
                             }
                         });
@@ -798,6 +855,8 @@ fn render_nested_branch_editors(
                                 1,
                                 None,
                                 shops,
+                                music_entries,
+                                sfx_entries,
                             );
                         }
                     });
@@ -828,6 +887,8 @@ fn render_nested_branch_editors(
                                 1,
                                 None,
                                 shops,
+                                music_entries,
+                                sfx_entries,
                             );
                         });
                     }
@@ -887,6 +948,8 @@ fn render_nested_branch_editors(
                             1,
                             None,
                             shops,
+                            music_entries,
+                            sfx_entries,
                         );
                     });
 
@@ -907,6 +970,8 @@ fn render_nested_branch_editors(
                             1,
                             None,
                             shops,
+                            music_entries,
+                            sfx_entries,
                         );
                     });
                 });

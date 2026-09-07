@@ -2,6 +2,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::ability::AbilityId;
 use crate::app_phase::AppPhase;
+use crate::asset::{MusicLoopId, SoundEffectId};
 use crate::character::CharacterId;
 use crate::condition::{BranchCondition, ConditionalTrigger};
 use crate::error::CommonError;
@@ -277,6 +278,34 @@ where
     Ok(opt)
 }
 
+/// Deserializes and validates an optional default music loop identifier.
+///
+/// Returns `None` when the field is absent. When present, the identifier must
+/// be 1–128 characters: empty values are rejected, and values longer than 128
+/// characters are rejected.
+fn deserialize_optional_music_loop_id<'de, D>(
+    deserializer: D,
+) -> Result<Option<MusicLoopId>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt = Option::<String>::deserialize(deserializer)?;
+    if let Some(ref s) = opt {
+        if s.is_empty() {
+            return Err(serde::de::Error::custom(
+                "default music loop identifier must not be empty",
+            ));
+        }
+        if s.chars().count() > 128 {
+            return Err(serde::de::Error::custom(format!(
+                "default music loop identifier length is invalid: must be 1 to 128 characters, got {}",
+                s.chars().count()
+            )));
+        }
+    }
+    Ok(opt)
+}
+
 /// Deserializes and validates a character_id with length 1–64.
 fn deserialize_character_id_length<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
@@ -407,6 +436,97 @@ where
     if !(0.5..=4.0).contains(&value) {
         return Err(serde::de::Error::custom(format!(
             "multiplier must be between 0.5 and 4.0 inclusive, got {}",
+            value
+        )));
+    }
+    Ok(value)
+}
+
+/// Deserializes and validates a `music_loop_id` (must be 1–128 characters).
+fn deserialize_music_loop_id<'de, D>(deserializer: D) -> Result<MusicLoopId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        return Err(serde::de::Error::custom("music_loop_id must not be empty"));
+    }
+    if s.chars().count() > 128 {
+        return Err(serde::de::Error::custom(format!(
+            "music_loop_id must contain 1 to 128 characters, got {}",
+            s.chars().count()
+        )));
+    }
+    Ok(s)
+}
+
+/// Deserializes and validates a `sound_effect_id` (must be 1–128 characters).
+fn deserialize_sound_effect_id<'de, D>(deserializer: D) -> Result<SoundEffectId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        return Err(serde::de::Error::custom(
+            "sound_effect_id must not be empty",
+        ));
+    }
+    if s.chars().count() > 128 {
+        return Err(serde::de::Error::custom(format!(
+            "sound_effect_id must contain 1 to 128 characters, got {}",
+            s.chars().count()
+        )));
+    }
+    Ok(s)
+}
+
+/// Deserializes and validates a fade duration in seconds. The value must be
+/// finite and within the range [0.0, 10.0]. Used for both `fade_duration` and
+/// `fade_out_duration`; defaults to `0.0` when the field is absent.
+fn deserialize_fade_seconds<'de, D>(deserializer: D) -> Result<f32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = f32::deserialize(deserializer)?;
+    if !value.is_finite() || !(0.0..=10.0).contains(&value) {
+        return Err(serde::de::Error::custom(format!(
+            "fade duration must be a finite value between 0.0 and 10.0 seconds inclusive, got {}",
+            value
+        )));
+    }
+    Ok(value)
+}
+
+/// Deserializes and validates an optional `loop_count`. `None` (absent)
+/// represents infinite repetition; when present the value must be at least 1.
+fn deserialize_optional_loop_count<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt = Option::<u32>::deserialize(deserializer)?;
+    if opt == Some(0) {
+        return Err(serde::de::Error::custom(
+            "loop_count must be at least 1 when specified",
+        ));
+    }
+    Ok(opt)
+}
+
+/// Returns the default volume of 1.0 for PlaySoundEffect actions.
+fn default_volume() -> f32 {
+    1.0
+}
+
+/// Deserializes and validates a `volume`. The value must be finite and within
+/// the range [0.0, 1.0]; defaults to `1.0` when the field is absent.
+fn deserialize_volume<'de, D>(deserializer: D) -> Result<f32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = f32::deserialize(deserializer)?;
+    if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+        return Err(serde::de::Error::custom(format!(
+            "volume must be a finite value between 0.0 and 1.0 inclusive, got {}",
             value
         )));
     }
@@ -610,6 +730,34 @@ pub enum EventAction {
         )]
         multiplier: f32,
     },
+    /// Override the currently playing music loop with a specified loop.
+    /// Non-blocking: the queue advances immediately.
+    PlayMusic {
+        /// Identifier of the music loop to play (1–128 characters).
+        #[serde(deserialize_with = "deserialize_music_loop_id")]
+        music_loop_id: MusicLoopId,
+        /// Fade-in / cross-fade duration in seconds (finite, 0.0–10.0, default 0.0).
+        #[serde(default, deserialize_with = "deserialize_fade_seconds")]
+        fade_duration: f32,
+        /// Number of times to play the loop before stopping. `None` (absent)
+        /// means infinite repetition; when present must be at least 1.
+        #[serde(default, deserialize_with = "deserialize_optional_loop_count")]
+        loop_count: Option<u32>,
+        /// Fade-out duration in seconds applied at the end of playback once the
+        /// loop count is reached (finite, 0.0–10.0, default 0.0).
+        #[serde(default, deserialize_with = "deserialize_fade_seconds")]
+        fade_out_duration: f32,
+    },
+    /// Play a one-shot sound effect on the sound effect channel.
+    /// Non-blocking: the queue advances immediately.
+    PlaySoundEffect {
+        /// Identifier of the sound effect to play (1–128 characters, required).
+        #[serde(deserialize_with = "deserialize_sound_effect_id")]
+        sound_effect_id: SoundEffectId,
+        /// Playback volume (finite, 0.0–1.0, default 1.0).
+        #[serde(default = "default_volume", deserialize_with = "deserialize_volume")]
+        volume: f32,
+    },
 }
 
 /// Per-tile attribute data: opacity flag, event trigger list, and elevation.
@@ -746,6 +894,8 @@ pub struct MapData {
     pub npcs: Vec<NpcInstance>,
     #[serde(default)]
     pub parallax_layers: Vec<ParallaxLayer>,
+    #[serde(default, deserialize_with = "deserialize_optional_music_loop_id")]
+    pub default_music_loop: Option<MusicLoopId>,
 }
 
 impl MapData {
@@ -786,6 +936,7 @@ impl MapData {
             active_layer_index: 0,
             npcs: Vec::new(),
             parallax_layers: Vec::new(),
+            default_music_loop: None,
         })
     }
 

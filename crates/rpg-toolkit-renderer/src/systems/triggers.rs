@@ -14,9 +14,10 @@ use crate::events::{MapChanged, PlayerMoved, ShowDialog};
 use crate::resources::{
     ActionQueue, CameraFollowTarget, CameraPanState, CharacterProgressState, CurrencyState,
     EntityMoveState, FadeState, GameState, IntroEventsActive, InventoryState, JumpAnimState,
-    NpcPositions, PartyState, RendererProjectData, RendererState, SavePath, ScreenShakeState,
-    SpeedMultiplier, WaitState, WaitingFor,
+    MusicChannelState, NpcPositions, PartyState, RendererProjectData, RendererState, SavePath,
+    ScreenShakeState, SpeedMultiplier, WaitState, WaitingFor,
 };
+use crate::systems::audio::{handle_play_music, handle_play_sound_effect};
 use crate::systems::jump::compute_landing;
 use crate::systems::player::grid_to_world;
 use crate::systems::selection::{ResolvedChoice, SelectionState};
@@ -146,6 +147,7 @@ pub fn advance_action_queue(
         Query<Entity, With<FadeOverlay>>,
         Res<NpcPositions>,
     ),
+    mut music_state: Option<ResMut<MusicChannelState>>,
 ) {
     // Destructure reward state tuple for convenient access
     let (
@@ -1094,6 +1096,45 @@ pub fn advance_action_queue(
                 if let Some(sm) = speed_multiplier.as_deref_mut() {
                     sm.value = multiplier;
                 }
+                queue.actions.pop_front();
+                continue;
+            }
+            // PlayMusic: mutate the music channel (non-blocking) — pop and continue.
+            EventAction::PlayMusic {
+                music_loop_id,
+                fade_duration,
+                loop_count,
+                fade_out_duration,
+            } => {
+                if let Some(ms) = music_state.as_deref_mut() {
+                    handle_play_music(
+                        &mut commands,
+                        ms,
+                        project_data.as_deref(),
+                        &asset_server,
+                        &music_loop_id,
+                        fade_duration,
+                        loop_count,
+                        fade_out_duration,
+                    );
+                } else {
+                    warn!("PlayMusic: MusicChannelState resource not present; skipping");
+                }
+                queue.actions.pop_front();
+                continue;
+            }
+            // PlaySoundEffect: spawn a concurrent one-shot (non-blocking).
+            EventAction::PlaySoundEffect {
+                sound_effect_id,
+                volume,
+            } => {
+                handle_play_sound_effect(
+                    &mut commands,
+                    project_data.as_deref(),
+                    &asset_server,
+                    &sound_effect_id,
+                    volume,
+                );
                 queue.actions.pop_front();
                 continue;
             }

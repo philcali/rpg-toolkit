@@ -32,6 +32,8 @@ pub enum CommonError {
     AssetRegistryError(String),
     #[error("Asset path resolution error: {0}")]
     AssetPathError(String),
+    #[error("Audio load error: {0}")]
+    AudioLoadError(String),
     #[error("Unsupported project format: {0}")]
     UnsupportedFormat(String),
 }

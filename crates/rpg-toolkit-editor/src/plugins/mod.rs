@@ -1,6 +1,8 @@
 pub mod ability_panel;
 pub mod app_shell;
 pub mod attribute;
+pub mod audio_page;
+pub mod audio_panel;
 pub mod canvas;
 pub mod character_panel;
 pub mod enemy_panel;
@@ -22,6 +24,7 @@ pub mod undo_redo;
 pub use ability_panel::AbilityPanelPlugin;
 pub use app_shell::AppShellPlugin;
 pub use attribute::AttributePlugin;
+pub use audio_page::AudioPagePlugin;
 pub use canvas::CanvasPlugin;
 pub use character_panel::CharacterPanelPlugin;
 pub use enemy_panel::EnemyPanelPlugin;

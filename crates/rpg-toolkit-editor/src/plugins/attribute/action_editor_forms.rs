@@ -696,6 +696,7 @@ pub fn render_branch_form(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_show_selection_form(
     ui: &mut egui::Ui,
     actions: &mut Vec<EventAction>,
@@ -704,6 +705,8 @@ pub fn render_show_selection_form(
     map_entries: &[(String, String)],
     portrait_entries: &[(String, String)],
     shops: &[(String, String)],
+    music_entries: &[(String, String)],
+    sfx_entries: &[(String, String)],
 ) {
     let form_label = if editor_state.editing_index.is_some() {
         "Edit ShowSelection Action:"
@@ -826,6 +829,8 @@ pub fn render_show_selection_form(
                         1,
                         None,
                         shops,
+                        music_entries,
+                        sfx_entries,
                     );
                 });
 
@@ -1855,5 +1860,217 @@ pub fn render_set_speed_form(
     if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
         editor_state.editing_index = None;
         editor_state.speed_multiplier = 1.0;
+    }
+}
+
+/// Renders the PlayMusic action form.
+///
+/// Fields: a searchable music loop selector (populated from the project's
+/// `music_loops` registry), a `fade_duration` numeric input (range 0.0..=10.0),
+/// a loop-count control defaulting to infinite (`None`) or a finite integer
+/// `>= 1`, and a `fade_out_duration` numeric input (range 0.0..=10.0).
+///
+/// The Add/Update button is disabled while no music loop id is selected.
+/// Out-of-range numeric values are clamped at save time via the pure clamp
+/// functions in `rpg_toolkit_editor` (see `build_action`).
+pub fn render_play_music_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+    music_entries: &[(String, String)],
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit PlayMusic Action:"
+    } else {
+        "Add PlayMusic Action:"
+    };
+    ui.label(form_label);
+
+    // Music loop selector (searchable, populated from the project registry).
+    ui.horizontal(|ui| {
+        ui.label("Music Loop:");
+        let current_label = if editor_state.music_loop_id.is_empty() {
+            "Select a music loop…".to_string()
+        } else {
+            music_entries
+                .iter()
+                .find(|(id, _)| *id == editor_state.music_loop_id)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| editor_state.music_loop_id.clone())
+        };
+        if let Some(selected_id) = searchable_combobox(
+            ui,
+            &format!("{}_music_loop_select", id_salt),
+            &current_label,
+            music_entries,
+            &mut editor_state.music_search_buffer,
+        ) {
+            editor_state.music_loop_id = selected_id;
+        }
+    });
+
+    ui.horizontal(|ui| {
+        ui.label("Fade Duration:");
+        ui.add(
+            egui::TextEdit::singleline(&mut editor_state.music_fade_duration).desired_width(60.0),
+        );
+        ui.label("(0.0 – 10.0)");
+    });
+
+    // Loop count: infinite toggle plus an integer input when finite.
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut editor_state.music_loop_infinite, "Loop infinitely");
+    });
+    if !editor_state.music_loop_infinite {
+        ui.horizontal(|ui| {
+            ui.label("Loop Count:");
+            ui.add(
+                egui::TextEdit::singleline(&mut editor_state.music_loop_count).desired_width(60.0),
+            );
+            ui.label("(≥ 1)");
+        });
+    }
+
+    ui.horizontal(|ui| {
+        ui.label("Fade Out Duration:");
+        ui.add(
+            egui::TextEdit::singleline(&mut editor_state.music_fade_out_duration)
+                .desired_width(60.0),
+        );
+        ui.label("(0.0 – 10.0)");
+    });
+
+    let can_save = !editor_state.music_loop_id.trim().is_empty();
+    if !can_save {
+        ui.label(
+            egui::RichText::new("Select a music loop.")
+                .color(egui::Color32::from_rgb(200, 150, 50)),
+        );
+    }
+
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update PlayMusic"
+    } else {
+        "Add PlayMusic"
+    };
+    if ui
+        .add_enabled(can_save, egui::Button::new(btn_label))
+        .clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        editor_state.music_loop_id = String::new();
+        editor_state.music_search_buffer = String::new();
+        editor_state.music_fade_duration = "0.0".to_string();
+        editor_state.music_loop_infinite = true;
+        editor_state.music_loop_count = "1".to_string();
+        editor_state.music_fade_out_duration = "0.0".to_string();
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.music_loop_id = String::new();
+        editor_state.music_search_buffer = String::new();
+        editor_state.music_fade_duration = "0.0".to_string();
+        editor_state.music_loop_infinite = true;
+        editor_state.music_loop_count = "1".to_string();
+        editor_state.music_fade_out_duration = "0.0".to_string();
+    }
+}
+
+/// Renders the PlaySoundEffect action form.
+///
+/// Fields: a searchable sound effect selector (populated from the project's
+/// `sound_effects` registry) and a `volume` numeric input (range 0.0..=1.0).
+///
+/// The Add/Update button is disabled while no sound effect id is selected.
+/// An out-of-range volume is clamped at save time via `rpg_toolkit_editor::clamp_volume`.
+pub fn render_play_sound_effect_form(
+    ui: &mut egui::Ui,
+    actions: &mut Vec<EventAction>,
+    editor_state: &mut ActionEditorState,
+    id_salt: &str,
+    sfx_entries: &[(String, String)],
+) {
+    let form_label = if editor_state.editing_index.is_some() {
+        "Edit PlaySoundEffect Action:"
+    } else {
+        "Add PlaySoundEffect Action:"
+    };
+    ui.label(form_label);
+
+    // Sound effect selector (searchable, populated from the project registry).
+    ui.horizontal(|ui| {
+        ui.label("Sound Effect:");
+        let current_label = if editor_state.sound_effect_id.is_empty() {
+            "Select a sound effect…".to_string()
+        } else {
+            sfx_entries
+                .iter()
+                .find(|(id, _)| *id == editor_state.sound_effect_id)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| editor_state.sound_effect_id.clone())
+        };
+        if let Some(selected_id) = searchable_combobox(
+            ui,
+            &format!("{}_sound_effect_select", id_salt),
+            &current_label,
+            sfx_entries,
+            &mut editor_state.sound_effect_search_buffer,
+        ) {
+            editor_state.sound_effect_id = selected_id;
+        }
+    });
+
+    ui.horizontal(|ui| {
+        ui.label("Volume:");
+        ui.add(
+            egui::TextEdit::singleline(&mut editor_state.sound_effect_volume).desired_width(60.0),
+        );
+        ui.label("(0.0 – 1.0)");
+    });
+
+    let can_save = !editor_state.sound_effect_id.trim().is_empty();
+    if !can_save {
+        ui.label(
+            egui::RichText::new("Select a sound effect.")
+                .color(egui::Color32::from_rgb(200, 150, 50)),
+        );
+    }
+
+    let btn_label = if editor_state.editing_index.is_some() {
+        "Update PlaySoundEffect"
+    } else {
+        "Add PlaySoundEffect"
+    };
+    if ui
+        .add_enabled(can_save, egui::Button::new(btn_label))
+        .clicked()
+        && let Some(new_action) = editor_state.build_action()
+    {
+        if let Some(idx) = editor_state.editing_index {
+            if idx < actions.len() {
+                actions[idx] = new_action;
+            }
+            editor_state.editing_index = None;
+        } else {
+            actions.push(new_action);
+        }
+        editor_state.sound_effect_id = String::new();
+        editor_state.sound_effect_search_buffer = String::new();
+        editor_state.sound_effect_volume = "1.0".to_string();
+    }
+    if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
+        editor_state.editing_index = None;
+        editor_state.sound_effect_id = String::new();
+        editor_state.sound_effect_search_buffer = String::new();
+        editor_state.sound_effect_volume = "1.0".to_string();
     }
 }
