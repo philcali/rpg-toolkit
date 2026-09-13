@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rpg_toolkit_common::{
-    AbilityId, CharacterId, EntityTarget, EventAction, FadeType, ItemId, MapId, MusicLoopId,
-    ProjectFile, ScreenShakeMode, SpritesheetId, TilesetId,
+    AbilityId, CharacterId, EntityTarget, EventAction, ItemId, MapId, MusicLoopId, ProjectFile,
+    ScreenShakeMode, SpritesheetId, TilesetId, TransitionDirection, TransitionKind,
 };
 use std::collections::{HashMap, VecDeque};
 
@@ -87,7 +87,7 @@ pub enum WaitingFor {
     Dialog,
     Selection,
     ScreenShake,
-    Fade,
+    Transition,
     EntityMove,
     CameraPan,
     Wait,
@@ -113,12 +113,18 @@ pub struct ScreenShakeState {
     pub elapsed: f32,
 }
 
-/// Tracks an active fade transition.
+/// Tracks an active shader-driven screen transition.
 #[derive(Resource)]
-pub struct FadeState {
-    pub fade_type: FadeType,
+pub struct TransitionState {
+    /// Visual style of the transition (fade, mosaic, distortion wave, …).
+    pub kind: TransitionKind,
+    /// Whether the scene is being revealed (`In`) or obscured (`Out`).
+    pub direction: TransitionDirection,
+    /// Total animation duration in seconds (> 0 while a transition is active).
     pub duration: f32,
+    /// Seconds elapsed since the transition started.
     pub elapsed: f32,
+    /// RGBA cover color used by the effect.
     pub color: [f32; 4],
 }
 

@@ -55,8 +55,9 @@ pub use item::{
 pub use manifest::ProjectManifest;
 pub use map::{
     ChoiceData, DialogConfigData, DialogPositionData, DialogTextData, EntityTarget, EventAction,
-    FadeType, Layer, MapData, MapId, ParallaxLayer, PlayerAppearance, ScreenShakeMode, SpawnPoint,
-    TileAttributeLayer, TileAttributes, TileRef, TilesetId, TransferDirection,
+    Layer, MapData, MapId, ParallaxLayer, PlayerAppearance, ScreenShakeMode, SpawnPoint,
+    TileAttributeLayer, TileAttributes, TileRef, TilesetId, TransferDirection, TransitionDirection,
+    TransitionKind,
 };
 pub use project::{ProjectFile, SpritesheetReferences};
 pub use save::{CharacterProgressData, SaveFile};

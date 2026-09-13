@@ -1,4 +1,4 @@
-use rpg_toolkit_common::map::{EventAction, FadeType, ScreenShakeMode};
+use rpg_toolkit_common::map::{EventAction, ScreenShakeMode};
 
 /// Computes a shake offset for a given intensity.
 /// Returns (dx, dy) where |dx| <= intensity and |dy| <= intensity.
@@ -21,28 +21,21 @@ pub fn is_shake_complete(elapsed: f32, duration: f32, mode: ScreenShakeMode) -> 
     }
 }
 
-/// Computes the fade overlay opacity for the current elapsed time.
+/// Computes the normalized time factor `t = elapsed / duration`, clamped to
+/// `[0.0, 1.0]`.
 ///
-/// For `FadeOut`: interpolates from 0.0 (transparent) to 1.0 (opaque).
-/// For `FadeIn`: interpolates from 1.0 (opaque) to 0.0 (transparent).
-///
-/// Returns a value clamped to [0.0, 1.0].
-pub fn compute_fade_opacity(elapsed: f32, duration: f32, fade_type: FadeType) -> f32 {
+/// This is the raw animation phase; mapping it to the shader `progress` value
+/// (which depends on the transition direction) is handled by
+/// [`crate::transition::direction_progress`].
+pub fn compute_transition_t(elapsed: f32, duration: f32) -> f32 {
     if duration <= 0.0 {
-        return match fade_type {
-            FadeType::FadeOut => 1.0,
-            FadeType::FadeIn => 0.0,
-        };
+        return 1.0;
     }
-    let t = (elapsed / duration).clamp(0.0, 1.0);
-    match fade_type {
-        FadeType::FadeOut => t,
-        FadeType::FadeIn => 1.0 - t,
-    }
+    (elapsed / duration).clamp(0.0, 1.0)
 }
 
-/// Returns true if a fade transition has completed.
-pub fn is_fade_complete(elapsed: f32, duration: f32) -> bool {
+/// Returns true if a screen transition has completed.
+pub fn is_transition_complete(elapsed: f32, duration: f32) -> bool {
     elapsed >= duration
 }
 
@@ -50,7 +43,7 @@ pub fn is_fade_complete(elapsed: f32, duration: f32) -> bool {
 ///
 /// Blocking actions prevent the ActionQueue from advancing until they complete:
 /// - `ScreenShake` with mode `Timed` and duration > 0
-/// - `FadeTransition` with duration > 0
+/// - `ScreenTransition` with duration > 0
 /// - `ShowDialog`
 /// - `ShowSelection`
 /// - `MoveEntity`
@@ -67,7 +60,7 @@ pub fn is_blocking_action(action: &EventAction) -> bool {
         EventAction::ScreenShake { mode, duration, .. } => {
             *mode == ScreenShakeMode::Timed && *duration > 0.0
         }
-        EventAction::FadeTransition { duration, .. } => *duration > 0.0,
+        EventAction::ScreenTransition { duration, .. } => *duration > 0.0,
         EventAction::ShowDialog { .. } => true,
         EventAction::ShowSelection { .. } => true,
         EventAction::MoveEntity { .. } => true,

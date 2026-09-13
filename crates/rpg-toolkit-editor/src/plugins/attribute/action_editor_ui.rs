@@ -96,15 +96,17 @@ pub fn render_action_editor(
                 EventAction::StopScreenShake => {
                     format!("{}. StopScreenShake", i + 1)
                 }
-                EventAction::FadeTransition {
-                    fade_type,
+                EventAction::ScreenTransition {
+                    kind,
+                    direction,
                     duration,
                     ..
                 } => {
                     format!(
-                        "{}. FadeTransition — {:?}, duration: {}",
+                        "{}. ScreenTransition — {} {:?}, duration: {}",
                         i + 1,
-                        fade_type,
+                        kind.label(),
+                        direction,
                         duration
                     )
                 }
@@ -340,8 +342,8 @@ pub fn render_action_editor(
         ActionType::StopScreenShake => {
             action_editor_forms::render_stop_screen_shake_form(ui, actions, editor_state);
         }
-        ActionType::FadeTransition => {
-            action_editor_forms::render_fade_transition_form(ui, actions, editor_state, id_salt);
+        ActionType::ScreenTransition => {
+            action_editor_forms::render_screen_transition_form(ui, actions, editor_state, id_salt);
         }
         ActionType::SetState => {
             action_editor_forms::render_set_state_form(ui, actions, editor_state);

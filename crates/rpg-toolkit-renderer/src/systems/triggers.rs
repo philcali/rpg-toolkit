@@ -1,26 +1,27 @@
 use bevy::prelude::*;
 use rpg_toolkit_common::{
-    AppPhase, DialogTextData, EntityTarget, EventAction, FadeType, NewGameFlag, PlayerAppearance,
-    ScreenShakeMode, TransferDirection,
+    AppPhase, DialogTextData, EntityTarget, EventAction, NewGameFlag, PlayerAppearance,
+    ScreenShakeMode, TransferDirection, TransitionDirection,
 };
 use std::collections::VecDeque;
 
-use crate::components::{FadeOverlay, GameCamera, PlayerCharacter, PlayerSpriteState};
+use crate::components::{GameCamera, PlayerCharacter, PlayerSpriteState, TransitionOverlay};
 use crate::dialog::{DialogState, dialog_config_from_data, dialog_text_from_data};
 use crate::effects::{
-    compute_fade_opacity, compute_shake_offset, is_fade_complete, is_shake_complete,
+    compute_shake_offset, compute_transition_t, is_shake_complete, is_transition_complete,
 };
 use crate::events::{MapChanged, PlayerMoved, ShowDialog};
 use crate::resources::{
     ActionQueue, CameraFollowTarget, CameraPanState, CharacterProgressState, CurrencyState,
-    EntityMoveState, FadeState, GameState, IntroEventsActive, InventoryState, JumpAnimState,
+    EntityMoveState, GameState, IntroEventsActive, InventoryState, JumpAnimState,
     MusicChannelState, NpcPositions, PartyState, RendererProjectData, RendererState, SavePath,
-    ScreenShakeState, SpeedMultiplier, WaitState, WaitingFor,
+    ScreenShakeState, SpeedMultiplier, TransitionState, WaitState, WaitingFor,
 };
 use crate::systems::audio::{handle_play_music, handle_play_sound_effect};
 use crate::systems::jump::compute_landing;
 use crate::systems::player::grid_to_world;
 use crate::systems::selection::{ResolvedChoice, SelectionState};
+use crate::transition::{ScreenTransitionMaterial, direction_progress, final_progress};
 
 /// Reacts to `PlayerMoved` events: collects event triggers from all layers at the
 /// destination tile and populates the `ActionQueue` for sequential processing.
@@ -124,7 +125,7 @@ pub fn advance_action_queue(
     dialog_state: Option<Res<DialogState>>,
     selection_state: Option<Res<SelectionState>>,
     shake_state: Option<Res<ScreenShakeState>>,
-    fade_state: Option<Res<FadeState>>,
+    transition_state: Option<Res<TransitionState>>,
     mut game_state: Option<ResMut<GameState>>,
     mut renderer_state: ResMut<RendererState>,
     project_data: Option<Res<RendererProjectData>>,
@@ -144,8 +145,9 @@ pub fn advance_action_queue(
         Query<(&PlayerCharacter, Option<&PlayerSpriteState>), Without<GameCamera>>,
         Res<State<AppPhase>>,
         ResMut<NextState<AppPhase>>,
-        Query<Entity, With<FadeOverlay>>,
+        Query<Entity, With<TransitionOverlay>>,
         Res<NpcPositions>,
+        ResMut<Assets<ScreenTransitionMaterial>>,
     ),
     mut music_state: Option<ResMut<MusicChannelState>>,
 ) {
@@ -164,8 +166,9 @@ pub fn advance_action_queue(
         player_pos_query,
         app_phase_state,
         mut next_app_phase,
-        fade_overlay_query,
+        transition_overlay_query,
         npc_positions,
+        mut transition_materials,
     ) = save_phase_state;
 
     let Some(mut queue) = action_queue else {
@@ -188,8 +191,8 @@ pub fn advance_action_queue(
             queue.waiting_for = WaitingFor::Nothing;
             queue.actions.pop_front();
         }
-        WaitingFor::Fade => {
-            if fade_state.is_some() {
+        WaitingFor::Transition => {
+            if transition_state.is_some() {
                 return;
             }
             queue.waiting_for = WaitingFor::Nothing;
@@ -300,44 +303,49 @@ pub fn advance_action_queue(
                 queue.actions.pop_front();
                 continue;
             }
-            EventAction::FadeTransition {
-                fade_type,
+            EventAction::ScreenTransition {
+                kind,
+                direction,
                 duration,
                 color,
             } => {
+                // Despawn any leftover overlay from a previous transition so we
+                // never stack overlays.
+                for entity in transition_overlay_query.iter() {
+                    commands.entity(entity).despawn();
+                }
+
                 if duration <= 0.0 {
-                    // Instant — apply final state
-                    match fade_type {
-                        FadeType::FadeOut => {
-                            // Spawn overlay at full opacity
-                            commands.spawn((
-                                Node {
-                                    width: Val::Percent(100.0),
-                                    height: Val::Percent(100.0),
-                                    position_type: PositionType::Absolute,
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgba(color[0], color[1], color[2], 1.0)),
-                                ZIndex(999),
-                                FadeOverlay,
-                            ));
-                        }
-                        FadeType::FadeIn => {
-                            // Despawn any existing overlay
-                            for entity in fade_overlay_query.iter() {
-                                commands.entity(entity).despawn();
-                            }
-                        }
+                    // Instant — apply the end state.
+                    let progress = final_progress(direction);
+                    // A revealed `In` (progress == 1) needs no overlay at all.
+                    // An obscured `Out` (progress == 0) leaves a full-cover overlay.
+                    if progress < 1.0 {
+                        let material = transition_materials
+                            .add(ScreenTransitionMaterial::new(kind, color, progress));
+                        commands.spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                height: Val::Percent(100.0),
+                                position_type: PositionType::Absolute,
+                                ..default()
+                            },
+                            MaterialNode(material),
+                            ZIndex(999),
+                            TransitionOverlay,
+                        ));
                     }
                     queue.actions.pop_front();
                     continue;
                 }
 
-                // Spawn the fade overlay entity
-                let initial_alpha = match fade_type {
-                    FadeType::FadeOut => 0.0,
-                    FadeType::FadeIn => 1.0,
-                };
+                // Spawn the fullscreen transition overlay driven by the shader.
+                let initial_progress = direction_progress(direction, 0.0);
+                let material = transition_materials.add(ScreenTransitionMaterial::new(
+                    kind,
+                    color,
+                    initial_progress,
+                ));
                 commands.spawn((
                     Node {
                         width: Val::Percent(100.0),
@@ -345,18 +353,19 @@ pub fn advance_action_queue(
                         position_type: PositionType::Absolute,
                         ..default()
                     },
-                    BackgroundColor(Color::srgba(color[0], color[1], color[2], initial_alpha)),
+                    MaterialNode(material),
                     ZIndex(999),
-                    FadeOverlay,
+                    TransitionOverlay,
                 ));
 
-                commands.insert_resource(FadeState {
-                    fade_type,
+                commands.insert_resource(TransitionState {
+                    kind,
+                    direction,
                     duration,
                     elapsed: 0.0,
                     color,
                 });
-                queue.waiting_for = WaitingFor::Fade;
+                queue.waiting_for = WaitingFor::Transition;
                 return;
             }
             EventAction::SetState { key, value } => {
@@ -1422,39 +1431,50 @@ pub fn screen_shake_system(
     }
 }
 
-/// Runs each frame while `FadeState` is present.
-/// Increments elapsed time, updates overlay opacity, and handles completion.
-pub fn fade_system(
+/// Runs each frame while a [`TransitionState`] is present.
+///
+/// Advances elapsed time, pushes the current animation `progress` into the
+/// overlay's shader material, and on completion removes the state — leaving the
+/// overlay in place for an `Out` transition (screen stays covered) or despawning
+/// it for an `In` transition (scene fully revealed).
+pub fn transition_system(
     mut commands: Commands,
     time: Res<Time>,
-    mut fade_state: Option<ResMut<FadeState>>,
-    mut overlay_query: Query<(Entity, &mut BackgroundColor), With<FadeOverlay>>,
+    mut transition_state: Option<ResMut<TransitionState>>,
+    mut materials: ResMut<Assets<ScreenTransitionMaterial>>,
+    overlay_query: Query<
+        (Entity, &MaterialNode<ScreenTransitionMaterial>),
+        With<TransitionOverlay>,
+    >,
 ) {
-    let Some(ref mut state) = fade_state else {
+    let Some(ref mut state) = transition_state else {
         return;
     };
 
     state.elapsed += time.delta_secs();
 
-    let opacity = compute_fade_opacity(state.elapsed, state.duration, state.fade_type);
+    let t = compute_transition_t(state.elapsed, state.duration);
+    let progress = direction_progress(state.direction, t);
 
-    // Update overlay color alpha
-    for (_, mut bg_color) in overlay_query.iter_mut() {
-        bg_color.0 = Color::srgba(state.color[0], state.color[1], state.color[2], opacity);
+    // Push the current progress into every overlay's material.
+    for (_, node) in overlay_query.iter() {
+        if let Some(material) = materials.get_mut(&node.0) {
+            material.set_progress(progress);
+        }
     }
 
-    if is_fade_complete(state.elapsed, state.duration) {
-        let fade_type = state.fade_type;
+    if is_transition_complete(state.elapsed, state.duration) {
+        let direction = state.direction;
 
-        // Remove the FadeState resource
-        commands.remove_resource::<FadeState>();
+        // Remove the transition state so the queue can advance.
+        commands.remove_resource::<TransitionState>();
 
-        match fade_type {
-            FadeType::FadeOut => {
-                // Leave overlay at full opacity (screen stays covered)
+        match direction {
+            TransitionDirection::Out => {
+                // Leave the overlay covering the screen.
             }
-            FadeType::FadeIn => {
-                // Despawn the overlay entity
+            TransitionDirection::In => {
+                // Scene fully revealed — despawn the overlay entity.
                 for (entity, _) in overlay_query.iter() {
                     commands.entity(entity).despawn();
                 }
