@@ -184,11 +184,69 @@ pub enum ScreenShakeMode {
     Continuous,
 }
 
-/// Type of fade transition.
+/// Direction of a screen transition.
+///
+/// `In` reveals the game world (the covering effect recedes to nothing), while
+/// `Out` obscures it (the effect builds up until the screen is fully covered).
+/// This mirrors the classic "fade in" / "fade out" semantics but generalizes to
+/// every transition kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FadeType {
-    FadeIn,
-    FadeOut,
+pub enum TransitionDirection {
+    /// Reveal the scene: the effect starts fully covering and animates away.
+    In,
+    /// Obscure the scene: the effect starts invisible and animates to full cover.
+    Out,
+}
+
+/// The visual style of a screen transition.
+///
+/// Every kind is driven by a single normalized `progress` value in `[0, 1]`
+/// (see [`TransitionDirection`] for how progress maps to reveal/obscure) and is
+/// rendered by the shader-based fullscreen overlay in the renderer crate. New
+/// kinds can be added here and handled in the shader without touching the event
+/// wiring.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TransitionKind {
+    /// Uniform opacity ramp of a solid color (the classic fade).
+    Fade,
+    /// The screen dissolves into (or out of) a grid of growing/shrinking blocks.
+    Mosaic,
+    /// A horizontal sine-wave ripple sweeps the cover across the screen.
+    DistortionWave,
+    /// A radial swirl spirals the cover in toward (or out from) the center.
+    Whirlpool,
+}
+
+impl TransitionKind {
+    /// All transition kinds in display order. Used by the editor to build a
+    /// selector and by property tests to exhaustively exercise every variant.
+    pub const ALL: [TransitionKind; 4] = [
+        TransitionKind::Fade,
+        TransitionKind::Mosaic,
+        TransitionKind::DistortionWave,
+        TransitionKind::Whirlpool,
+    ];
+
+    /// A short human-readable label for editor UI.
+    pub fn label(self) -> &'static str {
+        match self {
+            TransitionKind::Fade => "Fade",
+            TransitionKind::Mosaic => "Mosaic",
+            TransitionKind::DistortionWave => "Distortion Wave",
+            TransitionKind::Whirlpool => "Whirlpool",
+        }
+    }
+
+    /// Stable index used by the renderer to select the effect branch in the
+    /// shader. Kept in sync with the `KIND_*` constants in the WGSL source.
+    pub fn shader_index(self) -> u32 {
+        match self {
+            TransitionKind::Fade => 0,
+            TransitionKind::Mosaic => 1,
+            TransitionKind::DistortionWave => 2,
+            TransitionKind::Whirlpool => 3,
+        }
+    }
 }
 
 /// Player visual appearance state.
@@ -203,6 +261,13 @@ pub enum PlayerAppearance {
 /// Returns the default fade color (opaque black).
 pub fn default_fade_color() -> [f32; 4] {
     [0.0, 0.0, 0.0, 1.0]
+}
+
+/// Returns the default transition kind (plain fade), used as the serde default
+/// so transitions authored without an explicit `kind` behave like the classic
+/// fade.
+pub fn default_transition_kind() -> TransitionKind {
+    TransitionKind::Fade
 }
 
 /// Direction of a reward transfer: Give grants to the player, Take removes from the player.
@@ -557,8 +622,17 @@ pub enum EventAction {
         mode: ScreenShakeMode,
     },
     StopScreenShake,
-    FadeTransition {
-        fade_type: FadeType,
+    /// Play a shader-driven fullscreen screen transition.
+    ///
+    /// The `kind` selects the visual style (fade, mosaic, distortion wave,
+    /// whirlpool, …) and `direction` selects whether the scene is revealed
+    /// (`In`) or obscured (`Out`). `duration` is the animation length in
+    /// seconds (0 applies the end state instantly) and `color` is the RGBA
+    /// cover color the effect uses.
+    ScreenTransition {
+        #[serde(default = "default_transition_kind")]
+        kind: TransitionKind,
+        direction: TransitionDirection,
         duration: f32,
         #[serde(default = "default_fade_color")]
         color: [f32; 4],
@@ -1627,25 +1701,43 @@ mod tests {
     }
 
     #[test]
-    fn backward_compat_fade_transition_deserializes() {
-        let json = r#"{"type": "FadeTransition", "fade_type": "FadeOut", "duration": 0.5}"#;
+    fn screen_transition_deserializes_with_defaults() {
+        // `kind` and `color` are optional and default to Fade / opaque black.
+        let json = r#"{"type": "ScreenTransition", "direction": "Out", "duration": 0.5}"#;
         let result: Result<EventAction, _> = serde_json::from_str(json);
         assert!(
             result.is_ok(),
-            "FadeTransition should still deserialize: {:?}",
+            "ScreenTransition should deserialize: {:?}",
             result.err()
         );
-        if let EventAction::FadeTransition {
-            fade_type,
+        if let EventAction::ScreenTransition {
+            kind,
+            direction,
             duration,
             color,
         } = result.unwrap()
         {
-            assert_eq!(fade_type, FadeType::FadeOut);
+            assert_eq!(kind, TransitionKind::Fade);
+            assert_eq!(direction, TransitionDirection::Out);
             assert_eq!(duration, 0.5);
             assert_eq!(color, [0.0, 0.0, 0.0, 1.0]);
         } else {
-            panic!("Expected FadeTransition variant");
+            panic!("Expected ScreenTransition variant");
+        }
+    }
+
+    #[test]
+    fn screen_transition_round_trips_all_kinds() {
+        for kind in TransitionKind::ALL {
+            let action = EventAction::ScreenTransition {
+                kind,
+                direction: TransitionDirection::In,
+                duration: 1.5,
+                color: [0.1, 0.2, 0.3, 1.0],
+            };
+            let json = serde_json::to_string(&action).unwrap();
+            let back: EventAction = serde_json::from_str(&json).unwrap();
+            assert_eq!(action, back, "round trip failed for {:?}", kind);
         }
     }
 
@@ -2243,7 +2335,7 @@ mod tests {
             "enemies": {"enemies": {}},
             "shops": {"shops": {}},
             "intro_events": [
-                {"type": "FadeTransition", "fade_type": "FadeIn", "duration": 2.0, "color": [0.0, 0.0, 0.0, 1.0]},
+                {"type": "ScreenTransition", "kind": "Fade", "direction": "In", "duration": 2.0, "color": [0.0, 0.0, 0.0, 1.0]},
                 {"type": "CameraFollow", "target": {"type": "Npc", "npc_id": "elder"}},
                 {"type": "MoveEntity", "target": {"type": "Npc", "npc_id": "elder"}, "target_x": 6, "target_y": 10, "speed": 1.5},
                 {"type": "CameraPan", "target_x": 12, "target_y": 3, "duration": 2.5},

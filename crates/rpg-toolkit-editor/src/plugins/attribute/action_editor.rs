@@ -5,8 +5,8 @@
 use crate::data::map::EventAction;
 use rpg_toolkit_common::{
     AppPhase, BranchCondition, ChoiceData, ConditionCheck, ConditionLogic, DialogConfigData,
-    DialogPositionData, DialogTextData, EntityTarget, FadeType, PlayerAppearance, ScreenShakeMode,
-    TransferDirection,
+    DialogPositionData, DialogTextData, EntityTarget, PlayerAppearance, ScreenShakeMode,
+    TransferDirection, TransitionDirection, TransitionKind,
 };
 
 /// The type of action being added in the Event Trigger Editor.
@@ -18,7 +18,7 @@ pub enum ActionType {
     ShowSelection,
     ScreenShake,
     StopScreenShake,
-    FadeTransition,
+    ScreenTransition,
     SetState,
     SetPlayerAppearance,
     StateCheck,
@@ -105,7 +105,7 @@ pub const ACTION_CATEGORIES: &[ActionCategory] = &[
         actions: &[
             (ActionType::ScreenShake, "Screen Shake"),
             (ActionType::StopScreenShake, "Stop Screen Shake"),
-            (ActionType::FadeTransition, "Fade Transition"),
+            (ActionType::ScreenTransition, "Screen Transition"),
             (ActionType::SetPlayerAppearance, "Set Player Appearance"),
         ],
     },
@@ -228,10 +228,11 @@ pub struct ActionEditorState {
     pub shake_mode: ScreenShakeMode,
     pub shake_intensity: String,
     pub shake_duration: String,
-    // FadeTransition fields
-    pub fade_type: FadeType,
-    pub fade_duration: String,
-    pub fade_color: [f32; 4],
+    // ScreenTransition fields
+    pub transition_kind: TransitionKind,
+    pub transition_direction: TransitionDirection,
+    pub transition_duration: String,
+    pub transition_color: [f32; 4],
     // SetState fields
     pub state_key: String,
     pub state_value: String,
@@ -330,9 +331,10 @@ impl Default for ActionEditorState {
             shake_mode: ScreenShakeMode::Timed,
             shake_intensity: "5.0".to_string(),
             shake_duration: "0.5".to_string(),
-            fade_type: FadeType::FadeOut,
-            fade_duration: "1.0".to_string(),
-            fade_color: [0.0, 0.0, 0.0, 1.0],
+            transition_kind: TransitionKind::Fade,
+            transition_direction: TransitionDirection::Out,
+            transition_duration: "1.0".to_string(),
+            transition_color: [0.0, 0.0, 0.0, 1.0],
             state_key: String::new(),
             state_value: String::new(),
             appearance: PlayerAppearance::Hidden,
@@ -434,9 +436,10 @@ impl ActionEditorState {
             shake_mode: ScreenShakeMode::Timed,
             shake_intensity: "5.0".to_string(),
             shake_duration: "0.5".to_string(),
-            fade_type: FadeType::FadeOut,
-            fade_duration: "1.0".to_string(),
-            fade_color: [0.0, 0.0, 0.0, 1.0],
+            transition_kind: TransitionKind::Fade,
+            transition_direction: TransitionDirection::Out,
+            transition_duration: "1.0".to_string(),
+            transition_color: [0.0, 0.0, 0.0, 1.0],
             state_key: String::new(),
             state_value: String::new(),
             appearance: PlayerAppearance::Hidden,
@@ -553,15 +556,17 @@ impl ActionEditorState {
             EventAction::StopScreenShake => {
                 self.action_type = ActionType::StopScreenShake;
             }
-            EventAction::FadeTransition {
-                fade_type,
+            EventAction::ScreenTransition {
+                kind,
+                direction,
                 duration,
                 color,
             } => {
-                self.action_type = ActionType::FadeTransition;
-                self.fade_type = *fade_type;
-                self.fade_duration = duration.to_string();
-                self.fade_color = *color;
+                self.action_type = ActionType::ScreenTransition;
+                self.transition_kind = *kind;
+                self.transition_direction = *direction;
+                self.transition_duration = duration.to_string();
+                self.transition_color = *color;
             }
             EventAction::SetState { key, value } => {
                 self.action_type = ActionType::SetState;
@@ -850,17 +855,18 @@ impl ActionEditorState {
                 })
             }
             ActionType::StopScreenShake => Some(EventAction::StopScreenShake),
-            ActionType::FadeTransition => {
+            ActionType::ScreenTransition => {
                 let duration = self
-                    .fade_duration
+                    .transition_duration
                     .trim()
                     .parse::<f32>()
                     .unwrap_or(1.0)
                     .clamp(0.0, 10.0);
-                Some(EventAction::FadeTransition {
-                    fade_type: self.fade_type,
+                Some(EventAction::ScreenTransition {
+                    kind: self.transition_kind,
+                    direction: self.transition_direction,
                     duration,
-                    color: self.fade_color,
+                    color: self.transition_color,
                 })
             }
             ActionType::SetState => {

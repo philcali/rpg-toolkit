@@ -16,6 +16,7 @@ use crate::resources::{
     InventoryState, NpcPositions, PartyState, RendererProjectData, RendererState, WaitingFor,
 };
 use crate::systems::triggers::advance_action_queue;
+use crate::transition::ScreenTransitionMaterial;
 
 /// Creates a minimal Bevy App configured for reward action testing.
 fn test_app() -> App {
@@ -24,6 +25,9 @@ fn test_app() -> App {
     app.add_plugins(AssetPlugin::default());
     app.add_plugins(bevy::state::app::StatesPlugin);
     app.init_asset::<Image>();
+    // advance_action_queue takes ResMut<Assets<ScreenTransitionMaterial>>, so the
+    // asset must be registered even though these tests don't use transitions.
+    app.init_asset::<ScreenTransitionMaterial>();
 
     // Register messages used by advance_action_queue
     app.add_message::<MapChanged>();

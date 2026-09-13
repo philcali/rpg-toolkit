@@ -65,9 +65,9 @@ pub struct PlayerSpriteState {
 #[derive(Component)]
 pub struct GameCamera;
 
-/// Marker for the fade overlay UI entity.
+/// Marker for the fullscreen screen-transition overlay UI entity.
 #[derive(Component)]
-pub struct FadeOverlay;
+pub struct TransitionOverlay;
 
 /// Describes an in-progress tile-to-tile movement animation for an NPC.
 pub struct NpcMoveAnimation {

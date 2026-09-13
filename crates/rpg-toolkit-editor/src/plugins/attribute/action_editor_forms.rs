@@ -5,8 +5,8 @@
 use bevy_egui::egui;
 
 use rpg_toolkit_common::{
-    AppPhase, ConditionCheck, ConditionLogic, ConditionOperator, DialogPositionData, FadeType,
-    PlayerAppearance, ScreenShakeMode, TransferDirection,
+    AppPhase, ConditionCheck, ConditionLogic, ConditionOperator, DialogPositionData,
+    PlayerAppearance, ScreenShakeMode, TransferDirection, TransitionDirection, TransitionKind,
 };
 
 use crate::data::map::EventAction;
@@ -298,42 +298,63 @@ pub fn render_stop_screen_shake_form(
     }
 }
 
-pub fn render_fade_transition_form(
+pub fn render_screen_transition_form(
     ui: &mut egui::Ui,
     actions: &mut Vec<EventAction>,
     editor_state: &mut ActionEditorState,
-    _id_salt: &str,
+    id_salt: &str,
 ) {
     ui.horizontal(|ui| {
-        ui.label("Fade Type:");
-        ui.radio_value(&mut editor_state.fade_type, FadeType::FadeIn, "FadeIn");
-        ui.radio_value(&mut editor_state.fade_type, FadeType::FadeOut, "FadeOut");
+        ui.label("Transition:");
+        egui::ComboBox::from_id_salt(format!("{id_salt}_transition_kind"))
+            .selected_text(editor_state.transition_kind.label())
+            .show_ui(ui, |ui| {
+                for kind in TransitionKind::ALL {
+                    ui.selectable_value(&mut editor_state.transition_kind, kind, kind.label());
+                }
+            });
+    });
+
+    ui.horizontal(|ui| {
+        ui.label("Direction:");
+        ui.radio_value(
+            &mut editor_state.transition_direction,
+            TransitionDirection::In,
+            "In (reveal)",
+        );
+        ui.radio_value(
+            &mut editor_state.transition_direction,
+            TransitionDirection::Out,
+            "Out (obscure)",
+        );
     });
 
     ui.horizontal(|ui| {
         ui.label("Duration:");
-        ui.add(egui::TextEdit::singleline(&mut editor_state.fade_duration).desired_width(60.0));
+        ui.add(
+            egui::TextEdit::singleline(&mut editor_state.transition_duration).desired_width(60.0),
+        );
         ui.label("(0.0 – 10.0)");
     });
 
     ui.horizontal(|ui| {
         ui.label("Color (RGBA):");
         let mut color3 = [
-            editor_state.fade_color[0],
-            editor_state.fade_color[1],
-            editor_state.fade_color[2],
+            editor_state.transition_color[0],
+            editor_state.transition_color[1],
+            editor_state.transition_color[2],
         ];
         if ui.color_edit_button_rgb(&mut color3).changed() {
-            editor_state.fade_color[0] = color3[0];
-            editor_state.fade_color[1] = color3[1];
-            editor_state.fade_color[2] = color3[2];
+            editor_state.transition_color[0] = color3[0];
+            editor_state.transition_color[1] = color3[1];
+            editor_state.transition_color[2] = color3[2];
         }
     });
 
     let btn_label = if editor_state.editing_index.is_some() {
-        "Update FadeTransition"
+        "Update ScreenTransition"
     } else {
-        "Add FadeTransition"
+        "Add ScreenTransition"
     };
     if ui.button(btn_label).clicked()
         && let Some(new_action) = editor_state.build_action()
@@ -346,15 +367,17 @@ pub fn render_fade_transition_form(
         } else {
             actions.push(new_action);
         }
-        editor_state.fade_type = FadeType::FadeOut;
-        editor_state.fade_duration = "1.0".to_string();
-        editor_state.fade_color = [0.0, 0.0, 0.0, 1.0];
+        editor_state.transition_kind = TransitionKind::Fade;
+        editor_state.transition_direction = TransitionDirection::Out;
+        editor_state.transition_duration = "1.0".to_string();
+        editor_state.transition_color = [0.0, 0.0, 0.0, 1.0];
     }
     if editor_state.editing_index.is_some() && ui.button("Cancel Edit").clicked() {
         editor_state.editing_index = None;
-        editor_state.fade_type = FadeType::FadeOut;
-        editor_state.fade_duration = "1.0".to_string();
-        editor_state.fade_color = [0.0, 0.0, 0.0, 1.0];
+        editor_state.transition_kind = TransitionKind::Fade;
+        editor_state.transition_direction = TransitionDirection::Out;
+        editor_state.transition_duration = "1.0".to_string();
+        editor_state.transition_color = [0.0, 0.0, 0.0, 1.0];
     }
 }
 

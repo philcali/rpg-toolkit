@@ -472,7 +472,7 @@ mod tests {
     #[test]
     fn project_with_only_pre_existing_action_types_deserializes_without_error() {
         // A project file containing only pre-existing EventAction types (ShowDialog,
-        // JumpTo, SetState, FadeTransition, ScreenShake) verifies backward compatibility.
+        // JumpTo, SetState, ScreenTransition, ScreenShake) verifies backward compatibility.
         let json = r#"{
             "maps": {
                 "map-1": {
@@ -521,8 +521,9 @@ mod tests {
                                         "opacity": false,
                                         "event_trigger": [
                                             {
-                                                "type": "FadeTransition",
-                                                "fade_type": "FadeOut",
+                                                "type": "ScreenTransition",
+                                                "kind": "Whirlpool",
+                                                "direction": "Out",
                                                 "duration": 1.0
                                             }
                                         ]

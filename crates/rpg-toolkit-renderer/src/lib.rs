@@ -11,22 +11,23 @@ pub mod markup;
 pub mod resources;
 pub mod save;
 pub mod systems;
+pub mod transition;
 
 pub use components::{
-    FadeOverlay, GameCamera, MoveAnimation, NpcMoveAnimation, NpcPatrolState, NpcSprite,
-    NpcSpriteState, ParallaxSprite, PlayerCharacter, PlayerSpriteState, RendererTileSprite,
+    GameCamera, MoveAnimation, NpcMoveAnimation, NpcPatrolState, NpcSprite, NpcSpriteState,
+    ParallaxSprite, PlayerCharacter, PlayerSpriteState, RendererTileSprite, TransitionOverlay,
 };
 pub use events::{MapChanged, PlayerMoved, ShowDialog};
 pub use input::{Direction, MovementIntent, handle_intro_skip, open_status_on_escape, read_input};
 pub use resources::{
     ActionQueue, ActiveShopId, AnimationConfig, CameraFollowTarget, CameraPanState,
-    CharacterProgress, CharacterProgressState, CurrencyState, EntityMoveState, FadeRamp, FadeState,
+    CharacterProgress, CharacterProgressState, CurrencyState, EntityMoveState, FadeRamp,
     FadingTrack, GameState, InteractionIntent, IntroEventsActive, InventoryState, JumpAnimState,
     MovementConfig, MusicChannel, MusicChannelState, MusicCommand, MusicPlayback,
     NpcCollisionEvent, NpcPositions, PartyState, PixelScaleConfig, PixelScaleMode,
     PlayerAppearanceState, PlayerVisual, PreviousCameraPosition, RendererProjectData,
-    RendererState, ScreenShakeState, SoundEffectChannel, SpeedMultiplier, WaitState, WaitingFor,
-    next_music_command,
+    RendererState, ScreenShakeState, SoundEffectChannel, SpeedMultiplier, TransitionState,
+    WaitState, WaitingFor, next_music_command,
 };
 pub use systems::audio::{
     handle_play_music, handle_play_sound_effect, play_map_default_music, update_music_fades,
@@ -54,13 +55,17 @@ pub use systems::player::{
 pub use systems::speed::{apply_speed_multiplier_system, compute_speed_move_duration};
 pub use systems::spritesheet::{build_spritesheet_atlas, load_spritesheet_assets};
 pub use systems::triggers::{
-    advance_action_queue, camera_pan_system, check_triggers, fade_system, handle_map_change,
-    screen_shake_system, trigger_intro_events, wait_system,
+    advance_action_queue, camera_pan_system, check_triggers, handle_map_change,
+    screen_shake_system, transition_system, trigger_intro_events, wait_system,
+};
+pub use transition::{
+    SCREEN_TRANSITION_SHADER_PATH, ScreenTransitionMaterial, ScreenTransitionNode,
+    ScreenTransitionPlugin, direction_progress, final_progress,
 };
 
 pub use effects::{
-    compute_fade_opacity, compute_shake_offset, is_blocking_action, is_fade_complete,
-    is_shake_complete,
+    compute_shake_offset, compute_transition_t, is_blocking_action, is_shake_complete,
+    is_transition_complete,
 };
 
 pub use dialog::{
@@ -84,6 +89,9 @@ pub struct ProjectRendererPlugin;
 
 impl Plugin for ProjectRendererPlugin {
     fn build(&self, app: &mut App) {
+        // Register the embedded transition shader and its UI material pipeline.
+        app.add_plugins(ScreenTransitionPlugin);
+
         app
             // Resources
             .init_resource::<RendererState>()
@@ -153,7 +161,7 @@ impl Plugin for ProjectRendererPlugin {
                     screen_shake_system.after(update_camera),
                     entity_move_system.after(advance_action_queue),
                     camera_pan_system.after(advance_action_queue),
-                    fade_system.after(advance_action_queue),
+                    transition_system.after(advance_action_queue),
                     wait_system.after(advance_action_queue),
                     jump_animation_system.after(advance_action_queue),
                     apply_speed_multiplier_system.after(advance_action_queue),
